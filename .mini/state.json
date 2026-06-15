@@ -2,5 +2,11 @@
   "version": 2,
   "createdAt": "2026-06-15T19:13:16.562Z",
   "currentPhaseId": null,
-  "phases": []
+  "phases": [
+    {
+      "id": 1,
+      "title": "Kostra CLI a strom projektu",
+      "status": "done"
+    }
+  ]
 }

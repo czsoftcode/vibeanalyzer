@@ -1,0 +1,47 @@
+{
+  "id": 1,
+  "title": "Kostra CLI a strom projektu",
+  "goal": "CLI vezme cestu ke složce, projde jen vlastní strom projektu (přeskočí pomocné složky node_modules, .git, .mini, dist, build) a vygeneruje .md report se seznamem souborů a Mermaid diagramem struktury. Plné čtení .gitignore a chytřejší filtrování jsou mimo tuto fázi.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Scaffolding a spustitelná kostra CLI",
+      "status": "done",
+      "detail": "package.json, tsconfig.json, vstupní bod src/cli.ts, build/run skript. Ověření: vibeanalyzer --help/--version vypíše text a skončí s kódem 0."
+    },
+    {
+      "title": "Zpracování argumentu cesty a validace",
+      "status": "done",
+      "detail": "Cesta jako argument, bez argumentu ./. Neexistující/nečitelná cesta → srozumitelná chyba a nenulový exit, ne pád. Ověření: test na neexistující i platnou cestu."
+    },
+    {
+      "title": "Procházení stromu do datového modelu",
+      "status": "done",
+      "detail": "Rekurzivní průchod, přeskočí node_modules/.git/.mini/dist/build, nesleduje symlinky, nečitelný soubor přeskočí a zaznamená. Model { path, type, ext, size, depth }. Ověření: unit test nad fixture stromem."
+    },
+    {
+      "title": "Zápis JSON indexu",
+      "status": "done",
+      "detail": "Z modelu vyrobí vibeanalyzer-<timestamp>.json ({ version, generatedAt, root, files }) do cesty z parametru, jinak CWD. Ověření: soubor existuje, daný tvar, správný seznam."
+    },
+    {
+      "title": "Zápis MD reportu s folder-level Mermaidem",
+      "status": "done",
+      "detail": "Z téhož modelu (bez druhého průchodu) seznam souborů + mermaid blok jen nad složkami. Vyloučí vlastní výstupy; ořez diagramu napíše do reportu. Ověření: .md obsahuje seznam i validní mermaid blok."
+    },
+    {
+      "title": "Shrnutí v terminálu a průchod unhappy path",
+      "status": "done",
+      "detail": "Vypíše počet souborů a kam se uložily výstupy. Ověření: běh nad reálnou složkou vyrobí oba soubory; fixture s nečitelným souborem doběhne (přeskočen a zaznamenán); neexistující cesta skončí čistou chybou."
+    }
+  ],
+  "startedAt": "2026-06-15T20:33:22.238Z",
+  "resolvedVerify": [
+    "Vykreslení Mermaid diagramu v prohlížeči"
+  ],
+  "completedAt": "2026-06-15T21:26:38.244Z",
+  "autoCommit": {
+    "preSha": "f855b894376a4232db06a555e836fbd8d0844eb0",
+    "subject": "Phase 1: Kostra CLI a strom projektu"
+  }
+}

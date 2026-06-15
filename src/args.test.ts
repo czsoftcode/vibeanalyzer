@@ -1,0 +1,94 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+
+describe("parseArgs", () => {
+  const cwd = "/home/user/proj";
+
+  it("bez argumentu bere aktuální složku a výchozí výstup (null)", () => {
+    const r = parseArgs([], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null });
+  });
+
+  it("vezme cestu jako pozicní argument, výstup zůstává výchozí", () => {
+    const r = parseArgs(["./sub"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null });
+  });
+
+  it("--out přepíše výstupní adresář", () => {
+    const r = parseArgs(["./sub", "--out", "/tmp/out"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out" });
+  });
+
+  it("--out= varianta funguje taky", () => {
+    const r = parseArgs(["--out=/tmp/out", "x"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out" });
+  });
+
+  it("--help a --version mají přednost", () => {
+    expect(parseArgs(["--help"], cwd)).toEqual({ kind: "help" });
+    expect(parseArgs(["-v"], cwd)).toEqual({ kind: "version" });
+  });
+
+  it("neznámá volba je chyba", () => {
+    const r = parseArgs(["--nope"], cwd);
+    expect(r.kind).toBe("error");
+  });
+
+  it("--out bez hodnoty je chyba", () => {
+    const r = parseArgs(["--out"], cwd);
+    expect(r.kind).toBe("error");
+  });
+
+  it("druhý pozicní argument je chyba", () => {
+    const r = parseArgs(["a", "b"], cwd);
+    expect(r.kind).toBe("error");
+  });
+});
+
+describe("defaultOutDir", () => {
+  it("složí ~/.vibeanalyzer/<jméno projektu>", () => {
+    expect(defaultOutDir("/home/user", "/work/muj-projekt")).toBe(
+      path.join("/home/user", ".vibeanalyzer", "muj-projekt"),
+    );
+  });
+
+  it("pro kořen (prázdný basename) použije 'root'", () => {
+    expect(defaultOutDir("/home/user", "/")).toBe(
+      path.join("/home/user", ".vibeanalyzer", "root"),
+    );
+  });
+});
+
+describe("validateTarget", () => {
+  let dir: string;
+  let file: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "vibe-args-"));
+    file = path.join(dir, "soubor.txt");
+    await writeFile(file, "ahoj", "utf8");
+  });
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("platný adresář projde", async () => {
+    expect(await validateTarget(dir)).toEqual({ ok: true });
+  });
+
+  it("neexistující cesta selže srozumitelně", async () => {
+    const r = await validateTarget(path.join(dir, "neexistuje"));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("neexistuje");
+  });
+
+  it("soubor (ne adresář) selže", async () => {
+    const r = await validateTarget(file);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("není adresář");
+  });
+});

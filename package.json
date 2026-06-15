@@ -1,0 +1,29 @@
+{
+  "name": "vibeanalyzer",
+  "version": "0.1.1",
+  "description": "Lokální CLI analyzátor projektů psaných AI agenty – kód, bezpečnost, struktura, logika a non-goaly.",
+  "type": "module",
+  "bin": {
+    "vibeanalyzer": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
