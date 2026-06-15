@@ -1,0 +1,25 @@
+# Undo backup of the state — transient, created on every write (mini undo
+# remembers one step back). Not for git; on large projects it would also bloat
+# the history needlessly.
+phases-prev/
+state.prev.json
+
+# Transient artifacts of the atomic graph write (mini map). Created mid-regenerate
+# and immediately renamed/cleaned up; never belong in git. They could only linger
+# after a crash mid-write.
+graph.tmp/
+graph.json.tmp
+
+# Programmatically generated/derived outputs — they can be regenerated any time from
+# the source of truth (sources / .mini/memory/), so keep them out of diffs and commits.
+# The machine map of the project (mini map / done) — a derivative of the sources.
+graph/
+graph.json
+# Per-command token ranking — a pure measurement report.
+token-report.md
+# Slimmed-down summary of the last phase for `next` — derived from .mini/memory/.
+last-memory.md
+
+# Editor swap/backup files (vim etc.) — created while editing, not for git.
+*.sw[a-p]
+*~

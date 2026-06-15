@@ -1,0 +1,17 @@
+# Závislosti
+node_modules/
+
+# Build výstup
+dist/
+build/
+*.tsbuildinfo
+
+# Logy a lokální prostředí
+*.log
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.swp
