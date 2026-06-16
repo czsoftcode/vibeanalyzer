@@ -15,6 +15,11 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   `build`), nesleduje symlinky a nečitelné soubory přeskočí a zaznamená do reportu.
 - Výchozí výstup do `~/.vibeanalyzer/<jméno projektu>/` (lze přepsat přes `--out`),
   názvy souborů nesou časové razítko (nepřepisují předchozí běhy).
+- Report v hlavičce uvádí záměr projektu a deklarované non-goaly načtené z
+  `.mini/project.md` (případně `project.md`) analyzovaného projektu. Záměr je
+  volitelný: když chybí nebo je prázdný, report normálně doběhne, uvede explicitní
+  „záměr nedodán" a poradí, jak ho dodat. Nečitelný soubor jen ohlásí varováním.
+  Nástroj do analyzovaného projektu nic nezapisuje.
 
 ### Fixed
 

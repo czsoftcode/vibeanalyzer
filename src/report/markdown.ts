@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
 
 export interface MarkdownInput {
@@ -6,6 +7,8 @@ export interface MarkdownInput {
   generatedAt: string;
   files: FileEntry[];
   skippedUnreadable: string[];
+  /** Záměr z project.md analyzovaného projektu; null/undefined = nedodán. */
+  intent?: Intent | null;
 }
 
 export interface MarkdownOptions {
@@ -18,6 +21,69 @@ const DEFAULT_MAX_DIAGRAM_NODES = 60;
 /** Nahradí znaky, které by rozbily Mermaid label v hranatých závorkách. */
 function escapeLabel(s: string): string {
   return s.replace(/"/g, "'").replace(/[[\]]/g, "");
+}
+
+/**
+ * Zneškodní trojitý (a delší) plot z backticků v cizím textu. project.md píše
+ * uživatel/jiný nástroj; kdyby v záměru byl ```` ```mermaid ````, otevřel by
+ * uvnitř našeho reportu nový code fence a spolkl by zbytek (i náš diagram).
+ * Trojitý backtick zkrátíme na jeden – inline kód zůstane, fence se nespustí.
+ */
+function neutralizeFences(line: string): string {
+  return line.replace(/`{3,}/g, "`");
+}
+
+/**
+ * Vloží cizí text jako blockquote (každý řádek `> `). Spolu s neutralizeFences
+ * tím udržíme cizí `#` nadpisy i fence uvnitř citace – nerozbijí strukturu
+ * našich sekcí ani Mermaid blok.
+ */
+function blockquote(text: string): string[] {
+  return text.split("\n").map((line) => `> ${neutralizeFences(line)}`);
+}
+
+/**
+ * Sekce "## Záměr projektu" do hlavičky reportu. Když záměr (nebo jeho část)
+ * chybí, vypíše explicitní "_nedodáno_" – záměrně viditelný stav, ne prázdná
+ * díra. Hodnocení nálezů vůči záměru sem nepatří (to až AI vrstva).
+ */
+function intentSection(intent: Intent | null | undefined): string[] {
+  const out: string[] = ["## Záměr projektu", ""];
+
+  if (!intent) {
+    out.push(
+      "_Záměr nedodán._ Nenašel jsem v analyzovaném projektu `.mini/project.md` ani `project.md`.",
+    );
+    out.push("");
+    return out;
+  }
+
+  // sourcePath je odvozen z cesty cíle (uživatel ji řídí) → taky cizí vstup.
+  // Backtick i newline v názvu složky by rozbily inline code span hlavičky
+  // (backtick ukončí span, newline ho přeruší); oba nahradíme (nálezy 4-5).
+  const safeSource = intent.sourcePath.replace(/`/g, "'").replace(/[\r\n]/g, " ");
+  out.push(`Načteno z \`${safeSource}\`.`);
+  out.push("");
+
+  out.push("**Co se staví:**");
+  out.push("");
+  if (intent.building === null) {
+    out.push("> _nedodáno_");
+  } else {
+    out.push(...blockquote(intent.building));
+  }
+  out.push("");
+
+  out.push("**Deklarované non-goaly:**");
+  out.push("");
+  if (intent.nonGoals === null) {
+    out.push("> _nedodáno_");
+  } else {
+    for (const ng of intent.nonGoals) out.push(`> - ${neutralizeFences(ng)}`);
+  }
+  out.push("");
+
+  return out;
 }
 
 export interface FolderDiagram {
@@ -85,6 +151,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
     out.push(`- Přeskočeno (nečitelné): ${input.skippedUnreadable.length}`);
   }
   out.push("");
+
+  out.push(...intentSection(input.intent));
 
   out.push("## Struktura složek");
   out.push("");

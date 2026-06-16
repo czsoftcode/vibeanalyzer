@@ -1,0 +1,39 @@
+{
+  "id": 4,
+  "title": "Volitelné načtení záměru",
+  "goal": "Najít záměr a non-goaly v .mini/project.md cílového projektu (fallback project.md), vložit je do hlavičky .md reportu; když chybí nebo je sekce nenalezená, report jede dál a explicitně uvede 'záměr nedodán' – žádný pád, žádný tichý prázdný string.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Modul intent.ts – lokalizace a čtení souboru",
+      "status": "done",
+      "detail": "loadIntent(targetPath) zkusí <cíl>/.mini/project.md, pak fallback <cíl>/project.md. Rozlišený výsledek: loaded (obsah + cesta), absent (ENOENT na obou), unreadable (jiná chyba + kód). I/O chybu nemíchat s chybou parseru. Test každé větve."
+    },
+    {
+      "title": "Parser dvou sekcí podle pevných nadpisů",
+      "status": "done",
+      "detail": "Vytáhne blok pod '## What I'm building' a '## Non-goals', každý až do dalšího '## ' (víceřádkově). Chybějící i prázdná sekce → null (ne prázdný string). Non-goaly jako seznam. Test proti reálnému fixturu ve formátu mini init (kontrakt s mini), ne jen mocku."
+    },
+    {
+      "title": "Render záměru v hlavičce reportu",
+      "status": "done",
+      "detail": "buildMarkdown dostane volitelný intent. Nová sekce '## Záměr projektu' se záměrem, non-goaly, zdrojovou cestou. Bezpečné vložení cizího textu (blockquote, ať #/fence/mermaid nerozbije report). Chybějící část → explicitní '_záměr nedodán_'. Test zobrazení 'nedodáno' i odolnosti proti injection."
+    },
+    {
+      "title": "Napojení do run() + varování a nápověda",
+      "status": "done",
+      "detail": "cli.ts volá loadIntent před buildMarkdown. unreadable → varování na stderr + pokračuj. absent → vypiš nápovědu se strukturou (## What I'm building / ## Non-goals) + pokračuj. Předá intent do buildMarkdown. Nic nezapisuje do analyzovaného projektu. Test větví loaded/absent/unreadable."
+    },
+    {
+      "title": "Sebekontrola + celá sada + typecheck + nezávislý sub-agent",
+      "status": "done",
+      "detail": "Projít checklist CLAUDE.md, spustit testy a tsc. Fáze sahá na kontrakt mezi moduly a chybové cesty čtení → před reportem pustit nezávislého sub-agenta (čerstvý kontext) na self-review."
+    }
+  ],
+  "startedAt": "2026-06-16T12:51:18.387Z",
+  "completedAt": "2026-06-16T13:58:32.284Z",
+  "autoCommit": {
+    "preSha": "6b9639b915f675b29935811613cbc1c0cc9dbb20",
+    "subject": "Phase 4: Volitelné načtení záměru"
+  }
+}

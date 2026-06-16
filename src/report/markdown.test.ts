@@ -35,6 +35,84 @@ describe("buildMarkdown", () => {
   });
 });
 
+describe("buildMarkdown – sekce Záměr projektu", () => {
+  const base = {
+    root: "/p",
+    generatedAt: "t",
+    files: SAMPLE,
+    skippedUnreadable: [] as string[],
+  };
+
+  it("bez záměru ukáže explicitní 'nedodáno', ne prázdnou díru", () => {
+    const md = buildMarkdown(base);
+    expect(md).toContain("## Záměr projektu");
+    expect(md).toContain("_Záměr nedodán._");
+  });
+
+  it("se záměrem vykreslí text, non-goaly i zdroj", () => {
+    const md = buildMarkdown({
+      ...base,
+      intent: {
+        building: "Lokální CLI nástroj.",
+        nonGoals: ["Nespouští kód.", "Bez webové služby."],
+        sourcePath: "/p/.mini/project.md",
+      },
+    });
+    expect(md).toContain("Načteno z `/p/.mini/project.md`.");
+    expect(md).toContain("> Lokální CLI nástroj.");
+    expect(md).toContain("> - Nespouští kód.");
+    expect(md).toContain("> - Bez webové služby.");
+  });
+
+  it("chybějící část záměru → '_nedodáno_' (ne tichý prázdný blok)", () => {
+    const md = buildMarkdown({
+      ...base,
+      intent: { building: null, nonGoals: null, sourcePath: "/p/project.md" },
+    });
+    expect(md).toContain("> _nedodáno_");
+  });
+
+  it("injection: backtick v sourcePath nerozbije inline code span", () => {
+    const md = buildMarkdown({
+      ...base,
+      intent: { building: "x", nonGoals: null, sourcePath: "/p/`zlo`/project.md" },
+    });
+    // backtick z cesty je pryč (nahrazen), takže code span zůstane uzavřený
+    expect(md).toContain("Načteno z `/p/'zlo'/project.md`.");
+    expect(md).not.toContain("`zlo`");
+  });
+
+  it("injection: newline v sourcePath nepřeruší inline code span (4-5)", () => {
+    const md = buildMarkdown({
+      ...base,
+      intent: { building: "x", nonGoals: null, sourcePath: "/p/zlo\nnewline/project.md" },
+    });
+    expect(md).toContain("Načteno z `/p/zlo newline/project.md`.");
+    // řádek 'Načteno z ...' zůstane na jednom řádku (newline nahrazen mezerou)
+    const nactenoLines = md.split("\n").filter((l) => l.includes("Načteno z"));
+    expect(nactenoLines).toHaveLength(1);
+  });
+
+  it("injection: cizí code fence v záměru nerozbije náš report", () => {
+    const md = buildMarkdown({
+      ...base,
+      intent: {
+        building: "Zlo\n```mermaid\ngraph TD; HACK\n```\n## Falešný nadpis",
+        nonGoals: ["```bash\nrm -rf /\n```"],
+        sourcePath: "/p/project.md",
+      },
+    });
+    // jediný code fence v reportu je náš mermaid blok → přesně 2 výskyty ``` (open+close)
+    expect((md.match(/```/g) ?? []).length).toBe(2);
+    // náš diagram zůstal celý
+    expect(md).toContain("```mermaid");
+    expect(md).toContain("graph TD");
+    // cizí nadpis je zacitovaný (blockquote), ne reálná sekce reportu
+    expect(md).toContain("> ## Falešný nadpis");
+    expect(md).not.toMatch(/^## Falešný nadpis$/m);
+  });
+});
+
 describe("buildFolderDiagram", () => {
   it("napojí podsložky na rodiče", () => {
     const d = buildFolderDiagram(["src", "src/util"], "proj", 60);

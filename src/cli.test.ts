@@ -81,3 +81,96 @@ describe("run – chybové větve vrací exit 1 (ne pád, ne tiché 0)", () => {
     expect(errors.some((e) => e.includes("ENOTDIR"))).toBe(true);
   });
 });
+
+describe("run – načtení záměru je volitelné a nikdy nezhasí report", () => {
+  let proj: string;
+  let outDir: string;
+  let errors: string[];
+  let logs: string[];
+
+  beforeEach(async () => {
+    proj = await mkdtemp(path.join(tmpdir(), "vibe-cli-intent-"));
+    outDir = path.join(proj, "report");
+    await writeFile(path.join(proj, "index.ts"), "export const x = 1;\n", "utf8");
+    errors = [];
+    logs = [];
+    vi.spyOn(console, "log").mockImplementation((msg?: unknown) => {
+      logs.push(String(msg));
+    });
+    vi.spyOn(console, "error").mockImplementation((msg?: unknown) => {
+      errors.push(String(msg));
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(proj, { recursive: true, force: true }).catch(() => {});
+  });
+
+  async function readReportMd(): Promise<string> {
+    const outFiles = await readdir(outDir);
+    const mdName = outFiles.find((f) => f.endsWith(".md"));
+    expect(mdName).toBeDefined();
+    return readFile(path.join(outDir, mdName as string), "utf8");
+  }
+
+  it("se záměrem (.mini/project.md) ho vloží do reportu, exit 0", async () => {
+    await mkdir(path.join(proj, ".mini"), { recursive: true });
+    await writeFile(
+      path.join(proj, ".mini", "project.md"),
+      "## What I'm building\nNáš testovací záměr.\n\n## Non-goals\n- Nespouštět kód.\n",
+      "utf8",
+    );
+
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const md = await readReportMd();
+    expect(md).toContain("## Záměr projektu");
+    expect(md).toContain("> Náš testovací záměr.");
+    expect(md).toContain("> - Nespouštět kód.");
+  });
+
+  it("bez záměru: exit 0, report má 'nedodáno' a vypíše se nápověda", async () => {
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const md = await readReportMd();
+    expect(md).toContain("_Záměr nedodán._");
+    // nápověda jde na stdout (běžný stav, ne chyba) a zmiňuje obě kontraktní sekce
+    expect(logs.some((l) => l.includes("What I'm building") && l.includes("Non-goals"))).toBe(true);
+    // a NEšpiní chybový výstup
+    expect(errors.length).toBe(0);
+  });
+
+  it("prázdný skeleton .mini/project.md: 'nedodáno' není tiché, vypíše nápovědu (4-4)", async () => {
+    // soubor existuje a přečte se, ale obě sekce jsou prázdné → kind=loaded,
+    // building i nonGoals=null. Nesmí to být tichá cesta k 'nedodáno'.
+    await mkdir(path.join(proj, ".mini"), { recursive: true });
+    await writeFile(
+      path.join(proj, ".mini", "project.md"),
+      "# Projekt\n\n## What I'm building\n\n## Non-goals\n",
+      "utf8",
+    );
+
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const md = await readReportMd();
+    expect(md).toContain("_nedodáno_");
+    // i u prázdného souboru (ne jen chybějícího) se nápověda vypíše
+    expect(logs.some((l) => l.includes("What I'm building") && l.includes("Non-goals"))).toBe(true);
+    expect(errors.length).toBe(0);
+  });
+
+  it("nečitelný project.md (je to adresář): exit 0, varování + 'nedodáno'", async () => {
+    await mkdir(path.join(proj, "project.md"), { recursive: true });
+
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const md = await readReportMd();
+    expect(md).toContain("_Záměr nedodán._");
+    expect(errors.some((e) => e.includes("nešel přečíst") && e.includes("EISDIR"))).toBe(true);
+  });
+});

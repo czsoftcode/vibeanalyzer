@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+import { INTENT_HEADINGS, type Intent, loadIntent } from "./intent.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
@@ -81,12 +82,42 @@ export async function run(
     return 1;
   }
 
+  // Záměr je VOLITELNÝ: report jede dál i bez něj. Rozlišujeme tři stavy, ať se
+  // "soubor není" (běžné) nepleť s "nešel přečíst" (problém k nahlášení).
+  // READ-ONLY: do analyzovaného projektu nic nezapisujeme (non-goal č. 1) –
+  // při chybějícím záměru jen poradíme, jak ho dodat.
+  const intentResult = await loadIntent(targetPath);
+  let intent: Intent | null = null;
+  if (intentResult.kind === "loaded") {
+    intent = intentResult.intent;
+  } else if (intentResult.kind === "unreadable") {
+    console.error(
+      `Upozornění: našel jsem ${intentResult.path}, ale nešel přečíst (${intentResult.code}). ` +
+        `Záměr se do reportu nedoplní.`,
+    );
+  }
+
+  // Nápověda se odvíjí od OBSAHU, ne od existence souboru: vypíšeme ji, když
+  // z reportu nevyleze žádný použitelný záměr – tj. soubor chybí NEBO existuje,
+  // ale obě sekce jsou prázdné/skeleton (nález 4-4: prázdný .mini/project.md
+  // jinak tiše zastíní vyplněný fallback). U nečitelného souboru jsme už
+  // varovali na stderr, tam nápovědu nepřidáváme. Chybějící záměr je běžný stav,
+  // ne chyba → stdout (kontrakt "úspěch = ticho na stderr", cli.scanfail.test.ts).
+  const hasIntentContent = intent !== null && (intent.building !== null || intent.nonGoals !== null);
+  if (!hasIntentContent && intentResult.kind !== "unreadable") {
+    console.log(
+      `Tip: pro report se záměrem přidej do analyzovaného projektu \`.mini/project.md\` ` +
+        `(nebo \`project.md\`) se sekcemi \`## ${INTENT_HEADINGS.building}\` a \`## ${INTENT_HEADINGS.nonGoals}\`.`,
+    );
+  }
+
   const index = buildJsonIndex(targetPath, generatedAt, result.files);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
     files: result.files,
     skippedUnreadable: result.skippedUnreadable,
+    intent,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);
