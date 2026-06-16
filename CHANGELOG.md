@@ -15,3 +15,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   `build`), nesleduje symlinky a nečitelné soubory přeskočí a zaznamená do reportu.
 - Výchozí výstup do `~/.vibeanalyzer/<jméno projektu>/` (lze přepsat přes `--out`),
   názvy souborů nesou časové razítko (nepřepisují předchozí běhy).
+
+### Fixed
+
+- Výstupní adresář ležící uvnitř analyzované složky se už nezapočítá do indexu –
+  a to i když je zadán přes symlink (jinak by report rostl každým během).
+- Položky neznámého/zvláštního typu (na souborových systémech bez `d_type`, dále
+  fifo/socket/zařízení) se už tiše nezahazují – zaznamenají se mezi přeskočené.
+- Při selhání zápisu reportu (např. plný disk) nezůstane na disku osiřelý částečný
+  výstup; nástroj se ho pokusí uklidit a vrátí jasnou chybu.

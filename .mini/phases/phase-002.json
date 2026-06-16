@@ -1,0 +1,35 @@
+{
+  "id": 2,
+  "title": "Zpevnění kostry CLI (nálezy 1-1 až 1-3)",
+  "goal": "Opravit tři should-know nálezy z fáze 1: (1-1) výstupní adresář vytvořený uvnitř scanovaného stromu se nesmí započítat do indexu; (1-2) Dirent s neznámým typem (DT_UNKNOWN) se nesmí tiše zahodit, ale zaznamenat do skippedUnreadable; (1-3) při selhání zápisu MD nesmí na disku zůstat osiřelý JSON (uklidit částečný výstup). Nity 1-4 až 1-6 jsou mimo tuto fázi.",
+  "status": "done",
+  "fromFinding": "1-3",
+  "steps": [
+    {
+      "title": "scanTree: vyloučit výstupní adresář podle cesty",
+      "status": "done",
+      "detail": "Přidat do ScanOptions vyloučení podle absolutní cesty; walk přeskočí složku, jejíž abs cesta padne do vyloučení (včetně celého podstromu). V cli.ts předat scanu vyřešený outDir. Ověření: test v scan.test.ts — outDir uvnitř stromu není mezi files; mimo strom je strom nedotčený."
+    },
+    {
+      "title": "scanTree: nezahazovat neznámé/zvláštní Dirent typy",
+      "status": "done",
+      "detail": "Když záznam není symlink/dir/file, dořešit přes stat skutečný typ — soubor/složku zaindexovat normálně; fifo/socket/device nebo selhání stat zapsat do skippedUnreadable. Ověření: test s mkfifo — fifo se objeví v skippedUnreadable, ne že zmizí beze stopy."
+    },
+    {
+      "title": "cli: úklid částečného výstupu při selhání zápisu",
+      "status": "done",
+      "detail": "Sledovat, které výstupní soubory už byly zapsané; při chybě je best-effort smazat (unlink), pak vrátit chybu a exit 1. Hláška přizná, že úklid je best-effort. Ověření: po nasimulovaném selhání MD zápisu nezůstane osiřelý vibeanalyzer-<stamp>.json."
+    },
+    {
+      "title": "Ověření: build, testy, unhappy paths",
+      "status": "done",
+      "detail": "tsc projde, npm test zelené. Ruční kontrola: (1-1) --out uvnitř analyzované složky → výstupní adresář není v reportu; (1-3) zápis MD selže po úspěšném JSON → žádný osamocený soubor nezbyde."
+    }
+  ],
+  "startedAt": "2026-06-15T21:42:21.455Z",
+  "completedAt": "2026-06-16T06:43:57.213Z",
+  "autoCommit": {
+    "preSha": "cfb68eb76b2892c3327fda3b6f3be9dcefc02941",
+    "subject": "Phase 2: Zpevnění kostry CLI (nálezy 1-1 až 1-3)"
+  }
+}

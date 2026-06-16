@@ -1,13 +1,65 @@
+import { execFileSync } from "node:child_process";
+import * as fsp from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scanTree } from "./scan.js";
+
+// node:fs/promises mockujeme jako passthrough (kopie reálného modulu), aby šel
+// readdir/lstat přepsat spy-em pro simulaci DT_UNKNOWN / zvláštních typů, které
+// se na běžném FS nedají vynutit. Ostatní funkce volají reálnou implementaci.
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual };
+});
+
+// Je mkfifo k dispozici? Když ne (jiná platforma / omezené prostředí), test
+// pro zvláštní typy se VIDITELNĚ skipne (it.skipIf), ne aby falešně "prošel"
+// bez jediné assertion. Portovatelné pokrytí té větve řeší mock-test níž.
+let hasMkfifo = true;
+try {
+  execFileSync("sh", ["-c", "command -v mkfifo"], { stdio: "ignore" });
+} catch {
+  hasMkfifo = false;
+}
+
+// Dirent, který svůj typ NEoznačí (jako DT_UNKNOWN na FS bez d_type). scanTree
+// z něj čte jen name + is*() predikáty.
+function unknownDirent(name: string): import("node:fs").Dirent {
+  return {
+    name,
+    isSymbolicLink: () => false,
+    isDirectory: () => false,
+    isFile: () => false,
+  } as unknown as import("node:fs").Dirent;
+}
+
+// stat zvláštního typu (fifo/socket/device): ani symlink, ani dir, ani file.
+function specialStat(): import("node:fs").Stats {
+  return {
+    isSymbolicLink: () => false,
+    isDirectory: () => false,
+    isFile: () => false,
+  } as unknown as import("node:fs").Stats;
+}
+
+// stat symlinku – pro větev DT_UNKNOWN → lstat zjistí symlink.
+function symlinkStat(): import("node:fs").Stats {
+  return {
+    isSymbolicLink: () => true,
+    isDirectory: () => false,
+    isFile: () => false,
+  } as unknown as import("node:fs").Stats;
+}
 
 describe("scanTree", () => {
   let root: string;
+  // reálné implementace pro použití uvnitř mocků (mimo passthrough modul)
+  let real: typeof import("node:fs/promises");
 
   beforeEach(async () => {
+    real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     root = await mkdtemp(path.join(tmpdir(), "vibe-scan-"));
     // běžný projekt
     await mkdir(path.join(root, "src"), { recursive: true });
@@ -25,6 +77,7 @@ describe("scanTree", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -62,6 +115,123 @@ describe("scanTree", () => {
     const { files } = await scanTree(root);
     expect(files.some((f) => f.path === "loop")).toBe(false);
   });
+
+  it("vyloučí zadaný výstupní adresář i s podstromem (excludePaths)", async () => {
+    const outDir = path.join(root, "report");
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "neco.txt"), "x\n", "utf8");
+
+    // bez vyloučení by se výstupní adresář i jeho obsah započítal
+    const before = await scanTree(root);
+    expect(before.files.some((f) => f.path === "report")).toBe(true);
+
+    const { files } = await scanTree(root, { excludePaths: new Set([outDir]) });
+    const paths = files.map((f) => f.path);
+    expect(paths.some((p) => p === "report" || p.startsWith("report/"))).toBe(false);
+    // zbytek stromu zůstává nedotčený
+    expect(paths).toContain("src/index.ts");
+  });
+
+  it("vyloučí outDir zadaný přes symlink (kanonizace přes realpath)", async () => {
+    const outDir = path.join(root, "report");
+    await mkdir(outDir, { recursive: true });
+
+    // symlink na root MIMO strom; outDir zadáme jeho symlinkovým zápisem cesty
+    const linkBase = await mkdtemp(path.join(tmpdir(), "vibe-link-"));
+    const linkToRoot = path.join(linkBase, "rootlink");
+    await symlink(root, linkToRoot);
+    const outViaSymlink = path.join(linkToRoot, "report"); // jiný string, stejná fyzická cesta
+
+    const { files } = await scanTree(root, { excludePaths: new Set([outViaSymlink]) });
+    await rm(linkBase, { recursive: true, force: true }).catch(() => {});
+
+    // holé porovnání řetězců by tady selhalo (linkToRoot/report != root/report)
+    expect(files.some((f) => f.path === "report")).toBe(false);
+    expect(files.some((f) => f.path === "src/index.ts")).toBe(true);
+  });
+
+  it("DT_UNKNOWN: skutečný soubor dořeší přes lstat a ZAINDEXUJE (jádro 1-2)", async () => {
+    const mroot = await mkdtemp(path.join(tmpdir(), "vibe-unknown-"));
+    await real.writeFile(path.join(mroot, "mystery.ts"), "export const y = 2;\n", "utf8");
+    // readdir vrátí Dirent bez typu (DT_UNKNOWN); soubor reálně existuje na disku
+    vi.spyOn(fsp, "readdir").mockResolvedValue([unknownDirent("mystery.ts")] as never);
+
+    const { files, skippedUnreadable } = await scanTree(mroot);
+    await rm(mroot, { recursive: true, force: true }).catch(() => {});
+
+    const f = files.find((e) => e.path === "mystery.ts");
+    expect(f?.type).toBe("file");
+    expect(f?.ext).toBe(".ts");
+    expect(f?.size ?? 0).toBeGreaterThan(0);
+    expect(skippedUnreadable).not.toContain("mystery.ts");
+  });
+
+  it("DT_UNKNOWN: adresář se dořeší přes lstat a REKURZIVNĚ projde (jádro 1-2 na FS bez d_type)", async () => {
+    // reálná struktura na disku; readdr ji vrátí jako typeless (DT_UNKNOWN),
+    // takže VŠECHNO projde lstat fallbackem – včetně adresáře a rekurze do něj.
+    const mroot = await mkdtemp(path.join(tmpdir(), "vibe-unkdir-"));
+    await real.mkdir(path.join(mroot, "sub"), { recursive: true });
+    await real.writeFile(path.join(mroot, "sub", "inner.ts"), "export const z = 3;\n", "utf8");
+
+    // path-aware mock: deleguje na reálný readdir (konečná struktura → žádné
+    // zacyklení) a jen strhne typ z každého Direntu.
+    vi.spyOn(fsp, "readdir").mockImplementation(async (dir, opts) => {
+      const ents = await real.readdir(dir as string, opts as { withFileTypes: true });
+      return ents.map((e) => unknownDirent(e.name)) as never;
+    });
+
+    const { files, skippedUnreadable } = await scanTree(mroot);
+    await rm(mroot, { recursive: true, force: true }).catch(() => {});
+
+    const sub = files.find((f) => f.path === "sub");
+    const inner = files.find((f) => f.path === "sub/inner.ts");
+    expect(sub?.type).toBe("dir"); // adresář se nezahodil ani neoznačil za soubor
+    expect(inner?.type).toBe("file"); // rekurze proběhla a soubor uvnitř se zaindexoval
+    expect(inner?.depth).toBe(2);
+    expect(skippedUnreadable).toEqual([]);
+  });
+
+  it("zvláštní typ přes lstat fallback → skippedUnreadable (portovatelně, bez mkfifo)", async () => {
+    const mroot = await mkdtemp(path.join(tmpdir(), "vibe-special-"));
+    vi.spyOn(fsp, "readdir").mockResolvedValue([unknownDirent("weird")] as never);
+    vi.spyOn(fsp, "lstat").mockImplementation(async (p) => {
+      if (String(p).endsWith("weird")) return specialStat();
+      return real.lstat(p as Parameters<typeof real.lstat>[0]);
+    });
+
+    const { files, skippedUnreadable } = await scanTree(mroot);
+    await rm(mroot, { recursive: true, force: true }).catch(() => {});
+
+    expect(files.some((f) => f.path === "weird")).toBe(false);
+    expect(skippedUnreadable).toContain("weird");
+  });
+
+  it("DT_UNKNOWN, který je symlink → continue (nesleduje, neindexuje, nezaznamená)", async () => {
+    const mroot = await mkdtemp(path.join(tmpdir(), "vibe-unklink-"));
+    vi.spyOn(fsp, "readdir").mockResolvedValue([unknownDirent("link")] as never);
+    vi.spyOn(fsp, "lstat").mockImplementation(async (p) => {
+      if (String(p).endsWith("link")) return symlinkStat();
+      return real.lstat(p as Parameters<typeof real.lstat>[0]);
+    });
+
+    const { files, skippedUnreadable } = await scanTree(mroot);
+    await rm(mroot, { recursive: true, force: true }).catch(() => {});
+
+    // symlink se má tiše přeskočit – ne zaindexovat ANI zaznamenat jako nečitelný
+    expect(files.some((f) => f.path === "link")).toBe(false);
+    expect(skippedUnreadable).not.toContain("link");
+  });
+
+  it.skipIf(!hasMkfifo)(
+    "neztratí zvláštní typ (fifo) – zaznamená do skippedUnreadable",
+    async () => {
+      const fifo = path.join(root, "pipe");
+      execFileSync("mkfifo", [fifo]); // bez try/catch – selhání = padlý test, ne tichý skip
+      const { files, skippedUnreadable } = await scanTree(root);
+      expect(files.some((f) => f.path === "pipe")).toBe(false);
+      expect(skippedUnreadable).toContain("pipe");
+    },
+  );
 
   it("nečitelnou složku přeskočí a zaznamená, nespadne", async () => {
     const locked = path.join(root, "locked");

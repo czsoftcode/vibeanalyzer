@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
+import { writeReportFiles } from "./report/writeOutputs.js";
 import { scanTree } from "./scan.js";
 import { fileTimestamp } from "./timestamp.js";
 import { readPackageVersion } from "./version.js";
@@ -27,8 +30,11 @@ Výstup:
   vibeanalyzer-<timestamp>.json  strojový strukturální index
   vibeanalyzer-<timestamp>.md    lidský report se seznamem souborů a Mermaid diagramem`;
 
-async function run(): Promise<number> {
-  const parsed = parseArgs(process.argv.slice(2), process.cwd());
+export async function run(
+  argv: readonly string[] = process.argv.slice(2),
+  cwd: string = process.cwd(),
+): Promise<number> {
+  const parsed = parseArgs(argv, cwd);
 
   if (parsed.kind === "help") {
     console.log(HELP);
@@ -65,7 +71,9 @@ async function run(): Promise<number> {
   const generatedAt = now.toISOString();
   const stamp = fileTimestamp(now);
 
-  const result = await scanTree(targetPath);
+  // outDir může ležet uvnitř analyzované složky – ať se vlastní výstupní
+  // adresář (a jeho obsah) nezapočítá do indexu.
+  const result = await scanTree(targetPath, { excludePaths: new Set([outDir]) });
 
   const index = buildJsonIndex(targetPath, generatedAt, result.files);
   const md = buildMarkdown({
@@ -79,11 +87,13 @@ async function run(): Promise<number> {
   const mdPath = path.join(outDir, `vibeanalyzer-${stamp}.md`);
 
   try {
-    await writeFile(jsonPath, JSON.stringify(index, null, 2) + "\n", "utf8");
-    await writeFile(mdPath, md + "\n", "utf8");
+    await writeReportFiles(jsonPath, JSON.stringify(index, null, 2) + "\n", mdPath, md + "\n");
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
-    console.error(`Chyba: výstup nelze zapsat (${e.code ?? "neznámá chyba"}): ${e.message ?? ""}`);
+    console.error(
+      `Chyba: výstup nelze zapsat (${e.code ?? "neznámá chyba"}): ${e.message ?? ""}. ` +
+        `Případný částečný výstup jsem se pokusil uklidit (best-effort).`,
+    );
     return 1;
   }
 
@@ -99,11 +109,32 @@ async function run(): Promise<number> {
   return 0;
 }
 
-run()
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((err: unknown) => {
-    console.error("Neočekávaná chyba:", err);
-    process.exitCode = 1;
-  });
+/**
+ * Je tenhle modul vstupní bod procesu? Slouží k auto-spuštění run() jen při
+ * reálném spuštění, ne při importu z testu.
+ *
+ * POZOR na symlinky: npm při instalaci binárky (`bin`) vytvoří symlink na
+ * dist/cli.js, takže process.argv[1] = cesta SYMLINKU, ale import.meta.url node
+ * u main modulu dereferencuje na realpath. Holé `path.resolve` symlink
+ * nerozbaluje → nerovnost → CLI by se po instalaci nikdy nespustilo (tichý
+ * no-op, exit 0). Proto realpath na OBOU stranách.
+ */
+export function isEntrypoint(entryArg: string | undefined, moduleUrl: string): boolean {
+  if (typeof entryArg !== "string") return false;
+  try {
+    return realpathSync(path.resolve(entryArg)) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntrypoint(process.argv[1], import.meta.url)) {
+  run()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((err: unknown) => {
+      console.error("Neočekávaná chyba:", err);
+      process.exitCode = 1;
+    });
+}
