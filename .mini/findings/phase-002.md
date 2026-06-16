@@ -132,7 +132,7 @@ Pár-atomicita zničí úspěšně zapsaný JSON index, když selže jen MD
 
 Když JSON zápis projde a teprve MD selže (ENOSPC/EFBIG/EIO), catch BEZPODMÍNEČNĚ smaže i ten validní JSON. JSON je strojový produkt nástroje (index), MD je lidský report – jsou to dva nezávislé artefakty, ne transakce. Default 'buď oba, nebo žádný' znamená, že flaky druhý zápis (třeba MD je o řád větší a trefí EFBIG dřív než JSON) zahodí i hodnotný strojový výstup → uživatel nedostane NIC + exit 1. Není to bug (je to přímý důsledek záměrného návrhu a hláška to přiznává slovem best-effort), ale je to debatovatelná volba, kterou by měl člověk před 'done' vědomě potvrdit: protiargument 'půlvýstup by se mohl splést s kompletním' je legitimní, ale stejně tak 'radši mít JSON než nic'. Patří k ADR, který fáze beztak zvažuje (temp+rename). Označuju jako rozhodovací bod, ne jako defekt.
 
-## 2-17 · nit · open
+## 2-17 · nit · resolved
 **Where:** src/cli.ts:122-129
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial

@@ -1,15 +1,12 @@
-#!/usr/bin/env node
-import { realpathSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
-import { scanTree } from "./scan.js";
+import { ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 import { fileTimestamp } from "./timestamp.js";
 import { readPackageVersion } from "./version.js";
 
@@ -59,21 +56,30 @@ export async function run(
     return 1;
   }
 
-  try {
-    await mkdir(outDir, { recursive: true });
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    console.error(`Chyba: výstupní adresář nelze vytvořit: ${outDir} (${e.code ?? "neznámá chyba"})`);
-    return 1;
-  }
-
   const now = new Date();
   const generatedAt = now.toISOString();
   const stamp = fileTimestamp(now);
 
-  // outDir může ležet uvnitř analyzované složky – ať se vlastní výstupní
-  // adresář (a jeho obsah) nezapočítá do indexu.
+  // ŽÁDNÝ try/catch kolem scanTree ZÁMĚRNĚ: scanTree je plně defenzivní – I/O
+  // chyby (readdir/lstat/stat/realpath) si chytá sám a sype je do
+  // skippedUnreadable, na I/O tedy nikdy nehodí. Jediné, co by hodil, je
+  // programová chyba (RangeError z hluboké rekurze apod.) – a tu chceme nahlas
+  // se stackem přes launcher catch v bin.ts, ne maskovanou jako „I/O selhání"
+  // bez stacku. Stejná úvaha jako u build* (nález 3-7/3-11). Reálný TOCTOU
+  // (zmizelý cíl) řeší guard níž, ne výjimka.
+  // outDir může ležet uvnitř analyzované složky – ať se vlastní výstupní adresář
+  // (a jeho obsah) nezapočítá do indexu.
   const result = await scanTree(targetPath, { excludePaths: new Set([outDir]) });
+
+  // scanTree je defenzivní: nečitelný cíl NEHODÍ, jen kořen zapíše do
+  // skippedUnreadable jako ROOT_UNREADABLE_MARKER. To znamená, že se kořen vůbec
+  // nepřečetl – analýza reálně neproběhla. Bez téhle kontroly by se zapsal report
+  // o 0 souborech a vrátilo exit 0 (tichý falešný úspěch). Legitimně prázdná
+  // (ale čitelná) složka marker v seznamu nemá, takže se nepleteme.
+  if (result.skippedUnreadable.includes(ROOT_UNREADABLE_MARKER)) {
+    console.error(`Chyba: cílovou složku nelze přečíst (zmizela nebo chybí práva?): ${targetPath}`);
+    return 1;
+  }
 
   const index = buildJsonIndex(targetPath, generatedAt, result.files);
   const md = buildMarkdown({
@@ -86,13 +92,37 @@ export async function run(
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);
   const mdPath = path.join(outDir, `vibeanalyzer-${stamp}.md`);
 
+  // outDir vytvoříme až TEĎ, těsně před zápisem. Dřívější selhání (neprojitelný
+  // nebo nečitelný cíl) tak po sobě nenechají osiřelý prázdný výstupní adresář
+  // (nález 3-9). Důsledek kompromisu: chybu nevytvořitelného outDir nahlásíme až
+  // po scanu, ne hned – scan je levný a běžný případ projde.
+  // mkdir s {recursive:true} vrací NEJVYŠŠÍ vytvořenou cestu (nebo undefined, když
+  // nic nevzniklo, protože outDir už existoval). Tu hodnotu si držíme: je to přesně
+  // to, co po sobě smíme uklidit při selhání zápisu – nic víc, nic míň.
+  let createdDir: string | undefined;
+  try {
+    createdDir = await mkdir(outDir, { recursive: true });
+  } catch (err: unknown) {
+    const e = err as NodeJS.ErrnoException;
+    console.error(`Chyba: výstupní adresář nelze vytvořit: ${outDir} (${e.code ?? "neznámá chyba"})`);
+    return 1;
+  }
+
   try {
     await writeReportFiles(jsonPath, JSON.stringify(index, null, 2) + "\n", mdPath, md + "\n");
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
+    // writeReportFiles uklidí best-effort jen částečně zapsané SOUBORY. Adresáře,
+    // které jsme kvůli zápisu vytvořili (createdDir = nejvyšší z nich, včetně
+    // mezičlánků u zanořeného --out), smažeme tady. Když createdDir je undefined,
+    // outDir existoval už před námi (klidně prázdný uživatelův) → NEMAŽEME nic,
+    // ať neodstraníme cizí adresář ani staré reporty (nálezy 3-10/3-14/3-15).
+    if (createdDir !== undefined) {
+      await rm(createdDir, { recursive: true, force: true }).catch(() => {});
+    }
     console.error(
       `Chyba: výstup nelze zapsat (${e.code ?? "neznámá chyba"}): ${e.message ?? ""}. ` +
-        `Případný částečný výstup jsem se pokusil uklidit (best-effort).`,
+        `Částečně zapsané soubory a adresáře, které jsem kvůli zápisu vytvořil, jsem zkusil uklidit (best-effort).`,
     );
     return 1;
   }
@@ -109,32 +139,3 @@ export async function run(
   return 0;
 }
 
-/**
- * Je tenhle modul vstupní bod procesu? Slouží k auto-spuštění run() jen při
- * reálném spuštění, ne při importu z testu.
- *
- * POZOR na symlinky: npm při instalaci binárky (`bin`) vytvoří symlink na
- * dist/cli.js, takže process.argv[1] = cesta SYMLINKU, ale import.meta.url node
- * u main modulu dereferencuje na realpath. Holé `path.resolve` symlink
- * nerozbaluje → nerovnost → CLI by se po instalaci nikdy nespustilo (tichý
- * no-op, exit 0). Proto realpath na OBOU stranách.
- */
-export function isEntrypoint(entryArg: string | undefined, moduleUrl: string): boolean {
-  if (typeof entryArg !== "string") return false;
-  try {
-    return realpathSync(path.resolve(entryArg)) === realpathSync(fileURLToPath(moduleUrl));
-  } catch {
-    return false;
-  }
-}
-
-if (isEntrypoint(process.argv[1], import.meta.url)) {
-  run()
-    .then((code) => {
-      process.exitCode = code;
-    })
-    .catch((err: unknown) => {
-      console.error("Neočekávaná chyba:", err);
-      process.exitCode = 1;
-    });
-}

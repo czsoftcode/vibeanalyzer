@@ -1,0 +1,45 @@
+{
+  "id": 3,
+  "title": "Zpevnit chybové cesty CLI",
+  "goal": "Doplnit automatické testy chybových větví run() (neplatný cíl, selhání mkdir, selhání zápisu → každá vrací exit 1 s jasnou hláškou, ne pád ani tichý úspěch) (2-15) a opravit isEntrypoint, aby při výjimce z realpathSync nesklouzl do tichého no-opu, ale měl bezpečný fallback (2-17). Nález 2-16 je mimo tuto fázi (řeší se zvlášť).",
+  "status": "done",
+  "fromFinding": "2-17",
+  "steps": [
+    {
+      "title": "Test: neplatný cíl → exit 1",
+      "status": "done",
+      "detail": "V cli.test.ts zavolat run() na neexistující cestu; ověřit kód 1 a console.error s jasnou hláškou (žádný pád, žádné tiché 0). Bez mocku."
+    },
+    {
+      "title": "Test: selhání mkdir → exit 1",
+      "status": "done",
+      "detail": "Vynutit ENOTDIR tak, že --out míří do podsložky existujícího souboru; ověřit exit 1 a hlášku o nevytvořeném výstupním adresáři s code."
+    },
+    {
+      "title": "Test: selhání zápisu → exit 1",
+      "status": "done",
+      "detail": "Přes vi.mock writeOutputs nechat writeReportFiles vyhodit ErrnoException; ověřit, že run() chytí, vrátí 1 a vypíše hlášku o nemožnosti zápisu (ne pád)."
+    },
+    {
+      "title": "Oprava isEntrypoint – fail-closed s rozlišeným fallbackem",
+      "status": "done",
+      "detail": "Oddělit realpathSync modulu (selhání = skutečná chyba) od argv[1]; při výjimce jen z argv[1] porovnat path.resolve bez rozbalení symlinku, aby se nezamlčel rozdíl chyba realpathu vs neshoda."
+    },
+    {
+      "title": "Test: isEntrypoint na vyhozené výjimce",
+      "status": "done",
+      "detail": "Doplnit do cli.test.ts případ, kdy realpathSync(argv[1]) hodí; ověřit, že chování odpovídá fail-closed strategii – ne tichý no-op náhodou."
+    },
+    {
+      "title": "Spustit celou sadu + typecheck",
+      "status": "done",
+      "detail": "npm test a npm run typecheck zeleně; potvrdit, že nové testy bez opravy padají (sanity)."
+    }
+  ],
+  "startedAt": "2026-06-16T07:52:58.278Z",
+  "completedAt": "2026-06-16T11:37:53.307Z",
+  "autoCommit": {
+    "preSha": "483e482cc1ec7475c517a9a74570452aa5e14202",
+    "subject": "Phase 3: Zpevnit chybové cesty CLI"
+  }
+}

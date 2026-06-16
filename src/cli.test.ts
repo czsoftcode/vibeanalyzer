@@ -1,9 +1,8 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isEntrypoint, run } from "./cli.js";
+import { run } from "./cli.js";
 
 // Integrační test napojení cli → scanTree(excludePaths). Jednotkové scan testy
 // ověřují MECHANISMUS izolovaně; tohle hlídá, že cli ten Set opravdu předá –
@@ -45,37 +44,40 @@ describe("run – integrace cli s vyloučením outDir", () => {
   });
 });
 
-describe("isEntrypoint – rozpoznání vstupního bodu i přes symlink", () => {
-  let dir: string;
+describe("run – chybové větve vrací exit 1 (ne pád, ne tiché 0)", () => {
+  let proj: string;
+  let errors: string[];
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "vibe-entry-"));
+    proj = await mkdtemp(path.join(tmpdir(), "vibe-cli-err-"));
+    await writeFile(path.join(proj, "index.ts"), "export const x = 1;\n", "utf8");
+    errors = [];
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation((msg?: unknown) => {
+      errors.push(String(msg));
+    });
   });
 
   afterEach(async () => {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    vi.restoreAllMocks();
+    await rm(proj, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("symlink na modul (npm bin) se rozpozná jako vstupní bod", async () => {
-    const realFile = path.join(dir, "cli.js");
-    await writeFile(realFile, "// modul\n", "utf8");
-    const link = path.join(dir, "vibeanalyzer"); // jako npm bin symlink
-    await symlink(realFile, link);
-
-    // argv[1] = symlink, import.meta.url = realpath modulu (jako u main modulu v node)
-    expect(isEntrypoint(link, pathToFileURL(realFile).href)).toBe(true);
+  it("neplatný cíl (neexistující cesta) → exit 1 s jasnou hláškou", async () => {
+    const code = await run([path.join(proj, "tady-nic-neni")], proj);
+    expect(code).toBe(1);
+    expect(errors.some((e) => e.includes("Cesta neexistuje"))).toBe(true);
   });
 
-  it("cizí soubor jako argv[1] NENÍ vstupní bod (import z testu)", async () => {
-    const realFile = path.join(dir, "cli.js");
-    const other = path.join(dir, "vitest-runner.js");
-    await writeFile(realFile, "// modul\n", "utf8");
-    await writeFile(other, "// runner\n", "utf8");
+  it("selhání mkdir (--out uvnitř souboru → ENOTDIR) → exit 1", async () => {
+    const blocker = path.join(proj, "blocker");
+    await writeFile(blocker, "jsem soubor, ne adresář\n", "utf8");
+    // outDir leží UVNITŘ souboru → mkdir recursive narazí na ENOTDIR
+    const outDir = path.join(blocker, "report");
 
-    expect(isEntrypoint(other, pathToFileURL(realFile).href)).toBe(false);
-  });
-
-  it("chybějící argv[1] → false", () => {
-    expect(isEntrypoint(undefined, pathToFileURL(path.join(dir, "cli.js")).href)).toBe(false);
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(1);
+    expect(errors.some((e) => e.includes("výstupní adresář nelze vytvořit"))).toBe(true);
+    expect(errors.some((e) => e.includes("ENOTDIR"))).toBe(true);
   });
 });

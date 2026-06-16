@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { scanTree } from "./scan.js";
+import { ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 
 // node:fs/promises mockujeme jako passthrough (kopie reálného modulu), aby šel
 // readdir/lstat přepsat spy-em pro simulaci DT_UNKNOWN / zvláštních typů, které
@@ -244,5 +244,18 @@ describe("scanTree", () => {
     await chmod(locked, 0o755).catch(() => {});
 
     expect(skippedUnreadable).toContain("locked");
+  });
+
+  // Připnutí kontraktu pro guard v cli.ts (nález 3-8): když nejde přečíst sám
+  // KOŘEN scanu, musí to skončit přesně v ROOT_UNREADABLE_MARKER (ne v rel cestě
+  // jako u podadresáře výš). Bez tohoto testu by refaktor scan.ts tiše rozbil
+  // rozlišení „cíl nepřečten" vs „prázdný projekt" v cli.ts. Neexistující cesta
+  // modeluje zmizelý cíl (TOCTOU) a readdir(root) deterministicky hodí.
+  it("nečitelný KOŘEN → skippedUnreadable obsahuje ROOT_UNREADABLE_MARKER, žádné soubory", async () => {
+    const gone = path.join(root, "tady-uz-nic-neni");
+    const { files, skippedUnreadable } = await scanTree(gone);
+
+    expect(files).toEqual([]);
+    expect(skippedUnreadable).toContain(ROOT_UNREADABLE_MARKER);
   });
 });

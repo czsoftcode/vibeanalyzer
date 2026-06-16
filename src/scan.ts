@@ -33,6 +33,15 @@ export const DEFAULT_SKIP_DIRS: ReadonlySet<string> = new Set([
 /** Vlastní výstupní soubory nástroje – ať se příští běh nezapočítá do sebe. */
 const OUTPUT_ARTIFACT_RE = /^vibeanalyzer-.*\.(json|md)$/i;
 
+/**
+ * Značka v `skippedUnreadable` pro případ, že nešel přečíst sám KOŘEN scanu
+ * (readdir(root) hodil). Relativní cesta kořene je "" → značíme "." (relDir je
+ * jinak vždy konkrétní jméno, takže "." nemůže kolidovat s reálným záznamem).
+ * Sdílená konstanta záměrně: `cli.ts` na ni váže rozlišení „cíl nepřečten" vs
+ * „prázdný projekt" – holý literál na dvou místech by se při refaktoru rozešel.
+ */
+export const ROOT_UNREADABLE_MARKER = ".";
+
 export interface ScanOptions {
   skipDirs?: ReadonlySet<string>;
   isOutputArtifact?: (name: string) => boolean;
@@ -71,7 +80,7 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
     try {
       entries = await readdir(absDir, { withFileTypes: true });
     } catch {
-      skippedUnreadable.push(relDir === "" ? "." : relDir);
+      skippedUnreadable.push(relDir === "" ? ROOT_UNREADABLE_MARKER : relDir);
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));

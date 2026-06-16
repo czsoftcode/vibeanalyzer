@@ -23,4 +23,10 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 - Položky neznámého/zvláštního typu (na souborových systémech bez `d_type`, dále
   fifo/socket/zařízení) se už tiše nezahazují – zaznamenají se mezi přeskočené.
 - Při selhání zápisu reportu (např. plný disk) nezůstane na disku osiřelý částečný
-  výstup; nástroj se ho pokusí uklidit a vrátí jasnou chybu.
+  výstup; nástroj uklidí jen to, co sám kvůli zápisu vytvořil (včetně zanořených
+  adresářů), nikdy ne předem existující cizí adresář, a vrátí jasnou chybu.
+- Když cílová složka mezi kontrolou a průchodem zmizí nebo přestane být čitelná,
+  nástroj vrátí chybu a nenulový kód místo tichého prázdného reportu (dřív vypadal
+  jako úspěch). Legitimně prázdná složka je dál v pořádku.
+- Chybové cesty CLI (neplatný cíl, nevytvořitelný výstupní adresář, selhání zápisu)
+  spolehlivě končí nenulovým kódem s konkrétní hláškou, ne pádem ani tichým úspěchem.
