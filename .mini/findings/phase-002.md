@@ -4,7 +4,7 @@
 > Each entry is `## <id> · <severity> · <status>`; do not hand-edit those header
 > lines.
 
-## 2-1 · blocker · open
+## 2-1 · blocker · resolved
 **Where:** src/report/writeOutputs.ts:20-31
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -12,7 +12,7 @@ writeReportFiles zanechá osiřelý soubor při selhání zápisu po open (ENOSP
 
 Cíl fáze 1-3 (žádný osiřelý částečný výstup) NEPLATÍ pro realistický spouštěč. written.push(p) běží AŽ po vyřešení await writeFile, takže když zápis selže po otevření souboru (plný disk ENOSPC, kvóta EDQUOT, EFBIG, I/O chyba EIO), je soubor na disku VYTVOŘEN (open+truncate uspěl), ale do written se nedostane → catch ho neuklidí. Empiricky reprodukováno: pod 'ulimit -f 0' selže zápis JSON s EFBIG, v adresáři zbyl osiřelý out.json. Pokud projde JSON a selže MD uprostřed zápisu, zbyde naopak částečně zapsaný MD. Tj. právě ten realistický důvod selhání druhého zápisu (disk plný) garanci porušuje. Oprava je zároveň JEDNODUŠŠÍ: v catch bezpodmínečně unlink(jsonPath).catch() i unlink(mdPath).catch() — smaže i částečně zapsaný/vytvořený soubor; neexistující dá ENOENT (spolknuto). Pole 'written' je tak složitější A méně správné než naivní úklid obou cest.
 
-## 2-2 · should-know · open
+## 2-2 · should-know · resolved
 **Where:** src/report/writeOutputs.test.ts:36-60
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -20,7 +20,7 @@ Test 1-3 pokrývá jen EISDIR — jediný režim, který osiřelý soubor vyrobi
 
 Oba chybové testy simulují selhání tím, že cílová cesta je adresář (EISDIR). EISDIR selže UŽ při open(), takže žádný soubor nevznikne — proto se osiřelý výstup nikdy neobjeví a test 'projde'. Falešná jistota: skutečný spouštěč selhání druhého zápisu (plný disk / kvóta / EFBIG / EIO) selže AŽ při write() po vytvoření souboru a osiřelý soubor zanechá (viz 2-1). Chybí test pro write-after-open (lze deterministicky přes 'ulimit -f 0' v subprocesu, nebo mockem fs/promises.writeFile, který poprvé uspěje a podruhé rejectne po 'vytvoření' souboru).
 
-## 2-3 · should-know · open
+## 2-3 · should-know · resolved
 **Where:** src/scan.test.ts:80-90
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -28,7 +28,7 @@ fifo test se bez mkfifo tiše přeskočí — projde bez jediné assertion
 
 Když mkfifo selže/neexistuje (jiná platforma, omezené prostředí), catch blok udělá 'return' a test skončí jako passed, aniž cokoli ověřil. Zelená barva pak nedokazuje, že větev 'zvláštní typ → skippedUnreadable' funguje. Lépe: vitest it.skip s důvodem (test viditelně skipped, ne falešně passed), nebo dořešit DT_UNKNOWN cestu portovatelným mockem readdir vracejícím Dirent s d_type=UNKNOWN.
 
-## 2-4 · nit · open
+## 2-4 · nit · resolved
 **Where:** src/report/writeOutputs.ts:10-19
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -36,7 +36,7 @@ writeReportFiles: doc komentář slibuje návratovou hodnotu, ale funkce vrací 
 
 Komentář tvrdí 'Vrací cesty, které po (případném) úklidu reálně zůstaly zapsané... při úspěchu oba soubory; při chybě prázdné pole', ale signatura je Promise<void> a nic se nevrací. Zavádějící dokumentace — buď doplnit návratovou hodnotu (a volající by ji mohl logovat), nebo komentář opravit, ať neslibuje neexistující API.
 
-## 2-5 · should-know · open
+## 2-5 · should-know · resolved
 **Where:** src/scan.ts:105
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -44,7 +44,7 @@ Vyloučení outDir je porovnání řetězců 1:1, přes symlink tiše selže
 
 Vyloučení běží jako excludePaths.has(abs), kde abs = path.join(absDir, name) postavené od targetPath. path.resolve normalizuje '..'/'.', ale NErozbaluje symlinky. Reálný spouštěč z CLI: 'vibeanalyzer /mnt/x/proj --out ~/proj/report', kde ~/proj je symlink na /mnt/x/proj. targetPath=/mnt/x/proj -> abs=/mnt/x/proj/report; outDir=path.resolve(~/proj/report)=/home/u/proj/report. Řetězce se nerovnají -> vlastní výstupní adresář se NEvyloučí a zaindexuje (a roste s každým během). Přesně cíl 1-1 ('výstupní adresář se nezapočítá') má tichou díru. Funkce navíc nemá žádnou normalizaci/guard ani test na neabsolutní/nekanonickou cestu v excludePaths -> chyba kaskáduje potichu.
 
-## 2-6 · should-know · open
+## 2-6 · should-know · resolved
 **Where:** src/scan.ts:91-94, src/scan.test.ts
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -60,7 +60,7 @@ Smysl 1-2 nebyl jen 'nezahodit tiše', ale taky 'skutečný soubor/složku, kter
 
 catch dělá unlink(jsonPath)/unlink(mdPath) na cesty bez ohledu na to, jestli ten soubor vytvořil tenhle běh. Sémantika je 'smaž, co je na té cestě', ne 'smaž, co jsem zapsal'. V praxi to chrání milisekundové razítko v názvu (kolize skoro nemožná), takže nízká priorita; ale při souběžném běhu se stejným outDir+cílem ve stejné ms, nebo když na té cestě z jakéhokoli důvodu předtím soubor existoval, by se cizí/validní soubor tiše smazal. Před touhle fází selhání soubory NEchávalo; teď je aktivně maže.
 
-## 2-8 · nit · open
+## 2-8 · nit · resolved
 **Where:** src/scan.test.ts:96
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -68,7 +68,7 @@ Fifo test se skipuje bez mkfifo -> na takovém CI nula assertion pro zvláštní
 
 it.skipIf(!hasMkfifo) je poctivější než starý tichý try/return, ale na platformě/CI bez mkfifo je CELÁ větev zvláštních typů (lstat fallback -> fifo/socket/device) bez jediné assertion. Report to přiznává, přesto je to reálná díra v pokrytí na ne-POSIX nebo osekaných prostředích. Šlo by doplnit alternativní vynucení (např. socket přes net modul) nebo aspoň test, který skip viditelně vykáže.
 
-## 2-9 · should-know · open
+## 2-9 · should-know · resolved
 **Where:** src/cli.ts:71
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -76,7 +76,7 @@ Napojení cli→scanTree(excludePaths) nemá automatický test
 
 Vlastní cíl 1-1 (vyloučení outDir z indexu) je v produkčním kódu jen na řádku cli.ts:71. scan.test.ts ověřuje MECHANISMUS excludePaths izolovaně voláním scanTree přímo, ale nikdo netestuje, že cli ten Set skutečně předá. cli.ts nemá žádný test (run() není exportovaný). Když někdo ten řádek smaže/rozbije (např. refaktor argumentů), VŠECH 30 testů zůstane zelených a výstupní adresář se zase začne indexovat a růst každým během – přesně regrese, kterou fáze opravovala. Ověřeno jen ručním E2E, což zmizí při dalším refaktoru.
 
-## 2-10 · should-know · open
+## 2-10 · should-know · resolved
 **Where:** src/scan.ts:101
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -92,7 +92,7 @@ Dvojí stat na DT_UNKNOWN souborech (lstat + stat)
 
 U entry bez d_type, který je soubor, se volá lstat(abs) na řádku 96 (zjištění typu) a pak ještě stat(abs) na 123 (velikost). lstat už st.size obsahuje. Dva syscally místo jednoho. Týká se jen FS bez d_type (vzácné), takže opravdu jen nit – ale pokud by se velikost vzala rovnou z lstatu, kód by byl o jednu chybovou cestu kratší (stat na 123 má vlastní catch→skippedUnreadable, který může soubor přesunout mezi nečitelné i když lstat prošel – nekonzistence).
 
-## 2-12 · blocker · open
+## 2-12 · blocker · resolved
 **Where:** src/cli.ts:113-126
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -100,7 +100,7 @@ isMain guard zabíjí CLI při instalaci jako npm bin (symlink)
 
 Fáze 2 (fix 2-9) přidala kolem run() guard: isMain = path.resolve(process.argv[1]) === fileURLToPath(import.meta.url). Cíl byl správný (jít run() importovat v testu), ale rozbil produkční vstupní bod. package.json má bin: { vibeanalyzer: dist/cli.js } a npm při 'npm i -g' (i lokálně přes node_modules/.bin) vytvoří SYMLINK na cli.js. Node u main modulu defaultně dereferencuje symlink, takže import.meta.url = realpath cli.js, ale process.argv[1] = cesta symlinku (path.resolve symlink NErozbaluje). => nerovnost => isMain=false => run() se NIKDY nezavolá. Ověřeno empiricky i na reálném buildu: 'node dist/cli.js --help' vypíše help, ale 'node <symlink-na-dist/cli.js> --help' nevypíše NIC a skončí exit 0. Tj. po instalaci je celý nástroj mrtvý (tichý no-op, exit 0 = vypadá jako úspěch). Funguje jen dev cesta (tsx src/cli.ts) a 'npm start' (node dist/cli.js přímo) – proto to lokálně 'prošlo'. Fix: porovnávat realpath obou stran (fs.realpathSync(process.argv[1])), nebo použít process.argv[1] && fileURLToPath(import.meta.url) přes realpathSync, případně knihovní pattern. Regrese se neprojeví v žádném testu (viz samostatný should-know).
 
-## 2-13 · should-know · open
+## 2-13 · should-know · resolved
 **Where:** src/cli.test.ts:5,31
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -108,7 +108,7 @@ isMain vstupní bod nemá žádný test – regrese projde zeleně
 
 cli.test.ts importuje run() PŘÍMO (import { run } from ./cli.js a volá run([...])), čímž celý isMain guard obchází. Auto-spuštění (isMain && run()) – tedy jediná věc, která dělá z balíčku spustitelný program – nemá nulové pokrytí. Proto blocker 2-12 (mrtvé CLI přes symlink) projde 'vitest run' zeleně. Ironie: guard byl přidán kvůli testovatelnosti (2-9), ale to, co reálně rozhoduje o spustitelnosti binárky, zůstalo netestované => falešná jistota. Smysluplný test: spawnout reálný node proti zbuildovanému dist/cli.js přes symlink (execFile) a ověřit, že vypíše výstup / nenulový smysluplný kód, ne tichý no-op. Čistě in-process test isMain neověří (musí běžet jako main modul).
 
-## 2-14 · should-know · open
+## 2-14 · should-know · resolved
 **Where:** src/scan.ts:102-118; src/scan.test.ts
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial

@@ -4,7 +4,7 @@
 > Each entry is `## <id> · <severity> · <status>`; do not hand-edit those header
 > lines.
 
-## 1-1 · should-know · open
+## 1-1 · should-know · resolved
 **Where:** src/cli.ts:57
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -12,7 +12,7 @@ Výstupní adresář vytvořený uvnitř scanovaného stromu se započítá do i
 
 mkdir(outDir) na ř.57 běží PŘED scanTree() na ř.68. Když uživatel zadá --out na cestu uvnitř analyzované složky (např. 'vibeanalyzer . --out ./reports'), čerstvě vytvořený výstupní adresář se objeví v indexu jako dir záznam. Reprodukováno: scan T s --out T/reports → JSON obsahuje {path:'reports'}. Vlastní *.json/*.md artefakty jsou filtrované regexem podle jména, ale SAMOTNÁ výstupní složka ne → index zkresluje strukturu projektu složkou, kterou tam nástroj sám vytvořil. Oprava: scanovat před mkdir, nebo skip outDir, je-li uvnitř root.
 
-## 1-2 · should-know · open
+## 1-2 · should-know · resolved
 **Where:** src/scan.ts:64-92
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
