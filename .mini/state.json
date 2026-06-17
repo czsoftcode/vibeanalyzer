@@ -22,6 +22,11 @@
       "id": 4,
       "title": "Volitelné načtení záměru",
       "status": "done"
+    },
+    {
+      "id": 5,
+      "title": "Třetí zdroj záměru: ~/.vibeanalyzer",
+      "status": "done"
     }
   ]
 }

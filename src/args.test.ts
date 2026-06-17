@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+import { projectKey } from "./projectPaths.js";
 
 describe("parseArgs", () => {
   const cwd = "/home/user/proj";
@@ -49,15 +50,23 @@ describe("parseArgs", () => {
 });
 
 describe("defaultOutDir", () => {
-  it("složí ~/.vibeanalyzer/<jméno projektu>", () => {
+  it("složí ~/.vibeanalyzer/<projectKey> (sdílený klíč s intent)", () => {
+    // přes reálnou projectKey, ne natvrdo zadaný hash – kdyby se defaultOutDir
+    // přestal opírat o projectKey (rozpor s intent.loadIntent), test padne
     expect(defaultOutDir("/home/user", "/work/muj-projekt")).toBe(
-      path.join("/home/user", ".vibeanalyzer", "muj-projekt"),
+      path.join("/home/user", ".vibeanalyzer", projectKey("/work/muj-projekt")),
     );
   });
 
-  it("pro kořen (prázdný basename) použije 'root'", () => {
+  it("dva projekty se stejným jménem z různých cest → různý outDir (žádný přepis)", () => {
+    expect(defaultOutDir("/home/user", "/a/app")).not.toBe(
+      defaultOutDir("/home/user", "/b/app"),
+    );
+  });
+
+  it("pro kořen / složí klíč s prefixem 'root'", () => {
     expect(defaultOutDir("/home/user", "/")).toBe(
-      path.join("/home/user", ".vibeanalyzer", "root"),
+      path.join("/home/user", ".vibeanalyzer", projectKey("/")),
     );
   });
 });

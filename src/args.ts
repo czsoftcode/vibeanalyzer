@@ -1,6 +1,7 @@
 import { constants as fsConstants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import * as path from "node:path";
+import { projectKey } from "./projectPaths.js";
 
 /** Výsledek parsování argumentů příkazové řádky. */
 export type ParsedArgs =
@@ -11,12 +12,13 @@ export type ParsedArgs =
 
 /**
  * Výchozí výstupní adresář, když uživatel nezadá `--out`:
- * `<home>/.vibeanalyzer/<jméno projektu>`. Jméno projektu je poslední část
- * cílové cesty; pro kořen (prázdný basename) se použije "root".
+ * `<home>/.vibeanalyzer/<projectKey>`. Klíč je sdílený s `intent.loadIntent`
+ * (kam se píše report = odkud se čte záměr), tvar `basename-<hash>` – viz
+ * `projectKey`. Hash drží oddělené projekty se stejným jménem (žádný přepis
+ * cizího reportu).
  */
 export function defaultOutDir(homeDir: string, targetPath: string): string {
-  const name = path.basename(targetPath) || "root";
-  return path.join(homeDir, ".vibeanalyzer", name);
+  return path.join(homeDir, ".vibeanalyzer", projectKey(targetPath));
 }
 
 /**

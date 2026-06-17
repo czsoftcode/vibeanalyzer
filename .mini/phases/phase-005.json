@@ -1,0 +1,44 @@
+{
+  "id": 5,
+  "title": "Třetí zdroj záměru: ~/.vibeanalyzer",
+  "goal": "Rozšířit lokalizaci project.md o čtení z ~/.vibeanalyzer/<název projektu>/project.md jako fallback po .mini/project.md a project.md v cíli; když není ani tam, report jede dál s 'záměr nedodán' (beze změny interaktivity). V discuss/plan vyřešit odvození <název projektu> (basename vs. hash cesty vs. plná cesta jako klíč).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Funkce projectKey(targetPath) + test",
+      "status": "done",
+      "detail": "basename(resolve(target)) + '-' + sha1(resolve(target)).slice(0,8). path.resolve normalizuje vstup, aby ./app i /abs/app daly stejný klíč. Test: stejná cesta → deterministicky stejný klíč; dvě různé cesty se stejným basename → různý klíč."
+    },
+    {
+      "title": "Sestavení cesty k domácímu fallbacku",
+      "status": "done",
+      "detail": "~/.vibeanalyzer/<projectKey>/project.md přes os.homedir(). Když je homedir nedostupný/prázdný, kandidáta jen vynechat (neházet) – ať absence domova nezhatí čtení z .mini/."
+    },
+    {
+      "title": "Zařadit třetího kandidáta do loadIntent",
+      "status": "done",
+      "detail": "Pořadí: .mini/project.md → project.md → ~/.vibeanalyzer/<key>/project.md. Zachovat sémantiku: ENOENT → další kandidát, unreadable (práva, je to adresář) → stop, nehledat dál. Aktualizovat doc-komentář o pořadí."
+    },
+    {
+      "title": "Read-only kontrakt potvrzen",
+      "status": "done",
+      "detail": "Ověřit a popsat, že fáze do ~/.vibeanalyzer ani do cíle NIC nezapisuje – jen čte. Žádné mkdir/writeFile v této fázi (zápis přijde s interaktivní fází)."
+    },
+    {
+      "title": "Testy unhappy path nad reálným fixturem",
+      "status": "done",
+      "detail": "Záměr jen v home location → loaded se sourcePath z home. Nikde → absent. Soubor v home nečitelný (adresář místo souboru) → unreadable, nepřeskočí se. Kolize basename nenačte cizí záměr. Fixture skutečný formát project.md, ne mock string."
+    },
+    {
+      "title": "Sebekontrola + typecheck + nezávislý sub-agent",
+      "status": "done",
+      "detail": "Projet checklist (exit kódy, rozsah catche I/O vs. programová chyba, kontrakt mezi moduly, dosažitelnost větví). Fáze sahá na chybové cesty a kontrakt → před reportem pustit nezávislého sub-agenta jako self-review."
+    }
+  ],
+  "startedAt": "2026-06-16T14:58:01.260Z",
+  "completedAt": "2026-06-17T06:48:56.606Z",
+  "autoCommit": {
+    "preSha": "36277067e3b64a2f5be092b2da30753755791fa1",
+    "subject": "Phase 5: Třetí zdroj záměru: ~/.vibeanalyzer"
+  }
+}

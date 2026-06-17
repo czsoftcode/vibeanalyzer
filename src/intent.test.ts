@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { INTENT_HEADINGS, loadIntent, parseIntent } from "./intent.js";
+import { projectKey } from "./projectPaths.js";
 
 // Reálný fixtur ve formátu, jaký generuje `mini init` – kontrakt s mini.
 // NEpíšeme jen ručně podaný mock dvou nadpisů: parser musí umět přeskočit
@@ -149,6 +150,103 @@ describe("loadIntent – lokalizace souboru", () => {
     if (r.kind === "unreadable") {
       expect(r.path).toBe(path.join(proj, "project.md"));
       expect(r.code).toBe("EISDIR");
+    }
+  });
+});
+
+describe("loadIntent – domácí fallback ~/.vibeanalyzer", () => {
+  let proj: string;
+  let home: string;
+
+  beforeEach(async () => {
+    proj = await mkdtemp(path.join(tmpdir(), "vibe-intent-proj-"));
+    home = await mkdtemp(path.join(tmpdir(), "vibe-intent-home-"));
+  });
+
+  afterEach(async () => {
+    await rm(proj, { recursive: true, force: true }).catch(() => {});
+    await rm(home, { recursive: true, force: true }).catch(() => {});
+  });
+
+  // Cestu k domácímu úložišti stavíme přes REÁLNou projectKey – ne přes natvrdo
+  // zadaný hash. Kdyby se projectKey rozešla s loadIntent, test padne (má zuby).
+  function homeStore(target: string): string {
+    return path.join(home, ".vibeanalyzer", projectKey(target));
+  }
+
+  it("záměr jen v domácím úložišti → loaded se sourcePath z domova", async () => {
+    const store = homeStore(proj);
+    await mkdir(store, { recursive: true });
+    await writeFile(path.join(store, "project.md"), MINI_FIXTURE, "utf8");
+
+    const r = await loadIntent(proj, { homeDir: home });
+    expect(r.kind).toBe("loaded");
+    if (r.kind === "loaded") {
+      expect(r.intent.building).toContain("Lokální CLI nástroj.");
+      expect(r.intent.sourcePath).toBe(path.join(store, "project.md"));
+    }
+  });
+
+  it("cíl má přednost před domovem (.mini/project.md vyhrává)", async () => {
+    await mkdir(path.join(proj, ".mini"), { recursive: true });
+    await writeFile(path.join(proj, ".mini", "project.md"), MINI_FIXTURE, "utf8");
+    const store = homeStore(proj);
+    await mkdir(store, { recursive: true });
+    await writeFile(path.join(store, "project.md"), "## What I'm building\nz domova\n", "utf8");
+
+    const r = await loadIntent(proj, { homeDir: home });
+    expect(r.kind).toBe("loaded");
+    if (r.kind === "loaded") {
+      expect(r.intent.sourcePath).toBe(path.join(proj, ".mini", "project.md"));
+    }
+  });
+
+  it("nikde (ani v domově) → absent", async () => {
+    const r = await loadIntent(proj, { homeDir: home });
+    expect(r.kind).toBe("absent");
+  });
+
+  it("domov neznámý (homeDir prázdný) → domácí kandidát se přeskočí, nehází", async () => {
+    // i kdyby reálný ~/.vibeanalyzer cosi měl, prázdný homeDir ho vyřadí
+    const r = await loadIntent(proj, { homeDir: "" });
+    expect(r.kind).toBe("absent");
+  });
+
+  it("domácí project.md nečitelný (je to adresář) → unreadable, nepřeskočí se", async () => {
+    const store = homeStore(proj);
+    // project.md jako ADRESÁŘ → readFile hodí EISDIR
+    await mkdir(path.join(store, "project.md"), { recursive: true });
+    const r = await loadIntent(proj, { homeDir: home });
+    expect(r.kind).toBe("unreadable");
+    if (r.kind === "unreadable") {
+      expect(r.path).toBe(path.join(store, "project.md"));
+      expect(r.code).toBe("EISDIR");
+    }
+  });
+
+  it("kolize basename: cizí záměr se nenačte (klíč je per-cesta)", async () => {
+    // dva různé adresáře se STEJNÝM basename "app" v různých rodičích
+    const parentA = await mkdtemp(path.join(tmpdir(), "vibe-A-"));
+    const parentB = await mkdtemp(path.join(tmpdir(), "vibe-B-"));
+    const appA = path.join(parentA, "app");
+    const appB = path.join(parentB, "app");
+    await mkdir(appA, { recursive: true });
+    await mkdir(appB, { recursive: true });
+    // domácí záměr existuje JEN pro appA
+    const storeA = homeStore(appA);
+    await mkdir(storeA, { recursive: true });
+    await writeFile(path.join(storeA, "project.md"), MINI_FIXTURE, "utf8");
+
+    try {
+      // appB má stejný basename, ale jiný klíč → nesmí najít záměr appA
+      const rB = await loadIntent(appB, { homeDir: home });
+      expect(rB.kind).toBe("absent");
+      // kontrola, že to vůbec funguje: appA svůj záměr najde
+      const rA = await loadIntent(appA, { homeDir: home });
+      expect(rA.kind).toBe("loaded");
+    } finally {
+      await rm(parentA, { recursive: true, force: true }).catch(() => {});
+      await rm(parentB, { recursive: true, force: true }).catch(() => {});
     }
   });
 });

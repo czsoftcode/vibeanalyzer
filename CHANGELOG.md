@@ -13,13 +13,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   strojový JSON index a lidský MD report s Mermaid diagramem struktury (jen složky).
 - Procházení přeskakuje pomocné složky (`node_modules`, `.git`, `.mini`, `dist`,
   `build`), nesleduje symlinky a nečitelné soubory přeskočí a zaznamená do reportu.
-- Výchozí výstup do `~/.vibeanalyzer/<jméno projektu>/` (lze přepsat přes `--out`),
-  názvy souborů nesou časové razítko (nepřepisují předchozí běhy).
+- Výchozí výstup do `~/.vibeanalyzer/<jméno projektu>-<hash cesty>/` (lze přepsat
+  přes `--out`), názvy souborů nesou časové razítko (nepřepisují předchozí běhy).
+  Hash v názvu složky odděluje projekty se stejným jménem z různých cest, takže si
+  navzájem nepřepíšou výstup.
 - Report v hlavičce uvádí záměr projektu a deklarované non-goaly načtené z
-  `.mini/project.md` (případně `project.md`) analyzovaného projektu. Záměr je
-  volitelný: když chybí nebo je prázdný, report normálně doběhne, uvede explicitní
-  „záměr nedodán" a poradí, jak ho dodat. Nečitelný soubor jen ohlásí varováním.
-  Nástroj do analyzovaného projektu nic nezapisuje.
+  `.mini/project.md` (případně `project.md`) analyzovaného projektu, a nově i z
+  `~/.vibeanalyzer/<jméno projektu>-<hash cesty>/project.md` (společná složka s
+  výstupem) jako třetí zdroj v pořadí. Záměr je volitelný: když chybí nebo je
+  prázdný, report normálně doběhne, uvede explicitní „záměr nedodán" a poradí, jak
+  ho dodat. Nečitelný soubor jen ohlásí varováním. Nástroj do analyzovaného
+  projektu nic nezapisuje.
 
 ### Fixed
 

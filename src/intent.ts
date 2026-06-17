@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
+import { projectKey } from "./projectPaths.js";
 
 /**
  * Pevné nadpisy sekcí, jak je generuje `mini init` do project.md. Jsou to
@@ -34,21 +36,49 @@ export type IntentResult =
   | { kind: "unreadable"; path: string; code: string };
 
 /**
- * Najde a načte záměr v analyzovaném projektu. Pořadí: `<cíl>/.mini/project.md`,
- * pak fallback `<cíl>/project.md`. Čistě READ-ONLY – do analyzovaného projektu
- * nic nezapisuje.
+ * Domácí kandidát `~/.vibeanalyzer/<projectKey>/project.md`. Vrátí null, když
+ * domovský adresář není znám (prázdný/nedostupný) – pak ho z hledání jen
+ * vynecháme, ať absence domova nezhatí čtení z `.mini/`.
+ */
+function homeCandidate(targetPath: string, homeDir: string | undefined): string | null {
+  if (!homeDir) return null;
+  return path.join(homeDir, ".vibeanalyzer", projectKey(targetPath), "project.md");
+}
+
+/** Domovský adresář, defenzivně: prázdný/výjimka → undefined (kandidát vypadne). */
+function safeHomedir(): string | undefined {
+  try {
+    const home = os.homedir();
+    return home && home.length > 0 ? home : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Najde a načte záměr. Pořadí: `<cíl>/.mini/project.md`, pak `<cíl>/project.md`,
+ * pak mimo cíl `~/.vibeanalyzer/<projectKey>/project.md`. Čistě READ-ONLY – nikam
+ * (ani do cíle, ani do `~/.vibeanalyzer`) nic nezapisuje.
  *
- * - oba kandidáti chybí (ENOENT) → `absent`,
+ * - všichni kandidáti chybí (ENOENT) → `absent`,
  * - kandidát existuje, ale nejde přečíst (práva, je to adresář, …) →
  *   `unreadable` (nehledáme dál, ať reálný problém s právy nezmizí za fallbackem),
  * - kandidát přečten → `loaded` (parsování řeší parseIntent; chybové stavy sekcí
  *   se promítnou do Intent.building/nonGoals = null, nehází se).
+ *
+ * `options.homeDir` umožní v testech podstrčit jiný domov (jinak `os.homedir()`).
+ * Prázdný řetězec = "domov neznámý" → domácí kandidát se přeskočí.
  */
-export async function loadIntent(targetPath: string): Promise<IntentResult> {
+export async function loadIntent(
+  targetPath: string,
+  options: { homeDir?: string } = {},
+): Promise<IntentResult> {
+  const homeDir = options.homeDir ?? safeHomedir();
   const candidates = [
     path.join(targetPath, ".mini", "project.md"),
     path.join(targetPath, "project.md"),
-  ];
+    homeCandidate(targetPath, homeDir),
+  ].filter((candidate): candidate is string => candidate !== null);
 
   for (const candidate of candidates) {
     let content: string;
