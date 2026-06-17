@@ -27,6 +27,11 @@
       "id": 5,
       "title": "Třetí zdroj záměru: ~/.vibeanalyzer",
       "status": "done"
+    },
+    {
+      "id": 6,
+      "title": "Respektovat kořenový .gitignore",
+      "status": "done"
     }
   ]
 }

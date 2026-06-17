@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+import { type GitignorePredicate, loadGitignore } from "./gitignore.js";
 import { INTENT_HEADINGS, type Intent, loadIntent } from "./intent.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
@@ -68,9 +69,33 @@ export async function run(
   // se stackem přes launcher catch v bin.ts, ne maskovanou jako „I/O selhání"
   // bez stacku. Stejná úvaha jako u build* (nález 3-7/3-11). Reálný TOCTOU
   // (zmizelý cíl) řeší guard níž, ne výjimka.
+  // .gitignore je VOLITELNÝ a čistě READ-ONLY (jen čteme). Kořenový
+  // <cíl>/.gitignore necháme prořezat index – co Git ignoruje (u Symfony
+  // vendor/, var/cache/ …), do reportu nepatří a zbytečně by hltalo AI vrstvu.
+  // Chybějící soubor = ticho (běžný stav); nečitelný = upozornění a scan poběží
+  // bez něj (degradaci hlásíme nahlas, netváříme se, že .gitignore platil).
+  const gitignore = await loadGitignore(targetPath);
+  let isIgnored: GitignorePredicate | undefined;
+  if (gitignore.kind === "loaded") {
+    isIgnored = gitignore.isIgnored;
+  } else if (gitignore.kind === "unreadable") {
+    console.error(
+      `Upozornění: našel jsem ${gitignore.path}, ale nešel přečíst (${gitignore.code}). ` +
+        `.gitignore se nepoužije – prošlo se i to, co by Git ignoroval.`,
+    );
+  } else if (gitignore.kind === "invalid") {
+    // Soubor se přečetl, ale obsahuje vzor, který knihovna neumí zkompilovat
+    // (matcher by házel). Degradujeme nahlas a scan poběží bez .gitignore –
+    // ne pád celé analýzy (nález 6-1).
+    console.error(
+      `Upozornění: ${gitignore.path} obsahuje vzor, který nejde zpracovat. ` +
+        `.gitignore se nepoužije – prošlo se i to, co by Git ignoroval.`,
+    );
+  }
+
   // outDir může ležet uvnitř analyzované složky – ať se vlastní výstupní adresář
   // (a jeho obsah) nezapočítá do indexu.
-  const result = await scanTree(targetPath, { excludePaths: new Set([outDir]) });
+  const result = await scanTree(targetPath, { excludePaths: new Set([outDir]), isIgnored });
 
   // scanTree je defenzivní: nečitelný cíl NEHODÍ, jen kořen zapíše do
   // skippedUnreadable jako ROOT_UNREADABLE_MARKER. To znamená, že se kořen vůbec
@@ -80,6 +105,22 @@ export async function run(
   if (result.skippedUnreadable.includes(ROOT_UNREADABLE_MARKER)) {
     console.error(`Chyba: cílovou složku nelze přečíst (zmizela nebo chybí práva?): ${targetPath}`);
     return 1;
+  }
+
+  const fileCount = result.files.filter((f) => f.type === "file").length;
+  const dirCount = result.files.filter((f) => f.type === "dir").length;
+
+  // .gitignore mohl odfiltrovat všechny SOUBORY (např. vzor "*", "*.php"). Hlídáme
+  // počet souborů, ne result.files.length: vzor na soubory ("*.php") nechá v indexu
+  // prázdné složky (files.length > 0), ale report nemá jediný soubor a pro analýzu
+  // je bezcenný (nález 6-3). Report se přesto vytvoří (exit 0): kořen je čitelný,
+  // jen není co analyzovat. Rozlišení "prázdné" vs "vše ignorováno" drží
+  // ignoredByGitignore ze scanTree.
+  if (fileCount === 0 && result.ignoredByGitignore > 0) {
+    console.error(
+      `Upozornění: .gitignore odfiltroval všechny soubory – index neobsahuje jediný soubor. ` +
+        `Report se vytvoří, ale nebude co analyzovat.`,
+    );
   }
 
   // Záměr je VOLITELNÝ: report jede dál i bez něj. Rozlišujeme tři stavy, ať se
@@ -157,9 +198,6 @@ export async function run(
     );
     return 1;
   }
-
-  const fileCount = result.files.filter((f) => f.type === "file").length;
-  const dirCount = result.files.filter((f) => f.type === "dir").length;
 
   console.log(`VibeAnalyzer: prošel jsem ${fileCount} souborů a ${dirCount} složek v ${targetPath}`);
   if (result.skippedUnreadable.length > 0) {

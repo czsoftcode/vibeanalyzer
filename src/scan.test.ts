@@ -258,4 +258,56 @@ describe("scanTree", () => {
     expect(files).toEqual([]);
     expect(skippedUnreadable).toContain(ROOT_UNREADABLE_MARKER);
   });
+
+  // --- .gitignore predikát (isIgnored) ---
+  // scanTree zná jen predikát, ne knihovnu `ignore`; kontrakt predikát↔ignore je
+  // ověřen v gitignore.test.ts. Tady testujeme chování scanTree s predikátem.
+
+  it("gitignore: ignorovaný adresář se NEprochází (prořezání podstromu)", async () => {
+    await mkdir(path.join(root, "vendor", "deep"), { recursive: true });
+    await writeFile(path.join(root, "vendor", "deep", "x.php"), "<?php\n", "utf8");
+
+    const isIgnored = (rel: string, isDir: boolean): boolean => rel === "vendor" && isDir;
+    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { isIgnored });
+    const paths = files.map((f) => f.path);
+
+    expect(paths).not.toContain("vendor");
+    // klíčové: do ignorované složky se vůbec nevlezlo (žádný potomek v indexu)
+    expect(paths.some((p) => p.startsWith("vendor/"))).toBe(false);
+    expect(paths).toContain("src/index.ts"); // zbytek stromu nedotčen
+    expect(ignoredByGitignore).toBeGreaterThanOrEqual(1);
+    // ignorováno ZÁMĚRNĚ ≠ nečitelné
+    expect(skippedUnreadable).not.toContain("vendor");
+  });
+
+  it("gitignore: ignorovaný soubor se vynechá (a nepočítá jako nečitelný)", async () => {
+    await writeFile(path.join(root, "secret.env"), "KEY=1\n", "utf8");
+
+    const isIgnored = (rel: string): boolean => rel === "secret.env";
+    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { isIgnored });
+
+    expect(files.some((f) => f.path === "secret.env")).toBe(false);
+    expect(files.some((f) => f.path === "README.md")).toBe(true);
+    expect(ignoredByGitignore).toBe(1);
+    expect(skippedUnreadable).not.toContain("secret.env");
+  });
+
+  it("gitignore: predikát se NIKDY nevolá na kořeni (rel='')", async () => {
+    const calls: string[] = [];
+    const isIgnored = (rel: string): boolean => {
+      calls.push(rel);
+      return false;
+    };
+    await scanTree(root, { isIgnored });
+
+    expect(calls.length).toBeGreaterThan(0); // predikát se reálně volal
+    expect(calls).not.toContain(""); // ale nikdy na kořeni
+  });
+
+  it("bez isIgnored: ignoredByGitignore === 0, výstup beze změny", async () => {
+    const { files, ignoredByGitignore } = await scanTree(root);
+    expect(ignoredByGitignore).toBe(0);
+    // sanity: běžný strom se zaindexoval jako dosud
+    expect(files.some((f) => f.path === "src/index.ts")).toBe(true);
+  });
 });

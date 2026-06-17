@@ -19,6 +19,12 @@ export interface ScanResult {
   files: FileEntry[];
   /** relativní cesty, které nešlo přečíst (přeskočeno, ne pád) */
   skippedUnreadable: string[];
+  /** počet vynechaných položek NEJVYŠŠÍ úrovně kvůli .gitignore: prořezaný
+   *  adresář se počítá jako 1 BEZ ohledu na obsah (do podstromu se nevstupuje –
+   *  vendor/ s 10000 soubory přidá 1, ne 10001), ignorovaný soubor jako 1.
+   *  NENÍ to součet souborů uvnitř. Slouží jen k rozlišení "prázdná složka" od
+   *  "vše odfiltroval .gitignore" (čteno jako boolean > 0). */
+  ignoredByGitignore: number;
 }
 
 /** Pomocné/nástrojové složky, které do indexu nepatří. */
@@ -48,6 +54,10 @@ export interface ScanOptions {
   /** absolutní cesty, které se mají vynechat i s celým podstromem
    *  (typicky vlastní výstupní adresář ležící uvnitř scanovaného stromu) */
   excludePaths?: ReadonlySet<string>;
+  /** predikát z .gitignore: ignorovaný adresář se NEprochází (prořezání
+   *  podstromu), ignorovaný soubor se vynechá. `relPath` má oddělovač "/",
+   *  je relativní ke kořeni; kořen (relPath="") se sem nikdy neposílá. */
+  isIgnored?: (relPath: string, isDir: boolean) => boolean;
 }
 
 /**
@@ -59,6 +69,7 @@ export interface ScanOptions {
 export async function scanTree(root: string, options: ScanOptions = {}): Promise<ScanResult> {
   const skipDirs = options.skipDirs ?? DEFAULT_SKIP_DIRS;
   const isOutputArtifact = options.isOutputArtifact ?? ((n: string) => OUTPUT_ARTIFACT_RE.test(n));
+  const isIgnored = options.isIgnored;
 
   // Vyloučení outDir nemůže být holé porovnání řetězců: path.resolve normalizuje
   // ".."/"." ale NErozbaluje symlinky. Pokud se ke stejnému fyzickému adresáři
@@ -74,6 +85,7 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
 
   const files: FileEntry[] = [];
   const skippedUnreadable: string[] = [];
+  let ignoredByGitignore = 0;
 
   async function walk(absDir: string, relDir: string, depth: number): Promise<void> {
     let entries;
@@ -123,10 +135,24 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
       if (kind === "dir") {
         if (skipDirs.has(ent.name)) continue;
         if (excludePaths.has(abs)) continue; // vlastní výstupní adresář uvnitř stromu
+        // .gitignore: ignorovaný adresář se NEprochází (prořezání podstromu).
+        // Vůči Gitu korektní: ignorovaná rodičovská složka nejde znovu zahrnout
+        // zevnitř, takže do ní nemusíme vlézt – a hlavně se tím vyhneme průchodu
+        // desetitisíci souborů ve vendor/ apod.
+        if (isIgnored?.(rel, true)) {
+          ignoredByGitignore++;
+          continue;
+        }
         files.push({ path: rel, type: "dir", ext: "", size: 0, depth });
         await walk(abs, rel, depth + 1);
       } else {
         if (isOutputArtifact(ent.name)) continue;
+        // .gitignore: ignorovaný soubor se vynechá. Kontrola PŘED stat – ušetří
+        // zbytečný stat na ignorovaných souborech.
+        if (isIgnored?.(rel, false)) {
+          ignoredByGitignore++;
+          continue;
+        }
         let size = 0;
         try {
           const st = await stat(abs);
@@ -147,5 +173,5 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
   }
 
   await walk(realRoot, "", 1);
-  return { files, skippedUnreadable };
+  return { files, skippedUnreadable, ignoredByGitignore };
 }

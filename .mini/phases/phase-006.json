@@ -1,0 +1,44 @@
+{
+  "id": 6,
+  "title": "Respektovat kořenový .gitignore",
+  "goal": "Při scanTree načíst kořenový .gitignore a kromě DEFAULT_SKIP_DIRS z indexu vynechat soubory i celé podstromy, které Git ignoruje (ignorovaná složka se neprochází); chybějící/nečitelný .gitignore scan tiše nemění. Pro porovnávání vzorů použít knihovnu ignore. Vnořené .gitignore v podadresářích jsou mimo rozsah (pozdější fáze). Ošetřit unhappy path: žádný .gitignore, nečitelný/poškozený, prázdný, vzor mažoucí celý kořen. Ověření: na složce s .gitignore obsahujícím vendor/ a var/cache/ se tyto cesty v reportu neobjeví; bez .gitignore výstup beze změny.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přidat závislost ignore",
+      "status": "done",
+      "detail": "npm install ignore do dependencies (ne devDependencies). Ověření: package.json má ignore v dependencies, npm ci projde, tsc typecheck bez chyb (knihovna nese vlastní typy)."
+    },
+    {
+      "title": "Funkce loadGitignore(root) + testy",
+      "status": "done",
+      "detail": "Nový modul src/gitignore.ts: přečte <root>/.gitignore, vrátí predikát isIgnored(relPath, isDir) nad reálnou ignore, nebo null (soubor není / prázdný / nečitelný, s rozlišením stavu pro volajícího). Testy unhappy path: chybějící, prázdný, nečitelný, běžné vzory (vendor/, var/cache/, negace)."
+    },
+    {
+      "title": "Rozšířit ScanOptions a ScanResult",
+      "status": "done",
+      "detail": "ScanOptions dostane volitelný predikát isIgnored?(relPath, isDir); ScanResult dostane ignoredByGitignore: number. V scanTree: ignorovaný adresář se neprochází (prořezání podstromu), ignorovaný soubor se vynechá; obojí se počítá do ignoredByGitignore a NEPATŘÍ do skippedUnreadable. Kořen (rel=\"\") se do predikátu nikdy neposílá. Testy proti reálné ignore, ne mocku."
+    },
+    {
+      "title": "Napojit v cli.ts + stderr hlášky",
+      "status": "done",
+      "detail": "Před scanTree zavolat loadGitignore(targetPath), predikát předat do ScanOptions. Nečitelný .gitignore → jednořádkové upozornění na stderr (vzor jako nečitelný záměr); chybějící → ticho. Po scanu: když files.length===0 && ignoredByGitignore>0 → upozornění na stderr, že .gitignore odfiltroval vše (report se přesto vyrobí, exit 0)."
+    },
+    {
+      "title": "End-to-end test nad fixturem",
+      "status": "done",
+      "detail": "Fixture se složkou s vendor/, var/cache/, běžným src/ souborem a .gitignore. Ověření: ignorované cesty nejsou v JSON indexu ani v reportu, src/ ano. Druhý fixture bez .gitignore → výstup identický s dnešním chováním."
+    },
+    {
+      "title": "Sebekontrola + typecheck + nezávislý sub-agent",
+      "status": "done",
+      "detail": "Projít checklist z CLAUDE.md (exit kódy, rozsah catch, zuby testů, cross-module kontrakt scan-ignore, read-only). Fáze sahá na chybové cesty, vstupní bod scanu i kontrakt mezi moduly → před reportem pustit nezávislého sub-agenta (čerstvý kontext) jako self-review."
+    }
+  ],
+  "startedAt": "2026-06-17T07:06:37.809Z",
+  "completedAt": "2026-06-17T08:27:01.884Z",
+  "autoCommit": {
+    "preSha": "2ba8f52dc80be2235b885950b64cec5704d96a9f",
+    "subject": "Phase 6: Respektovat kořenový .gitignore"
+  }
+}

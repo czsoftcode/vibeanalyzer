@@ -24,6 +24,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   prázdný, report normálně doběhne, uvede explicitní „záměr nedodán" a poradí, jak
   ho dodat. Nečitelný soubor jen ohlásí varováním. Nástroj do analyzovaného
   projektu nic nezapisuje.
+- Procházení respektuje kořenový `.gitignore` analyzovaného projektu: co Git
+  ignoruje (u Symfony typicky `vendor/`, `var/cache/`) se do indexu nezahrne a do
+  ignorovaných složek se vůbec nevstupuje. Chybějící `.gitignore` nic nemění;
+  nečitelný nebo s patologicky dlouhým vzorem se ohlásí varováním a procházení
+  pokračuje bez něj. Když `.gitignore` odfiltruje úplně všechny soubory, report
+  přesto vznikne, ale upozorní, že není co analyzovat.
 
 ### Fixed
 
