@@ -32,6 +32,11 @@
       "id": 6,
       "title": "Respektovat kořenový .gitignore",
       "status": "done"
+    },
+    {
+      "id": 7,
+      "title": "Vnořené .gitignore v podadresářích",
+      "status": "done"
     }
   ]
 }

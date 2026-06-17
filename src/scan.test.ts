@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import * as fsp from "node:fs/promises";
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DirIgnoreResult } from "./gitignore.js";
 import { ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 
 // node:fs/promises mockujeme jako passthrough (kopie reálného modulu), aby šel
@@ -259,16 +260,32 @@ describe("scanTree", () => {
     expect(skippedUnreadable).toContain(ROOT_UNREADABLE_MARKER);
   });
 
-  // --- .gitignore predikát (isIgnored) ---
-  // scanTree zná jen predikát, ne knihovnu `ignore`; kontrakt predikát↔ignore je
-  // ověřen v gitignore.test.ts. Tady testujeme chování scanTree s predikátem.
+  // --- .gitignore přes injektovaný loadDirIgnore ---
+  // scanTree zná jen loader + matcher, ne knihovnu `ignore`; kontrakt matcher↔ignore
+  // je ověřen v gitignore.test.ts. Tady testujeme chování scanTree se zásobníkem
+  // matcherů – fake loader keyovaný na absolutní cestu složky (bez fs).
+
+  // helper: loader, který vrátí daný matcher JEN pro jednu konkrétní složku
+  // (kanonizovanou přes realpath, protože scanTree kořen kanonizuje), jinak absent.
+  function loaderFor(
+    absTargetDir: string,
+    match: (relToBase: string, isDir: boolean) => { ignored: boolean; unignored: boolean },
+  ): (absDir: string) => Promise<DirIgnoreResult> {
+    return async (absDir: string): Promise<DirIgnoreResult> =>
+      absDir === absTargetDir ? { kind: "loaded", match } : { kind: "absent" };
+  }
 
   it("gitignore: ignorovaný adresář se NEprochází (prořezání podstromu)", async () => {
     await mkdir(path.join(root, "vendor", "deep"), { recursive: true });
     await writeFile(path.join(root, "vendor", "deep", "x.php"), "<?php\n", "utf8");
 
-    const isIgnored = (rel: string, isDir: boolean): boolean => rel === "vendor" && isDir;
-    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { isIgnored });
+    const realRoot = await realpath(root);
+    const loadDirIgnore = loaderFor(realRoot, (relToBase, isDir) =>
+      relToBase === "vendor" && isDir
+        ? { ignored: true, unignored: false }
+        : { ignored: false, unignored: false },
+    );
+    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { loadDirIgnore });
     const paths = files.map((f) => f.path);
 
     expect(paths).not.toContain("vendor");
@@ -283,8 +300,13 @@ describe("scanTree", () => {
   it("gitignore: ignorovaný soubor se vynechá (a nepočítá jako nečitelný)", async () => {
     await writeFile(path.join(root, "secret.env"), "KEY=1\n", "utf8");
 
-    const isIgnored = (rel: string): boolean => rel === "secret.env";
-    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { isIgnored });
+    const realRoot = await realpath(root);
+    const loadDirIgnore = loaderFor(realRoot, (relToBase) =>
+      relToBase === "secret.env"
+        ? { ignored: true, unignored: false }
+        : { ignored: false, unignored: false },
+    );
+    const { files, ignoredByGitignore, skippedUnreadable } = await scanTree(root, { loadDirIgnore });
 
     expect(files.some((f) => f.path === "secret.env")).toBe(false);
     expect(files.some((f) => f.path === "README.md")).toBe(true);
@@ -292,21 +314,91 @@ describe("scanTree", () => {
     expect(skippedUnreadable).not.toContain("secret.env");
   });
 
-  it("gitignore: predikát se NIKDY nevolá na kořeni (rel='')", async () => {
-    const calls: string[] = [];
-    const isIgnored = (rel: string): boolean => {
-      calls.push(rel);
-      return false;
-    };
-    await scanTree(root, { isIgnored });
+  it("gitignore: matcher NIKDY nedostane prázdnou relToBase (sám adresář se netestuje)", async () => {
+    // Ekvivalent staré invariance "predikát se nevolá na kořeni": matcher se testuje
+    // jen na DĚTECH, nikdy na základně, kde .gitignore leží.
+    const seen: string[] = [];
+    const loadDirIgnore = async (): Promise<DirIgnoreResult> => ({
+      kind: "loaded",
+      match: (relToBase: string) => {
+        seen.push(relToBase);
+        return { ignored: false, unignored: false };
+      },
+    });
+    await scanTree(root, { loadDirIgnore });
 
-    expect(calls.length).toBeGreaterThan(0); // predikát se reálně volal
-    expect(calls).not.toContain(""); // ale nikdy na kořeni
+    expect(seen.length).toBeGreaterThan(0); // matcher se reálně volal
+    expect(seen).not.toContain(""); // ale nikdy na prázdné cestě (základně)
   });
 
-  it("bez isIgnored: ignoredByGitignore === 0, výstup beze změny", async () => {
-    const { files, ignoredByGitignore } = await scanTree(root);
+  it("vnořené pravidlo přebíjí mělčí (re-include přes !) – zásobník matcherů", async () => {
+    // root/.gitignore ignoruje *.log; root/sub/.gitignore má !keep.log. Hlubší
+    // úroveň re-include vrátí keep.log zpět, ostatní *.log zůstanou ignorované.
+    await mkdir(path.join(root, "sub"), { recursive: true });
+    await writeFile(path.join(root, "a.log"), "x\n", "utf8");
+    await writeFile(path.join(root, "sub", "b.log"), "x\n", "utf8");
+    await writeFile(path.join(root, "sub", "keep.log"), "x\n", "utf8");
+
+    const realRoot = await realpath(root);
+    const subAbs = path.join(realRoot, "sub");
+    const loadDirIgnore = async (absDir: string): Promise<DirIgnoreResult> => {
+      if (absDir === realRoot) {
+        return {
+          kind: "loaded",
+          match: (relToBase) =>
+            relToBase.endsWith(".log")
+              ? { ignored: true, unignored: false }
+              : { ignored: false, unignored: false },
+        };
+      }
+      if (absDir === subAbs) {
+        return {
+          kind: "loaded",
+          match: (relToBase) =>
+            relToBase === "keep.log"
+              ? { ignored: false, unignored: true }
+              : { ignored: false, unignored: false },
+        };
+      }
+      return { kind: "absent" };
+    };
+
+    const { files } = await scanTree(root, { loadDirIgnore });
+    const paths = files.map((f) => f.path);
+
+    expect(paths).not.toContain("a.log"); // root *.log
+    expect(paths).not.toContain("sub/b.log"); // root *.log platí i hlouběji
+    expect(paths).toContain("sub/keep.log"); // re-include z hlubšího !keep.log
+  });
+
+  it("degradace: unreadable/invalid loader → warning, podstrom se PŘESTO projde", async () => {
+    await mkdir(path.join(root, "sub"), { recursive: true });
+    await writeFile(path.join(root, "sub", "inner.ts"), "export const q = 1;\n", "utf8");
+
+    const realRoot = await realpath(root);
+    const subAbs = path.join(realRoot, "sub");
+    const loadDirIgnore = async (absDir: string): Promise<DirIgnoreResult> => {
+      if (absDir === subAbs) {
+        return { kind: "unreadable", path: path.join(subAbs, ".gitignore"), code: "EISDIR" };
+      }
+      return { kind: "absent" };
+    };
+
+    const { files, gitignoreWarnings } = await scanTree(root, { loadDirIgnore });
+    const paths = files.map((f) => f.path);
+
+    // degradace se posbírala
+    expect(gitignoreWarnings).toHaveLength(1);
+    expect(gitignoreWarnings[0]).toMatchObject({ reason: "unreadable", code: "EISDIR" });
+    // ale podstrom se PŘESTO prošel (bez pravidel té složky)
+    expect(paths).toContain("sub");
+    expect(paths).toContain("sub/inner.ts");
+  });
+
+  it("bez loadDirIgnore: ignoredByGitignore === 0, žádné warnings, výstup beze změny", async () => {
+    const { files, ignoredByGitignore, gitignoreWarnings } = await scanTree(root);
     expect(ignoredByGitignore).toBe(0);
+    expect(gitignoreWarnings).toEqual([]);
     // sanity: běžný strom se zaindexoval jako dosud
     expect(files.some((f) => f.path === "src/index.ts")).toBe(true);
   });

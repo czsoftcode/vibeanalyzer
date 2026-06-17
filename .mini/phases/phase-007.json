@@ -1,0 +1,39 @@
+{
+  "id": 7,
+  "title": "Vnořené .gitignore v podadresářích",
+  "goal": "Rozšířit skenování tak, aby se .gitignore v každém podadresáři aplikoval na svůj podstrom (vzory relativní k té složce), hlubší pravidla měla přednost (včetně re-include přes !), prořezané podstromy se nečetly a chybějící/nečitelný/patologický .gitignore v podadresáři degradoval stejně jako kořenový (varování, scan pokračuje). Architektura: čtení .gitignore v podsložkách probíhá až během průchodu (injektovaný loader loadDirIgnore(absDir) → matcher, ať scanTree zůstane testovatelný), udržovat zásobník matcherů (jeden na složku) a testovat cestu relativní k bázi každého. Read-only kontrakt zachován. Ověření: na stromu, kde src/.gitignore ignoruje *.log a src/sub/.gitignore obsahuje !keep.log, se src/a.log v reportu neobjeví, ale src/sub/keep.log ano; kořenové chování z fáze 6 zůstane beze změny.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "loadDirIgnore(absDir) – matcher se stavem {ignored, unignored}",
+      "status": "done",
+      "detail": "Refaktor gitignore.ts: loadGitignore(root) -> loadDirIgnore(absDir) pro libovolnou slozku. Vysledek nese match(relToBase, isDir) => {ignored, unignored} (pres ig.test(), dir-probe s koncovym /) + stav loaded|absent|unreadable|invalid (logika ENOENT/prazdny/EISDIR/patologicka radka beze zmeny). Booleovsky loadGitignore odstranit (zadny produkcni uzivatel). Prepsat gitignore.test.ts na novy tvar – tytez pripady (absent/prazdny/EISDIR/invalid/vendor//negace), asserce na ignored/unignored."
+    },
+    {
+      "title": "scanTree: zasobnik matcheru pres injektovany loadDirIgnore",
+      "status": "done",
+      "detail": "Volbu isIgnored nahradit loadDirIgnore?: (absDir)=>Promise<DirIgnoreResult>. Pri vstupu do slozky zavolat loader: loaded -> push {baseRel, match}, unreadable/invalid -> push do noveho result.gitignoreWarnings, absent -> nic; po dokonceni slozky pop. Verdikt entry = projit zasobnik melky->hluboky, cesta relativni k bazi ramce, vyhrava posledni rozhodny (unignored->zaradit, jinak ignored->ignorovat, jinak beze zmeny). Zachovat proriznuti podstromu, preskoceni souboru i ignoredByGitignore (adresar=1, soubor=1; loader se na prorezane vetve nevola). Prepsat 4 gitignore unit testy ve scan.test.ts na injektovany fake loadDirIgnore keyovany na absDir."
+    },
+    {
+      "title": "cli.ts: napojit loadDirIgnore + vypsat varovani per-soubor",
+      "status": "done",
+      "detail": "cli preda scanTree realny loadDirIgnore; po scanu vypise result.gitignoreWarnings – kazde na vlastni radku na stderr (cesta + duvod). Odstranit prednacitani korene pres loadGitignore. Zneni zprav ponechat tak, aby korenove varovani dal obsahovalo 'nesel precist'+kod, resp. 'nejde zpracovat' (cli.gitignore.test.ts projde beze zmeny = strazce faze 6)."
+    },
+    {
+      "title": "Testy chovani faze 7 (re-include, gotcha, degradace)",
+      "status": "done",
+      "detail": "End-to-end: src/.gitignore=*.log + src/sub/.gitignore=!keep.log -> src/a.log NENI, src/sub/keep.log JE. Re-include napric korenem (root *.log + src !debug.log). Git gotcha: pod prorezanym (ignorovanym) adresarem ! soubor neozivi. Degradace jedne urovne: necitelny/patologicky vnoreny .gitignore -> varovani + ta slozka bez pravidel, podstrom se projde s pravidly predku."
+    },
+    {
+      "title": "Adversarialni self-review (nezavisly sub-agent) + finalni kontrola",
+      "status": "done",
+      "detail": "Sub-agent s cerstvym kontextem projde chybove cesty, kontrakt scanTree<->cli (varovani, ignoredByGitignore), unhappy path zmenenych funkci (prazdna/null/necitelny vnoreny gitignore/symlink na .gitignore/hloubka). Spustit celou sadu testu + tsc/lint; report az po zelene."
+    }
+  ],
+  "startedAt": "2026-06-17T09:40:06.417Z",
+  "completedAt": "2026-06-17T10:24:07.790Z",
+  "autoCommit": {
+    "preSha": "fb45c79057c3b14a11899be2c76afe2fea7b4a24",
+    "subject": "Phase 7: Vnořené .gitignore v podadresářích"
+  }
+}

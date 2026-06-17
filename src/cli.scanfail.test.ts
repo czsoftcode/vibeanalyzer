@@ -54,7 +54,11 @@ describe("run – chybové větve analýzy (scan/build)", () => {
   it("nečitelný kořen (skippedUnreadable obsahuje marker) → exit 1 + outDir nevznikne", async () => {
     // simulace TOCTOU: cíl prošel validací, ale při scanu už nejde přečíst.
     // Hodnotu bereme ze sdílené konstanty – ať test sleduje kontrakt, ne literál.
-    mockedScan.mockResolvedValueOnce({ files: [], skippedUnreadable: [ROOT_UNREADABLE_MARKER] });
+    mockedScan.mockResolvedValueOnce({
+      files: [],
+      skippedUnreadable: [ROOT_UNREADABLE_MARKER],
+      gitignoreWarnings: [],
+    });
     const outDir = path.join(proj, "out");
 
     const code = await run([proj, "--out", outDir], proj);
@@ -67,7 +71,7 @@ describe("run – chybové větve analýzy (scan/build)", () => {
 
   it("legitimně prázdná čitelná složka (skippedUnreadable prázdné) → exit 0, ne falešné selhání", async () => {
     // pojistka, že guard nepleteme: prázdný projekt je validní výsledek, ne chyba
-    mockedScan.mockResolvedValueOnce({ files: [], skippedUnreadable: [] });
+    mockedScan.mockResolvedValueOnce({ files: [], skippedUnreadable: [], gitignoreWarnings: [] });
     const outDir = path.join(proj, "out");
 
     const code = await run([proj, "--out", outDir], proj);

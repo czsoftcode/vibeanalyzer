@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
-import { type GitignorePredicate, loadGitignore } from "./gitignore.js";
+import { loadDirIgnore } from "./gitignore.js";
 import { INTENT_HEADINGS, type Intent, loadIntent } from "./intent.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
@@ -63,39 +63,37 @@ export async function run(
   const stamp = fileTimestamp(now);
 
   // ŽÁDNÝ try/catch kolem scanTree ZÁMĚRNĚ: scanTree je plně defenzivní – I/O
-  // chyby (readdir/lstat/stat/realpath) si chytá sám a sype je do
-  // skippedUnreadable, na I/O tedy nikdy nehodí. Jediné, co by hodil, je
-  // programová chyba (RangeError z hluboké rekurze apod.) – a tu chceme nahlas
-  // se stackem přes launcher catch v bin.ts, ne maskovanou jako „I/O selhání"
-  // bez stacku. Stejná úvaha jako u build* (nález 3-7/3-11). Reálný TOCTOU
-  // (zmizelý cíl) řeší guard níž, ne výjimka.
-  // .gitignore je VOLITELNÝ a čistě READ-ONLY (jen čteme). Kořenový
-  // <cíl>/.gitignore necháme prořezat index – co Git ignoruje (u Symfony
-  // vendor/, var/cache/ …), do reportu nepatří a zbytečně by hltalo AI vrstvu.
-  // Chybějící soubor = ticho (běžný stav); nečitelný = upozornění a scan poběží
-  // bez něj (degradaci hlásíme nahlas, netváříme se, že .gitignore platil).
-  const gitignore = await loadGitignore(targetPath);
-  let isIgnored: GitignorePredicate | undefined;
-  if (gitignore.kind === "loaded") {
-    isIgnored = gitignore.isIgnored;
-  } else if (gitignore.kind === "unreadable") {
-    console.error(
-      `Upozornění: našel jsem ${gitignore.path}, ale nešel přečíst (${gitignore.code}). ` +
-        `.gitignore se nepoužije – prošlo se i to, co by Git ignoroval.`,
-    );
-  } else if (gitignore.kind === "invalid") {
-    // Soubor se přečetl, ale obsahuje vzor, který knihovna neumí zkompilovat
-    // (matcher by házel). Degradujeme nahlas a scan poběží bez .gitignore –
-    // ne pád celé analýzy (nález 6-1).
-    console.error(
-      `Upozornění: ${gitignore.path} obsahuje vzor, který nejde zpracovat. ` +
-        `.gitignore se nepoužije – prošlo se i to, co by Git ignoroval.`,
-    );
-  }
-
+  // chyby (readdir/lstat/stat/realpath i čtení .gitignore přes loadDirIgnore) si
+  // chytá sám a sype je do skippedUnreadable / gitignoreWarnings, na I/O tedy
+  // nikdy nehodí. Jediné, co by hodil, je programová chyba (RangeError z hluboké
+  // rekurze apod.) – a tu chceme nahlas se stackem přes launcher catch v bin.ts,
+  // ne maskovanou jako „I/O selhání" bez stacku. Stejná úvaha jako u build*
+  // (nález 3-7/3-11). Reálný TOCTOU (zmizelý cíl) řeší guard níž, ne výjimka.
+  // .gitignore je VOLITELNÝ a čistě READ-ONLY (jen čteme). loadDirIgnore se volá
+  // na KAŽDÉ vstoupené složce (kořen i podsložky) – co Git ignoruje (u Symfony
+  // vendor/, var/cache/ …), do reportu nepatří a zbytečně by hltalo AI vrstvu;
+  // vnořená pravidla platí pro svůj podstrom, hlubší má přednost (re-include přes !).
+  // Chybějící/prázdný soubor = ticho (běžný stav); nečitelný/patologický =
+  // upozornění a scan poběží bez TOHO .gitignore (degradaci hlásíme nahlas).
   // outDir může ležet uvnitř analyzované složky – ať se vlastní výstupní adresář
   // (a jeho obsah) nezapočítá do indexu.
-  const result = await scanTree(targetPath, { excludePaths: new Set([outDir]), isIgnored });
+  const result = await scanTree(targetPath, { excludePaths: new Set([outDir]), loadDirIgnore });
+
+  // Degradace .gitignore (kořenového i vnořeného): každý problémový soubor vlastní
+  // řádka na stderr. Scan už proběhl bez jeho pravidel – jen to neutajujeme.
+  for (const w of result.gitignoreWarnings) {
+    if (w.reason === "unreadable") {
+      console.error(
+        `Upozornění: našel jsem ${w.path}, ale nešel přečíst (${w.code}). ` +
+          `Pravidla z tohoto .gitignore se nepoužijí – prošlo se i to, co by podle něj Git ignoroval.`,
+      );
+    } else {
+      console.error(
+        `Upozornění: ${w.path} obsahuje vzor, který nejde zpracovat. ` +
+          `Pravidla z tohoto .gitignore se nepoužijí – prošlo se i to, co by podle něj Git ignoroval.`,
+      );
+    }
+  }
 
   // scanTree je defenzivní: nečitelný cíl NEHODÍ, jen kořen zapíše do
   // skippedUnreadable jako ROOT_UNREADABLE_MARKER. To znamená, že se kořen vůbec
