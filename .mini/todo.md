@@ -20,3 +20,4 @@
 - [ ] Filtr na minifikované .min.js - signál/šum v reportu
 - [ ] Prověřit 5 transitivních zranitelností z podstromu ESLintu
 - [ ] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
+- [ ] Plný sandbox vč. importů

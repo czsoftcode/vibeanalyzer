@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -143,6 +143,85 @@ describe("analyzeTypeScript", () => {
     // 3) ale jeho verzi jsme PŘEČETLI z package.json (data) a rozdíl přiznáme
     expect(res.projectTsVersion).toBe("9.9.9-hostile");
   });
+
+  it("ZUBY (SEC-1 vektor 1): files mimo kořen se NEANALYZUJE – vynecháno + hlučný nález", async () => {
+    // soubor MIMO root (o úroveň výš); na STARÉM kódu by ho tsc zařadil a zanalyzoval
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    // záměrná typová chyba: kdyby se secret.ts analyzoval, vznikl by TS2322 s cestou ../
+    await writeFile(path.join(outer, "secret.ts"), 'export const secret: number = "x";\n');
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true }, files: ["../secret.ts", "ok.ts"] }));
+    await writeFile(path.join(root, "ok.ts"), "export const x: number = 1;\n");
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // jen legitimní soubor uvnitř (STARÝ kód: 2)
+    expect(res.fileCount).toBe(1);
+    // vnější soubor se NEzanalyzoval → žádný jeho nález ani cesta ven (STARÝ kód: TS2322 z secret)
+    expect(res.findings.some((f) => f.rule === "TS2322")).toBe(false);
+    expect(res.findings.some((f) => f.file?.includes(".."))).toBe(false);
+    // pokus je hlučně OHLÁŠEN
+    const warn = res.findings.find((f) => f.severity === "warning" && /mimo kořen/.test(f.message));
+    expect(warn).toBeDefined();
+    expect(warn?.message).toContain("secret.ts");
+  }, 30_000);
+
+  it("všechny soubory mimo kořen → skipped s PRAVDIVÝM důvodem (ne 'prázdný projekt')", async () => {
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(outer, "secret.ts"), "export const x = 1;\n");
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["../secret.ts"] }));
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("skipped");
+    if (res.kind !== "skipped") return;
+    expect(res.reason).toContain("mimo kořen");
+    expect(res.reason).not.toContain("žádné soubory"); // nelhat "prázdný projekt"
+  }, 30_000);
+
+  it("ZUBY (SEC-1 vektor 1, symlink): soubor uvnitř symlinkovaný VEN se NEANALYZUJE", async () => {
+    // symlink obejde literální test cesty – realpath ho musí rozplést
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    // záměrná typová chyba: kdyby se cizí soubor přečetl, vznikl by TS2322
+    await writeFile(path.join(outer, "secret.ts"), 'export const secret: number = "x";\n');
+    // link.ts LEŽÍ uvnitř root, ale míří VEN
+    await symlink(path.join(outer, "secret.ts"), path.join(root, "link.ts"));
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true }, files: ["link.ts", "ok.ts"] }));
+    await writeFile(path.join(root, "ok.ts"), "export const x: number = 1;\n");
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // STARÝ kód (jen literál): fileCount=2 a TS2322 z cizího souboru
+    expect(res.fileCount).toBe(1);
+    expect(res.findings.some((f) => f.rule === "TS2322")).toBe(false);
+    const warn = res.findings.find((f) => f.severity === "warning" && /mimo kořen/.test(f.message));
+    expect(warn).toBeDefined();
+  }, 30_000);
+
+  it("ZUBY (SEC-1 vektor 2): extends mimo kořen se NEPŘEČTE – jeho options se neuplatní a je ohlášeno", async () => {
+    // base config LEŽÍ MIMO root a zapíná noUnusedLocals; na STARÉM kódu by se přečetl
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(outer, "base.json"), JSON.stringify({ compilerOptions: { noUnusedLocals: true } }));
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ extends: "../base.json", files: ["a.ts"] }));
+    // nepoužitá lokální proměnná → TS6133 JEN když by se noUnusedLocals z extends uplatnil
+    await writeFile(path.join(root, "a.ts"), "export function f(): number { const unused = 1; return 2; }\n");
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // extends mimo root se NEuplatnil → žádné TS6133 (na STARÉM kódu by tu bylo)
+    expect(res.findings.some((f) => f.rule === "TS6133")).toBe(false);
+    // a pokus je OHLÁŠEN: TS hlásí nenačtený extends jako chybu konfigurace
+    expect(res.findings.some((f) => f.rule === "TS5083")).toBe(true);
+  }, 30_000);
 
   it("projektová verze TS SHODNÁ s přibalenou → projectTsVersion undefined (žádná zbytečná poznámka)", async () => {
     const root = await tmp();

@@ -101,8 +101,10 @@ function tscSection(tsc: TscResult | undefined): string[] {
 
 /** Jedna odrážka nálezu: `- **error** `soubor:řádek:sloupec` TS2322: zpráva`. */
 function renderFinding(f: Finding): string {
-  // backtick v cestě (legální znak souboru na Linuxu) by ukončil inline code span
-  const loc = formatLocation(f).replace(/`/g, "'");
+  // SEC-2: cesta je cizí vstup (název souboru) – sanitizujeme STEJNĚ jako zprávu.
+  // Nejen backtick (ukončil by inline code span), ale i CR/LF: název souboru na
+  // Linuxu smí mít newline a rozbil by odrážku / vložil falešný nadpis do reportu.
+  const loc = sanitizeInline(formatLocation(f));
   const rule = f.rule ? ` ${f.rule}` : "";
   return `- **${f.severity}** \`${loc}\`${rule}: ${sanitizeInline(f.message)}`;
 }

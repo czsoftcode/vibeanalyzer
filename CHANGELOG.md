@@ -7,6 +7,21 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Security
+
+- Typová analýza (tsc) už nepřečte soubory mimo analyzovaný projekt, i když na ně
+  podvržený `tsconfig.json` cílí. Dřív mohl klonovaný cizí repozitář přes `files`/
+  `include` (cesty s `../` nebo absolutní), přes `extends` nebo přes symlink uvnitř
+  projektu mířící ven donutit nástroj přečíst libovolný soubor na disku a vtáhnout
+  jeho obsah/cestu do reportu (sondování souborového systému). Teď se takové cesty
+  vynechají z analýzy a nahlásí jako varování v reportu; když na ně tsconfig míří
+  jen na soubory mimo projekt, vrstva se přeskočí s pravdivým důvodem. (Zbývá známé
+  omezení: `import`/`/// <reference path>` uvnitř zdrojáků zatím mimo tohle zadržení.)
+
+- Název souboru v reportu se sanitizuje i proti zalomení řádku (CR/LF), ne jen proti
+  zpětnému apostrofu. Soubor se zákeřným jménem (na Linuxu smí obsahovat newline) už
+  nerozbije odrážku ani nepodstrčí do MD reportu falešný nadpis.
+
 ### Added
 
 - Strojová lint analýza (ESLint): nástroj projede JS/TS soubory projektu (jen je

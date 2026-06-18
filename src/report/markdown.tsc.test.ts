@@ -65,6 +65,23 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
     expect(bullet).toContain("řádek2");
   });
 
+  it("ZUBY (SEC-2): CR/LF v názvu souboru (loc) se zploští – odrážka zůstane jednořádková", () => {
+    const tsc: TscResult = {
+      kind: "ran",
+      tsVersion: "5.9.3",
+      fileCount: 1,
+      nodeModulesPresent: true,
+      findings: [{ source: "tsc", severity: "error", file: "evil\n## Injekce.ts", line: 1, column: 1, message: "zpráva" }],
+    };
+    const md = buildMarkdown({ ...base, tsc });
+    // injektovaný nadpis se NEvyrenderuje jako samostatný řádek (STARÝ kód: newline projde)
+    expect(md).not.toContain("\n## Injekce.ts");
+    // celý loc zůstane na JEDNÉ odrážce (newline → mezera)
+    const bullet = md.split("\n").find((l) => l.includes("evil"));
+    expect(bullet).toBeDefined();
+    expect(bullet).toContain("Injekce.ts");
+  });
+
   it("nález bez souboru (globální chyba) → (bez umístění), nespadne", () => {
     const tsc: TscResult = {
       kind: "ran",

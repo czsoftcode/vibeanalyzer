@@ -82,6 +82,11 @@
       "id": 16,
       "title": "Soulad načítání TS s non-goalem",
       "status": "done"
+    },
+    {
+      "id": 17,
+      "title": "Zadržení tsc v kořeni projektu",
+      "status": "done"
     }
   ]
 }

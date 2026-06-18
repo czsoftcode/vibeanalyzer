@@ -1,4 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { readFile, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import type TS from "typescript";
 import type { Finding, Severity, TscResult } from "../findings.js";
@@ -49,7 +50,8 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   }
 
   const configDir = path.dirname(tsconfigPath);
-  const cmd = ts.parseJsonConfigFileContent(jsonParsed.config, ts.sys, configDir);
+  // Host místo ts.sys zadrží SEC-1 vektor 2: extends mimo root se přes něj nepřečte.
+  const cmd = ts.parseJsonConfigFileContent(jsonParsed.config, containedParseHost(ts, root), configDir);
 
   // TS18003 = "v configu se nenašly žádné vstupní soubory" – to je STAV (prázdný
   // projekt), ne chyba configu. Oddělíme ho od SKUTEČNÝCH chyb konfigurace
@@ -57,9 +59,33 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   const TS_NO_INPUTS = 18003;
   const configDiagnostics = cmd.errors.filter((e) => e.code !== TS_NO_INPUTS);
 
-  if (cmd.fileNames.length === 0) {
-    // config je, ale nezahrnul žádný soubor. Rozlišíme rozbitý config od prostě
-    // prázdného projektu – ať reason nelže (žádné "chyba konfigurace", kde není).
+  // SEC-1 vektor 1: cmd.fileNames pochází z files/include, které jsou plně pod
+  // kontrolou útočníka a SMÍ obsahovat ../ i absolutní cesty MIMO root. Takové by
+  // createProgram níže přečetl z disku (probing FS + vtažení cizího obsahu do
+  // reportu). Vyfiltrujeme je a každý vynechaný hlučně ohlásíme – ať jeden řádek
+  // tsconfigu nezabije celou analýzu (DoS), ale uživatel pokus VIDÍ. isUnderRootReal
+  // rozplete i symlink UVNITŘ root mířící VEN (realpath), ne jen literál cesty.
+  const caseSensitive = ts.sys.useCaseSensitiveFileNames;
+  const insideFiles: string[] = [];
+  const outsideFiles: string[] = [];
+  for (const fn of cmd.fileNames) {
+    ((await isUnderRootReal(root, fn, caseSensitive)) ? insideFiles : outsideFiles).push(fn);
+  }
+  const containmentFindings: Finding[] = outsideFiles.map((fn) => ({
+    source: "tsc",
+    severity: "warning",
+    message: `tsconfig odkazuje na soubor mimo kořen projektu – vynecháno z analýzy: ${toRelPosix(root, fn)}`,
+  }));
+
+  if (insideFiles.length === 0) {
+    // config je, ale nezahrnul žádný soubor UVNITŘ root. Tři pravdivé důvody – ať
+    // reason nelže (žádné "prázdný projekt", když útočník mířil ven).
+    if (outsideFiles.length > 0) {
+      return {
+        kind: "skipped",
+        reason: `tsconfig odkazoval jen na soubory mimo kořen projektu (${outsideFiles.length}) – uvnitř kořene není co analyzovat`,
+      };
+    }
     const realConfigError = configDiagnostics.some((e) => e.category === ts.DiagnosticCategory.Error);
     if (realConfigError) {
       return { kind: "skipped", reason: "tsconfig.json obsahuje chybu konfigurace" };
@@ -79,14 +105,19 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
     sourceMap: false,
   };
 
-  deps.onStart?.(cmd.fileNames.length, version);
+  deps.onStart?.(insideFiles.length, version);
 
-  const program = ts.createProgram(cmd.fileNames, options);
+  // ZBYTKOVÉ RIZIKO (mimo V1 rozsah, viz fáze 17): createProgram běží s DEFAULTNÍM
+  // hostem, takže `import` / `/// <reference path="../..">` UVNITŘ zdrojáků může
+  // resolverem sáhnout mimo root. Vědomě NEřešíme – chtělo by vlastní CompilerHost
+  // a hrozí rozbití načítání lib/@types, které legitimně leží mimo root. SEC-1
+  // zadržuje tsconfig vektory (files/include výše + extends přes containedParseHost).
+  const program = ts.createProgram(insideFiles, options);
   // POZOR: getPreEmitDiagnostics NEvrací chyby konfigurace (cmd.errors). Kdybychom
   // je nepřidali, "extends na neexistující soubor" nebo neznámá volba by zmizely
   // a report by lhal "0 nálezů" nad rozbitým configem (tichý falešný úspěch).
   const diagnostics = [...configDiagnostics, ...ts.getPreEmitDiagnostics(program)];
-  const findings = diagnostics.map((d) => toFinding(ts, d, root));
+  const findings = [...diagnostics.map((d) => toFinding(ts, d, root)), ...containmentFindings];
   const nodeModulesPresent = await hasNodeModules(root);
 
   // Verzi TS projektu jen ČTEME (data), abychom přiznali případný rozdíl proti
@@ -95,7 +126,69 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   const projectTs = await readProjectTsVersion(root);
   const projectTsVersion = projectTs && projectTs !== version ? projectTs : undefined;
 
-  return { kind: "ran", findings, fileCount: cmd.fileNames.length, nodeModulesPresent, tsVersion: version, projectTsVersion };
+  return { kind: "ran", findings, fileCount: insideFiles.length, nodeModulesPresent, tsVersion: version, projectTsVersion };
+}
+
+/**
+ * Leží `candidate` uvnitř `root` (nebo JE root)? Po normalizaci absolutních cest.
+ * Case-sensitivity respektuje FS (ts.sys.useCaseSensitiveFileNames) – na macOS/Windows
+ * by jinak `/ROOT/x` prošlo jako "mimo" `/root`. Hranice je root sám nebo prefix
+ * `root + path.sep`, ať `/root-evil` NEprojde jako podstrom `/root`. path.resolve
+ * sjednotí i forward-slashe, které TS používá interně i na Windows.
+ */
+function isUnderRoot(root: string, candidate: string, caseSensitive: boolean): boolean {
+  const fold = (p: string) => (caseSensitive ? p : p.toLowerCase());
+  const r = fold(path.resolve(root));
+  const c = fold(path.resolve(candidate));
+  return c === r || c.startsWith(r + path.sep);
+}
+
+/**
+ * Jako isUnderRoot, ale rozplete symlinky (realpath) na OBOU stranách. Bez toho by
+ * soubor UVNITŘ root symlinkovaný VEN (`ln -s ../../etc/passwd link.ts` + files:
+ * ["link.ts"]) prošel literálním testem a tsc by jeho cizí obsah vtáhl do reportu.
+ * Realpath i rootu: když je sám pod symlinkem (např. /tmp → /private/tmp na macOS),
+ * nesmí to dělat falešné negativy. FAIL-CLOSED: realpath selže (rozbitý symlink,
+ * ENOENT, práva) → bereme jako MIMO root (radši vynechat než tiše přečíst).
+ */
+async function isUnderRootReal(root: string, candidate: string, caseSensitive: boolean): Promise<boolean> {
+  if (!isUnderRoot(root, candidate, caseSensitive)) return false; // levný gate před realpathem
+  try {
+    return isUnderRoot(await realpath(root), await realpath(candidate), caseSensitive);
+  } catch {
+    return false;
+  }
+}
+
+/** Synchronní varianta isUnderRootReal pro ParseConfigHost (host.readFile/fileExists jsou sync). */
+function isUnderRootRealSync(root: string, candidate: string, caseSensitive: boolean): boolean {
+  if (!isUnderRoot(root, candidate, caseSensitive)) return false;
+  try {
+    return isUnderRoot(realpathSync(root), realpathSync(candidate), caseSensitive);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ParseConfigHost obalující ts.sys, který ČTENÍ souboru a test existence MIMO root
+ * odmítne. Zadrží SEC-1 vektor 2: `extends` se resolvuje UVNITŘ parseJsonConfigFileContent
+ * přes host.readFile – kdyby host pustil cizí cestu, tsc by přečetl libovolný soubor
+ * mimo repo. Odmítnutý extends TS ohlásí jako chybu konfigurace (→ náš Finding).
+ * isUnderRootRealSync rozplete i symlink mířící ven (symlinkovaný extends).
+ * `readDirectory` necháme projít (legitimní include glob nerozbít) – může sice
+ * enumerovat JMÉNA mimo root (slabý existence-oracle), ale OBSAH se nevtáhne: jeho
+ * výsledky projdou filtrem fileNames výše. POZN.: lib/@types se přes tenhle host
+ * NEčtou (jdou až přes createProgram s default hostem), takže je zadržení nerozbije.
+ */
+function containedParseHost(ts: typeof TS, root: string): TS.ParseConfigHost {
+  const caseSensitive = ts.sys.useCaseSensitiveFileNames;
+  return {
+    useCaseSensitiveFileNames: caseSensitive,
+    readDirectory: ts.sys.readDirectory.bind(ts.sys),
+    fileExists: (p) => isUnderRootRealSync(root, p, caseSensitive) && ts.sys.fileExists(p),
+    readFile: (p) => (isUnderRootRealSync(root, p, caseSensitive) ? ts.sys.readFile(p) : undefined),
+  };
 }
 
 /**

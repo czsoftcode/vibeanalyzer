@@ -1,0 +1,44 @@
+{
+  "id": 17,
+  "title": "Zadržení tsc v kořeni projektu",
+  "goal": "Opravit SEC-1 (tsc přes podvržený tsconfig nesmí číst soubory mimo root – odfiltrovat/ohlásit cesty z files/extends mířící ven) a zároveň SEC-2 (sanitizovat CR/LF v loc reportu stejně jako ve zprávě); SEC-3 uzavřít bez akce jako informační supply-chain poznámku.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Predikát pod root + kontejnment parse hostu",
+      "status": "done",
+      "detail": "isUnderRoot(root, candidate) po path.resolve/normalizaci (root sám nebo prefix root+sep; case-sensitivity dle ts.sys.useCaseSensitiveFileNames). Vlastní ParseConfigHost obalující ts.sys, předaný do parseJsonConfigFileContent místo ts.sys; readFile/fileExists mimo root odmítnou (zablokuje extends). readDirectory necháme procházet ts.sys (legitimní include nerozbít). Ověřitelné: extends na soubor mimo root nezanese své compiler options do cmd.options."
+    },
+    {
+      "title": "Filtr fileNames mimo root + hlučný nález + pravdivý důvod",
+      "status": "done",
+      "detail": "Před createProgram odfiltrovat z cmd.fileNames cesty neležící pod root (vektor 1). Pro každou vynechanou cestu message-only Finding (source:tsc, severity warning, text 'tsconfig odkazuje mimo kořen, vynecháno: …'); teče do md i json. Když filtr vyprázdní seznam, větev length===0 dá pravdivý důvod, ne 'prázdný projekt'."
+    },
+    {
+      "title": "SEC-2: sanitizace loc v reportu",
+      "status": "done",
+      "detail": "src/report/markdown.ts:105 → const loc = sanitizeInline(formatLocation(f)) místo replace(/backtick/). CR/LF v názvu souboru se zneutralizuje stejně jako ve zprávě."
+    },
+    {
+      "title": "Testy se zuby (3, padnou na starém kódu)",
+      "status": "done",
+      "detail": "(a) vektor 1: fixtura files:[\"../../../../etc/hostname\"] → cesta není ve fileNames/nálezech, místo toho warning Finding. (b) vektor 2: extends ven nastavující rozpoznatelný compiler option → option NENÍ v cmd.options + ohlášeno. (c) SEC-2: Finding s \\n v file → markdown výstup jednořádkový, code-span nerozbitý."
+    },
+    {
+      "title": "Uzavřít SEC-3 bez kódu + zbytkový vektor 3 doložit",
+      "status": "done",
+      "detail": "SEC-3 (supply-chain) bez kódové změny, vědomě potvrdit důvod v reportu fáze. Komentářem v tsc.ts zdokumentovat, že import / /// <reference> reads přes createProgram zůstávají zbytkové (mimo V1 rozsah)."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext) na chybové cesty / parsování cizího vstupu / kontrakt do reportu; pak průchod sebekontrolním checklistem (exit kódy, rozsah catch, zuby testů, vedlejší efekty při selhání)."
+    }
+  ],
+  "startedAt": "2026-06-18T21:07:25.889Z",
+  "completedAt": "2026-06-18T21:33:47.201Z",
+  "autoCommit": {
+    "preSha": "c145b29b6823eb89d88a4bb0d2c89e96f72273d4",
+    "subject": "Phase 17: Zadržení tsc v kořeni projektu"
+  }
+}
