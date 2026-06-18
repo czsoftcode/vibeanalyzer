@@ -118,6 +118,23 @@ describe("collectIntentDraft – sběrová smyčka", () => {
     });
   });
 
+  it("non-goal s vedoucí odrážkou se ořízne (10-2): '- text' nedá '- - text'", async () => {
+    // Uživatel přirozeně napíše non-goal jako odrážku; render přidá svou '- '.
+    // Bez ořezu by vznikl '- - …' a parser by do položky vrátil vedoucí pomlčku.
+    const { ask } = fakeAsk(["CLI.", "- Nespouštět kód.", "* Nestavět web.", ""]);
+    const r = await collectIntentDraft(ask);
+    expect(r.kind).toBe("draft");
+    if (r.kind === "draft") {
+      // ve sběru už je čistý text bez odrážky
+      expect(r.draft.nonGoals).toEqual(["Nespouštět kód.", "Nestavět web."]);
+      // a round-trip přes render + parser drží čistou položku (žádné '- - …')
+      const md = renderProjectMd(r.draft);
+      expect(md).not.toContain("- - ");
+      const parsed = parseIntent(md, "/x/project.md");
+      expect(parsed.nonGoals).toEqual(["Nespouštět kód.", "Nestavět web."]);
+    }
+  });
+
   it("žádné non-goaly (hned prázdný řádek) → prázdný seznam", async () => {
     const { ask } = fakeAsk(["CLI nástroj.", ""]);
     const r = await collectIntentDraft(ask);

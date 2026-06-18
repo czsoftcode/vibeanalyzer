@@ -1,0 +1,43 @@
+{
+  "id": 11,
+  "title": "Oprava záměru: odrážky + test bin.ts",
+  "goal": "Opravit zdvojenou odrážku v renderProjectMd (non-goal začínající '- '/'* ' nezdvojí odrážku) a pokrýt interaktivní cestu bin.ts (readline + nabídka + zaručené close) testem, aby se po dotazu proces nezasekl.",
+  "status": "done",
+  "fromFinding": "10-2",
+  "steps": [
+    {
+      "title": "Oříznout vedoucí odrážku u non-goalů",
+      "status": "done",
+      "detail": "Ve sběrové vrstvě (validateAnswerLine/collectIntentDraft v intentPrompt.ts) odstranit vedoucí '- '/'* ' z hodnoty non-goalu, aby renderProjectMd nevyrobil '- - text'. Respektuje dokumentovaný kontrakt 'sanitizace patří sběru, ne renderu'."
+    },
+    {
+      "title": "Test 10-2: '- text' nedá '- - text'",
+      "status": "done",
+      "detail": "V intentPrompt.test.ts přes collectIntentDraft (fake ask) ověřit, že non-goal '- Nespouštět kód' skončí v draftu bez vedoucí pomlčky a po renderProjectMd + round-trip přes parseIntent je položka čistá. Test padne, když ořez odstraním."
+    },
+    {
+      "title": "Vyčlenit testovatelnou výplň z bin.ts",
+      "status": "done",
+      "detail": "Vytáhnout z bin.ts čistou funkci (main(argv, cwd, deps)) s injektovatelnými závislostmi (isInteractive, továrna ask/close, run). Tělo bin.ts jen poskládá reálné závislosti a funkci zavolá – žádný vedlejší efekt při importu."
+    },
+    {
+      "title": "Test 10-1: close vždy + ask jen interaktivně",
+      "status": "done",
+      "detail": "Test vyčleněné funkce: (a) close() se zavolá právě jednou i když run() vyhodí chybu; (b) při isInteractive=false se ask nepředá a rozhraní nevznikne; (c) exit kód správný i v chybové větvi."
+    },
+    {
+      "title": "Adversariální self-review + finální kontrola",
+      "status": "done",
+      "detail": "Projít checklist CLAUDE.md (exit kódy, rozsah catch, zuby testů, vedlejší efekty při selhání) a protože fáze sahá na vstupní bod procesu, pustit nezávislého sub-agenta na self-review."
+    }
+  ],
+  "startedAt": "2026-06-18T14:50:24.867Z",
+  "completedAt": "2026-06-18T15:57:22.860Z",
+  "autoCommit": {
+    "preSha": "ab57a15b70b60d4700e516d02ddcf72dda4a7eb8",
+    "subject": "Phase 11: Oprava záměru: odrážky + test bin.ts"
+  },
+  "resolvedFindings": [
+    "10-1"
+  ]
+}

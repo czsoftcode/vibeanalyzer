@@ -56,3 +56,7 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   jako úspěch). Legitimně prázdná složka je dál v pořádku.
 - Chybové cesty CLI (neplatný cíl, nevytvořitelný výstupní adresář, selhání zápisu)
   spolehlivě končí nenulovým kódem s konkrétní hláškou, ne pádem ani tichým úspěchem.
+- Non-goal zadaný při tvorbě záměru s vedoucí odrážkou (např. „- Nespouštět kód")
+  se ve vygenerovaném `project.md` už nezobrazí se zdvojenou odrážkou („- - …").
+- Interaktivní dotaz na záměr po sobě vždy spolehlivě zavře vstup, takže se proces
+  po zodpovězení otázek nezasekne – i kdyby vlastní běh skončil chybou.

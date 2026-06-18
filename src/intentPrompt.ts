@@ -50,6 +50,22 @@ export function validateAnswerLine(raw: string): LineCheck {
 /** Výsledek sběru: hotový koncept záměru, nebo zrušení (EOF / prázdný záměr). */
 export type CollectResult = { kind: "draft"; draft: IntentDraft } | { kind: "cancelled" };
 
+/** JEDNA vedoucí odrážka `- `/`* ` (s mezerou). renderProjectMd už každý non-goal
+ *  prefixuje `- `, takže když uživatel přirozeně napíše „- Nespouštět kód", vznikla
+ *  by zdvojená odrážka `- - …` (nález 10-2). Ořez děláme TADY, ve sběru – render
+ *  zůstává čistý formátter (kontrakt v intentWriter.ts). */
+const LEADING_BULLET = /^[-*]\s+/;
+
+/**
+ * Odřízne JEDNU vedoucí odrážku z non-goalu (víc ne – `- - x` po jednom ořezu dá
+ * `- x`, což už je validní text položky). Vstup je po `validateAnswerLine` (jeden
+ * řádek, bez fence/nadpisu), takže ořez nemůže odhalit nic nebezpečného. Trim řeší
+ * mezeru, kterou regex spotřeboval i případné krajní bílé znaky.
+ */
+function stripLeadingBullet(value: string): string {
+  return value.replace(LEADING_BULLET, "").trim();
+}
+
 const Q_BUILDING = "Co stavíš? (jedna věta; prázdný řádek = zrušit)";
 const Q_NONGOAL =
   "Co projekt vědomě NEMÁ dělat? (jeden non-goal; prázdný řádek = hotovo, žádné non-goaly nech prázdné)";
@@ -102,7 +118,7 @@ export async function collectIntentDraft(ask: AskFn): Promise<CollectResult> {
     const goal = await askValidLine(ask, Q_NONGOAL);
     if (goal.kind === "eof") return { kind: "cancelled" };
     if (goal.kind === "empty") break;
-    nonGoals.push(goal.value);
+    nonGoals.push(stripLeadingBullet(goal.value));
   }
 
   return { kind: "draft", draft: { building: building.value, nonGoals } };

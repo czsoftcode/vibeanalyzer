@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // zkompilovanému dist/bin.js, ne přes tsx.
 const projectRoot = path.resolve(fileURLToPath(import.meta.url), "..", "..");
 const distBin = path.join(projectRoot, "dist", "bin.js");
+const distCliMain = path.join(projectRoot, "dist", "cliMain.js");
 
 // Jeden build pro celý soubor – ať se dva testy neperou o zápis do dist/.
 beforeAll(() => {
@@ -74,6 +75,10 @@ describe("bin.ts launcher – chování při běhu run()", () => {
         "export function createReadlineAsk() { return { ask: undefined, close() {} }; }\n",
         "utf8",
       );
+      // bin.js importuje i ./cliMain.js (orchestrace launcheru). Kopírujeme REÁLNÝ
+      // dist/cliMain.js – má jen `import type` (v JS vymazané), žádné runtime deps,
+      // takže launcher testujeme i s pravou logikou close/exit kódu, ne se stubem.
+      await copyFile(distCliMain, path.join(dir, "cliMain.js"));
       await copyFile(distBin, path.join(dir, "bin.js")); // reálný shipovaný launcher
       try {
         // stdio pipe: stderr zachytit do proměnné, ne nechat protéct do logu testů
