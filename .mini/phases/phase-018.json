@@ -1,0 +1,43 @@
+{
+  "id": 18,
+  "title": "Mermaid graf na výšku, plný",
+  "goal": "Přepnout diagram složek z 'graph TD' na 'graph LR' (čitelný na výšku) a zvednout ořez uzlů z 60 na bezpečný strop 1000, aby report vykreslil všechny složky i u stovek (nad 1000 zůstane poctivá ořezová poznámka); ověření: report nad projektem se 100+ složkami obsahuje všechny složky v jednom LR diagramu bez ořezové poznámky.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přepnout orientaci diagramu na LR",
+      "status": "done",
+      "detail": "V buildFolderDiagram změnit 'graph TD' -> 'graph LR' (markdown.ts:239) a srovnat doprovodný komentář (markdown.ts:218). Výstup: mermaid blok začíná 'graph LR'."
+    },
+    {
+      "title": "Zvednout strop uzlů z 60 na 1000",
+      "status": "done",
+      "detail": "DEFAULT_MAX_DIAGRAM_NODES = 1000 (markdown.ts:24). Ořezová logika i poznámka (markdown.ts:287-290) beze změny -> nad 1000 se stále poctivě ořízne. Výstup: report nad <1000 složkami nemá ořezovou poznámku."
+    },
+    {
+      "title": "Srovnat existující testy na LR",
+      "status": "done",
+      "detail": "Tři aserce 'graph TD' -> 'graph LR' (markdown.test.ts:20, :109, :121). Výstup: stávající sada projde, žádná neasertuje starou orientaci."
+    },
+    {
+      "title": "Test se zuby: plný počet + ořez na hraně",
+      "status": "done",
+      "detail": "(a) 200 složek se vykreslí celé (truncated=false, shown=total=200); (b) 1001 složek se ořízne (truncated=true, shown=999, total=1001), poznámka uvádí 'limit 1000'. Na starém kódu (cap 60) test (a) padne."
+    },
+    {
+      "title": "Smoke ověření a self-kontrola",
+      "status": "done",
+      "detail": "npm test + build; sebekontrola dle CLAUDE.md (ořezová větev nelže o počtu, prázdný vstup [] nedá nevalidní mermaid). Výstup: zelená sada, ručně ověřený report s LR diagramem."
+    }
+  ],
+  "startedAt": "2026-06-18T21:43:25.832Z",
+  "resolvedVerify": [
+    "Vizuální čitelnost LR diagramu v prohlížeči",
+    "Renderování velkého grafu (stovky až ~1000 uzlů)"
+  ],
+  "completedAt": "2026-06-18T22:01:41.815Z",
+  "autoCommit": {
+    "preSha": "dcbb15c4cc959b8d787afa479fe43625756879a1",
+    "subject": "Phase 18: Mermaid graf na výšku, plný"
+  }
+}

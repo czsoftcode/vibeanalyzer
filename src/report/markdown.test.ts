@@ -17,7 +17,7 @@ describe("buildMarkdown", () => {
       skippedUnreadable: [],
     });
     expect(md).toContain("```mermaid");
-    expect(md).toContain("graph TD");
+    expect(md).toContain("graph LR");
     expect(md).toContain("`src/index.ts`");
     expect(md).toContain("Souborů: 2");
     expect(md).toContain("Složek: 1");
@@ -106,7 +106,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
     expect((md.match(/```/g) ?? []).length).toBe(2);
     // náš diagram zůstal celý
     expect(md).toContain("```mermaid");
-    expect(md).toContain("graph TD");
+    expect(md).toContain("graph LR");
     // cizí nadpis je zacitovaný (blockquote), ne reálná sekce reportu
     expect(md).toContain("> ## Falešný nadpis");
     expect(md).not.toMatch(/^## Falešný nadpis$/m);
@@ -118,7 +118,7 @@ describe("buildFolderDiagram", () => {
     const d = buildFolderDiagram(["src", "src/util"], "proj", 60);
     expect(d.truncated).toBe(false);
     const text = d.lines.join("\n");
-    expect(text).toContain("graph TD");
+    expect(text).toContain("graph LR");
     // dvě hrany: kořen->src, src->src/util
     expect(text.match(/-->/g)?.length).toBe(2);
   });
@@ -129,5 +129,61 @@ describe("buildFolderDiagram", () => {
     expect(d.truncated).toBe(true);
     expect(d.shown).toBe(4); // limit 5 minus kořen
     expect(d.total).toBe(10);
+  });
+
+  it("ZUBY (default): buildMarkdown vykreslí 200 složek bez ořezové poznámky", () => {
+    // Jde přes DEFAULTNÍ strop (bez maxDiagramNodes) → testuje změnu konstanty 60→1000.
+    // Na starém kódu (default 60) by se 200 složek oříznulo a poznámka by byla → padne.
+    const dirs = Array.from({ length: 200 }, (_, i) => `d${String(i).padStart(3, "0")}`);
+    const md = buildMarkdown({
+      root: "/p/proj",
+      generatedAt: "2026-06-15T18:00:00.000Z",
+      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1 })),
+      skippedUnreadable: [],
+    });
+    expect(md).toContain("graph LR");
+    expect(md).not.toContain("Diagram byl oříznut");
+    // všech 200 složek má hranu z kořene
+    expect(md.match(/-->/g)?.length).toBe(200);
+  });
+
+  it("vykreslí všech 200 složek bez ořezu (strop 1000)", () => {
+    // 3-místné zarovnání → stabilní řazení i lexikograficky (d000..d199)
+    const dirs = Array.from({ length: 200 }, (_, i) => `d${String(i).padStart(3, "0")}`);
+    const d = buildFolderDiagram(dirs, "proj", 1000);
+    expect(d.truncated).toBe(false);
+    expect(d.shown).toBe(200);
+    expect(d.total).toBe(200);
+    // každá složka má svůj uzel + hranu z kořene → 200 hran
+    expect(d.lines.join("\n").match(/-->/g)?.length).toBe(200);
+  });
+
+  it("ořízne na hraně 1001 složek (strop 1000), poznámka uvádí limit", () => {
+    const dirs = Array.from({ length: 1001 }, (_, i) => `d${String(i).padStart(4, "0")}`);
+    const d = buildFolderDiagram(dirs, "proj", 1000);
+    expect(d.truncated).toBe(true);
+    expect(d.shown).toBe(999); // strop 1000 minus kořen
+    expect(d.total).toBe(1001);
+
+    // ořezová poznámka v reportu uvádí pravdivý počet i limit (ne lež o úplnosti)
+    const md = buildMarkdown({
+      root: "/p/proj",
+      generatedAt: "2026-06-15T18:00:00.000Z",
+      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1 })),
+      skippedUnreadable: [],
+    });
+    expect(md).toContain("zobrazeno 999 z 1001 složek");
+    expect(md).toContain("limit 1000 uzlů");
+  });
+
+  it("prázdný vstup dá validní mermaid jen s kořenem (žádná hrana)", () => {
+    const d = buildFolderDiagram([], "proj", 1000);
+    expect(d.truncated).toBe(false);
+    expect(d.shown).toBe(0);
+    expect(d.total).toBe(0);
+    const text = d.lines.join("\n");
+    expect(text).toContain("graph LR");
+    expect(text).toContain('n0["proj"]');
+    expect(text).not.toContain("-->");
   });
 });

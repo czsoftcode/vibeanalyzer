@@ -50,6 +50,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Mermaid diagram struktury složek se kreslí zleva doprava (`graph LR`) místo
+  shora dolů. Sourozenecké složky se teď skládají pod sebe, takže graf roste do
+  výšky a ne do šířky – u projektů s mnoha složkami je čitelnější. Zároveň se
+  zvedl strop vykreslených uzlů z 60 na 1000, takže i projekt se stovkami složek
+  se v diagramu zobrazí celý (ověřeno na 1100 souborech / 343 adresářích). Nad
+  1000 uzlů se diagram dál poctivě ořízne s poznámkou, kolik z kolika složek je
+  vidět.
+
 - Strojová analýza (tsc i ESLint) teď běží v odděleném podprocesu s limitem paměti
   a časovým limitem. Na obřím projektu, kde by dřív mohla vyčerpat paměť (a shodit
   celý nástroj) nebo se zaseknout, se místo pádu čistě označí jako přeskočená

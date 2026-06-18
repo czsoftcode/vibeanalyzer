@@ -21,3 +21,4 @@
 - [ ] Prověřit 5 transitivních zranitelností z podstromu ESLintu
 - [ ] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
 - [ ] Plný sandbox vč. importů
+- [x] Mermaid vertikálně ne horizontálně a plný počet adresářů i když budou stovky

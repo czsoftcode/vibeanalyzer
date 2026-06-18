@@ -21,7 +21,7 @@ export interface MarkdownOptions {
   maxDiagramNodes?: number;
 }
 
-const DEFAULT_MAX_DIAGRAM_NODES = 60;
+const DEFAULT_MAX_DIAGRAM_NODES = 1000;
 
 /** Nahradí znaky, které by rozbily Mermaid label v hranatých závorkách. */
 function escapeLabel(s: string): string {
@@ -215,7 +215,9 @@ export interface FolderDiagram {
 }
 
 /**
- * Postaví Mermaid diagram (graph TD) JEN nad složkami.
+ * Postaví Mermaid diagram (graph LR) JEN nad složkami.
+ * LR (zleva doprava) skládá sourozenecké složky pod sebe → graf roste do výšky,
+ * ne do šířky, a u projektů s mnoha mělkými složkami je čitelnější.
  * Při překročení limitu uzlů se diagram ořízne (a volající to napíše do reportu).
  */
 export function buildFolderDiagram(
@@ -236,7 +238,7 @@ export function buildFolderDiagram(
 
   const labelFor = (p: string): string => (p === "" ? rootLabel : (p.split("/").pop() ?? p));
 
-  const lines: string[] = ["graph TD"];
+  const lines: string[] = ["graph LR"];
   lines.push(`  n0["${escapeLabel(rootLabel)}"]`);
   for (const p of shownPaths) {
     lines.push(`  n${idOf.get(p)}["${escapeLabel(labelFor(p))}"]`);
