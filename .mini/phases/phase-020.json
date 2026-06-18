@@ -1,0 +1,39 @@
+{
+  "id": 20,
+  "title": "Náhrada SHA-1 v projectKey za SHA-256",
+  "goal": "V projectKey (src/projectPaths.ts:27) nahradit createHash(\"sha1\") za createHash(\"sha256\") (ponechat .slice(0, 8)), upravit komentář u řádku 13, ověřit zelené testy včetně round-tripu home úložiště, a do ADR/reportu zapsat, že jde o quality fix (ne bezpečnostní) a že změna klíče osiřelí dříve uložené složky pod ~/.vibeanalyzer/.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Záměna sha1 → sha256 v projectKey",
+      "status": "done",
+      "detail": "V src/projectPaths.ts:27 změnit createHash(\"sha1\") na createHash(\"sha256\"), .slice(0, 8) ponechat. Tvar klíče basename-<8 hex> zůstává stejný."
+    },
+    {
+      "title": "Aktualizace komentáře u řádku 13",
+      "status": "done",
+      "detail": "V doc-komentáři projectKey opravit zmínku 'hash je SHA-1' na SHA-256, aby komentář nelhal o použitém algoritmu."
+    },
+    {
+      "title": "Ověřit zelené testy včetně round-tripu",
+      "status": "done",
+      "detail": "Spustit npm run build, npm run typecheck a npm run test. Potvrdit, že projdou projectPaths.test.ts i round-trip home úložiště (intentWriter ↔ intent přes homeIntentPath), které sdílí projectKey."
+    },
+    {
+      "title": "Test se zuby: žádný weak-algo literál",
+      "status": "done",
+      "detail": "Přidat test, že projectKey produkuje validní 8-hex klíč a liší se od dřívějšího SHA-1 výstupu pro známou cestu, aby regrese zpět na SHA-1 padla. Pokud krok 3 pokrytí stačí, zdůvodnit a nepřidávat."
+    },
+    {
+      "title": "ADR (phase-020.md) – quality, ne security",
+      "status": "skipped",
+      "detail": "Zapsat: jde o code-quality fix umlčující semgrep, ne bezpečnostní opravu; výslovně uvést trade-off, že změna hashe změní klíč → dříve uložené složky pod ~/.vibeanalyzer/ osiřejí (round-trip se nerozbije, ale historie se ztratí)."
+    }
+  ],
+  "startedAt": "2026-06-18T23:08:56.724Z",
+  "completedAt": "2026-06-18T23:14:06.576Z",
+  "autoCommit": {
+    "preSha": "82f81405841e19a10ad3e17bf62442c02d8ec837",
+    "subject": "Phase 20: Náhrada SHA-1 v projectKey za SHA-256"
+  }
+}

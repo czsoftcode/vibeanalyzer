@@ -7,18 +7,31 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Changed
+
+- Klíč adresáře projektu pod `~/.vibeanalyzer/` (kam se ukládá report i záměr) se
+  nově odvozuje pomocí SHA-256 místo SHA-1. Jde o úklid kvůli bezpečnostnímu
+  skeneru, ne o reálnou bezpečnostní díru – hash tu jen tvoří krátký deterministický
+  klíč z cesty, nechrání žádná citlivá data. Pozor: protože se klíč změnil, projekty
+  analyzované starší verzí dostanou pod `~/.vibeanalyzer/` novou složku a dříve
+  uložené reporty/záměry zůstanou pod původním (starým) klíčem jako osiřelé. Tvar
+  klíče (`jméno-složky-<8 hex>`) i chování jinak zůstávají stejné.
+
 ## [0.2.0] - 2026-06-19
 
 ### Changed
 
-- Přibalený TypeScript povýšen z 5.9 na 6.0.3. Strojová typová analýza (tsc) tak
-  běží na aktuální stabilní řadě před příchodem nativního TypeScriptu 7. Přechod je
-  bez dopadu na chování nástroje (build, typecheck i celá testová sada zelené, tvar
-  nálezů beze změny). Pozor: jelikož cizí projekty analyzujeme tímto přibaleným
-  TypeScriptem, ne jejich vlastní verzí, může se u projektů bez explicitní
-  konfigurace `tsconfig` (nové výchozí hodnoty 6.0 – strict, novější knihovna) report
-  o něco více lišit od toho, co by nahlásil jejich vlastní toolchain; verze
-  projektového TS zůstává v reportu uvedená.
+- Strojová typová analýza (tsc) běží na přibaleném TypeScriptu 6.0.3 (povýšeno z 5.9).
+  Záměrně se nenačítá (a tedy nespouští) TypeScript z `node_modules` analyzovaného
+  projektu – vždy se použije přibalený, čímž nástroj drží slib „čte, nespouští" i pro
+  tuhle vrstvu. Verzi TypeScriptu projektu jen přečte z jeho `package.json` a když se
+  liší, report u tsc poznamená, kterou verzí se typovalo a kterou projekt používá.
+  Povýšení na 6.0 drží nástroj na aktuální stabilní řadě před příchodem nativního
+  TypeScriptu 7 a je bez dopadu na chování (build, typecheck i celá testová sada
+  zelené, tvar nálezů beze změny). Pozor: u analyzovaných projektů bez explicitní
+  konfigurace `tsconfig` (nové výchozí hodnoty 6.0 – strict, novější knihovna) se může
+  report o něco více lišit od toho, co by nahlásil jejich vlastní toolchain – proto je
+  výše uvedená poznámka o verzním rozdílu důležitější než dřív.
 
 ### Security
 
@@ -76,12 +89,6 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   celý nástroj) nebo se zaseknout, se místo pádu čistě označí jako přeskočená
   s konkrétním důvodem („příliš velký projekt", „trvalo příliš dlouho") – report
   vždy vznikne. Cena: každý běh má kvůli izolaci o ~1–2 s vyšší režii.
-
-- Strojová typová analýza už nenačítá (a tedy nespouští) TypeScript z `node_modules`
-  analyzovaného projektu – vždy se použije přibalený TypeScript (nově 5.9.3). Tím nástroj
-  drží slib „čte, nespouští" i pro tuhle vrstvu. Verzi TypeScriptu projektu jen přečte
-  z jeho `package.json` a když se liší, report u tsc poznamená, kterou verzí se typovalo
-  a kterou projekt používá (nálezy se tak dají posoudit s vědomím možného verzního rozdílu).
 
 - JSON index má nově verzi 4 (přibyla pole `tsc` a `eslint` s výsledky strojových analýz;
   tsc výsledek nese i verzi použitého TypeScriptu, případně verzi deklarovanou projektem).

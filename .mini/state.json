@@ -97,6 +97,11 @@
       "id": 19,
       "title": "Prozkoumat dopady TS 6.0",
       "status": "done"
+    },
+    {
+      "id": 20,
+      "title": "Náhrada SHA-1 v projectKey za SHA-256",
+      "status": "done"
     }
   ]
 }
