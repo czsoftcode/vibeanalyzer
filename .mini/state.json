@@ -77,6 +77,11 @@
       "id": 15,
       "title": "Ochrana strojové vrstvy proti pádu",
       "status": "done"
+    },
+    {
+      "id": 16,
+      "title": "Soulad načítání TS s non-goalem",
+      "status": "done"
     }
   ]
 }

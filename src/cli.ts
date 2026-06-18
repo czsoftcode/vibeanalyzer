@@ -63,8 +63,8 @@ function childExecArgv(memMb: number): string[] {
   return args;
 }
 
-const tscProgress = (fileCount: number, source?: string): string =>
-  `Spouštím tsc (${source}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`;
+const tscProgress = (fileCount: number, version?: string): string =>
+  `Spouštím tsc (TS ${version}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`;
 const eslintProgress = (fileCount: number): string =>
   `Spouštím ESLint nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`;
 
@@ -103,7 +103,7 @@ async function analyzeTypeScriptIsolated(root: string): Promise<TscResult> {
     execArgv: childExecArgv(memMb),
     payload,
     timeoutMs: ANALYSIS_TIMEOUT_MS,
-    onStarted: (m) => console.log(tscProgress(m.fileCount, m.source)),
+    onStarted: (m) => console.log(tscProgress(m.fileCount, m.version)),
   });
   return skipFromOutcome(outcome, "tsc", memMb) ?? (outcome as { kind: "ok"; value: TscResult }).value;
 }
@@ -287,7 +287,7 @@ export async function run(
   if (realTsc) {
     try {
       tsc = await realTsc(targetPath, {
-        onStart: (fileCount, source) => console.log(tscProgress(fileCount, source)),
+        onStart: (fileCount, version) => console.log(tscProgress(fileCount, version)),
       });
     } catch (err: unknown) {
       const e = err as Error;

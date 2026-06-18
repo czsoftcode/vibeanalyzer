@@ -21,7 +21,7 @@ export type ChildPayload =
 async function handle(payload: ChildPayload): Promise<TscResult | EslintResult> {
   if (payload.layer === "tsc") {
     return analyzeTypeScript(payload.root, {
-      onStart: (fileCount, source) => process.send?.({ type: "started", fileCount, source }),
+      onStart: (fileCount, version) => process.send?.({ type: "started", fileCount, version }),
     });
   }
   return analyzeESLint(payload.root, payload.files, {

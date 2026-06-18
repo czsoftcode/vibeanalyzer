@@ -69,8 +69,18 @@ function tscSection(tsc: TscResult | undefined): string[] {
     return out;
   }
 
-  out.push(`tsc proběhl nad ${tsc.fileCount} soubory.`);
+  out.push(`tsc (TS ${tsc.tsVersion}) proběhl nad ${tsc.fileCount} soubory.`);
   out.push("");
+  // Typujeme vždy přibalenou verzí (non-goal č. 1 – nespouštíme projektový TS).
+  // Když projekt deklaruje JINOU verzi, přiznáme to: jeho nálezy můžou být verzním
+  // rozdílem, ne reálným bugem (novější/starší syntaxe, jiné compiler defaults).
+  if (tsc.projectTsVersion) {
+    out.push(
+      `_Pozn.: typováno přibaleným TypeScriptem ${tsc.tsVersion}; projekt používá ${tsc.projectTsVersion} – ` +
+        `nálezy posuzuj s vědomím možného verzního rozdílu._`,
+    );
+    out.push("");
+  }
   if (!tsc.nodeModulesPresent) {
     out.push(NODE_MODULES_NOTE);
     out.push("");

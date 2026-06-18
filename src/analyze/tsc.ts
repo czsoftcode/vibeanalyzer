@@ -5,14 +5,16 @@ import type { Finding, Severity, TscResult } from "../findings.js";
 import { type LoadedTypescript, loadTypescript } from "./loadTypescript.js";
 
 export interface TscAnalyzeDeps {
-  /** injektovatelný loader (test si podstrčí svůj) */
-  loadTs?: (root: string) => Promise<LoadedTypescript>;
+  /** injektovatelný loader (test si podstrčí svůj). Bez root: vždy přibalený TS. */
+  loadTs?: () => Promise<LoadedTypescript>;
   /**
    * Zavolá se PO naparsování tsconfigu, těsně před (potenciálně dlouhým) během
-   * tsc – aby CLI mohlo vypsat "spouštím tsc nad N souborů". Bez timeoutu: u
-   * obřího monorepa to může chvíli viset (vědomě přijaté riziko V1).
+   * tsc – aby CLI mohlo vypsat "spouštím tsc (TS <verze>) nad N souborů". Druhý
+   * argument je verze použitého (přibaleného) TypeScriptu.
    */
-  onStart?: (fileCount: number, tsSource: "project" | "bundled") => void;
+  onStart?: (fileCount: number, tsVersion: string) => void;
+  /** injektovatelné čtení verze TS projektu (test si podstrčí svou); jinak reálné */
+  readProjectTsVersion?: (root: string) => Promise<string | undefined>;
 }
 
 /**
@@ -28,6 +30,7 @@ export interface TscAnalyzeDeps {
  */
 export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {}): Promise<TscResult> {
   const loadTs = deps.loadTs ?? loadTypescript;
+  const readProjectTsVersion = deps.readProjectTsVersion ?? readProjectTypescriptVersion;
   const tsconfigPath = path.join(root, "tsconfig.json");
 
   let configRaw: string;
@@ -37,7 +40,7 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
     return { kind: "skipped", reason: "v kořeni projektu není tsconfig.json (není to TypeScript projekt?)" };
   }
 
-  const { ts, source } = await loadTs(root);
+  const { ts, version } = await loadTs();
 
   // tsconfig je JSONC (komentáře) – parsujeme přes tsc, ne JSON.parse.
   const jsonParsed = ts.parseConfigFileTextToJson(tsconfigPath, configRaw);
@@ -76,7 +79,7 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
     sourceMap: false,
   };
 
-  deps.onStart?.(cmd.fileNames.length, source);
+  deps.onStart?.(cmd.fileNames.length, version);
 
   const program = ts.createProgram(cmd.fileNames, options);
   // POZOR: getPreEmitDiagnostics NEvrací chyby konfigurace (cmd.errors). Kdybychom
@@ -86,7 +89,29 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   const findings = diagnostics.map((d) => toFinding(ts, d, root));
   const nodeModulesPresent = await hasNodeModules(root);
 
-  return { kind: "ran", findings, fileCount: cmd.fileNames.length, nodeModulesPresent };
+  // Verzi TS projektu jen ČTEME (data), abychom přiznali případný rozdíl proti
+  // přibalené verzi. projectTsVersion vyplníme JEN když existuje a LIŠÍ SE – jinak
+  // by report nesl zbytečnou „shodnou" poznámku.
+  const projectTs = await readProjectTsVersion(root);
+  const projectTsVersion = projectTs && projectTs !== version ? projectTs : undefined;
+
+  return { kind: "ran", findings, fileCount: cmd.fileNames.length, nodeModulesPresent, tsVersion: version, projectTsVersion };
+}
+
+/**
+ * Verze TypeScriptu, kterou MÁ projekt (z `node_modules/typescript/package.json`).
+ * ČISTĚ ČTENÍ: `JSON.parse` textu package.json – data, NE spuštění modulu (na rozdíl
+ * od `require("typescript")`; trojanizovaný package.json je inertní). Když projekt TS
+ * nemá / soubor chybí / je nečitelný / bez `version` → `undefined` (poznámka se vynechá).
+ */
+async function readProjectTypescriptVersion(root: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(path.join(root, "node_modules", "typescript", "package.json"), "utf8");
+    const v = (JSON.parse(raw) as { version?: unknown }).version;
+    return typeof v === "string" ? v : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function hasNodeModules(root: string): Promise<boolean> {

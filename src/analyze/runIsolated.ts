@@ -11,11 +11,11 @@ import { fork } from "node:child_process";
  * dítěte (u workeru sdílíme paměť procesu → slabší záruka).
  */
 
-/** Zpráva „začínám" – nese počet souborů pro progress hlášku (tsc i source). */
+/** Zpráva „začínám" – nese počet souborů pro progress hlášku (u tsc i verzi TS). */
 export interface StartedMessage {
   type: "started";
   fileCount: number;
-  source?: "project" | "bundled";
+  version?: string;
 }
 /** Zpráva s hotovým výsledkem analýzy (diskriminovaný union TscResult/EslintResult). */
 export interface ResultMessage<T> {

@@ -41,7 +41,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   s konkrétním důvodem („příliš velký projekt", „trvalo příliš dlouho") – report
   vždy vznikne. Cena: každý běh má kvůli izolaci o ~1–2 s vyšší režii.
 
-- JSON index má nově verzi 3 (přibylo pole `tsc` a `eslint` s výsledky strojových analýz).
+- Strojová typová analýza už nenačítá (a tedy nespouští) TypeScript z `node_modules`
+  analyzovaného projektu – vždy se použije přibalený TypeScript (nově 5.9.3). Tím nástroj
+  drží slib „čte, nespouští" i pro tuhle vrstvu. Verzi TypeScriptu projektu jen přečte
+  z jeho `package.json` a když se liší, report u tsc poznamená, kterou verzí se typovalo
+  a kterou projekt používá (nálezy se tak dají posoudit s vědomím možného verzního rozdílu).
+
+- JSON index má nově verzi 4 (přibyla pole `tsc` a `eslint` s výsledky strojových analýz;
+  tsc výsledek nese i verzi použitého TypeScriptu, případně verzi deklarovanou projektem).
 
 - Když záměr projektu (`project.md`) nikde není a nástroj běží v terminálu, nabídne
   jeho vytvoření: pár otázek (co stavíš + non-goaly), uloží `project.md` do

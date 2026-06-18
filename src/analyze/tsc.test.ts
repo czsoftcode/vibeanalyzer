@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -94,17 +94,18 @@ describe("analyzeTypeScript", () => {
     expect(res.reason).toContain("naparsovat");
   });
 
-  it("onStart dostane počet souborů a zdroj tsc", async () => {
+  it("onStart dostane počet souborů a VERZI přibaleného TS", async () => {
     const root = await tmp();
     await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["ok.ts"] }));
     await writeFile(path.join(root, "ok.ts"), "export const x = 1;\n");
 
-    let seen: { count: number; src: string } | undefined;
-    await analyzeTypeScript(root, { onStart: (count, src) => { seen = { count, src }; } });
-    expect(seen).toEqual({ count: 1, src: "bundled" });
+    let seen: { count: number; version: string } | undefined;
+    await analyzeTypeScript(root, { onStart: (count, version) => { seen = { count, version }; } });
+    expect(seen?.count).toBe(1);
+    expect(seen?.version).toMatch(/^\d+\.\d+\.\d+/); // sémver přibaleného TS
   });
 
-  it("chybějící node_modules se promítne do nodeModulesPresent=false", async () => {
+  it("chybějící node_modules → nodeModulesPresent=false a projectTsVersion undefined", async () => {
     const root = await tmp();
     await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["ok.ts"] }));
     await writeFile(path.join(root, "ok.ts"), "export const x = 1;\n");
@@ -112,5 +113,51 @@ describe("analyzeTypeScript", () => {
     expect(res.kind).toBe("ran");
     if (res.kind !== "ran") return;
     expect(res.nodeModulesPresent).toBe(false);
+    expect(res.projectTsVersion).toBeUndefined(); // bez projektového TS žádná poznámka
+    expect(res.tsVersion).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("ZUBY: hostile node_modules/typescript se NESPUSTÍ – jen přečteme jeho verzi", async () => {
+    const root = await tmp();
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["a.ts"] }));
+    await writeFile(path.join(root, "a.ts"), "export const x = 1;\n");
+    const tsDir = path.join(root, "node_modules", "typescript");
+    await mkdir(path.join(tsDir, "lib"), { recursive: true });
+    const marker = path.join(root, "HOSTILE_EXECUTED");
+    await writeFile(
+      path.join(tsDir, "package.json"),
+      JSON.stringify({ name: "typescript", version: "9.9.9-hostile", main: "lib/typescript.js" }),
+    );
+    // kdyby se tenhle modul VYHODNOTIL (require), zapíše marker = spuštění cizího kódu
+    await writeFile(path.join(tsDir, "lib", "typescript.js"), `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x'); module.exports = {};`);
+
+    const res = await analyzeTypeScript(root);
+
+    // 1) cizí TS se NEVYKONAL (marker nevznikl) – non-goal č. 1
+    await expect(access(marker)).rejects.toThrow();
+    // 2) typovalo se PŘIBALENÝM TS, ne hostile verzí
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.tsVersion).not.toBe("9.9.9-hostile");
+    expect(res.tsVersion).toMatch(/^\d+\.\d+\.\d+/);
+    // 3) ale jeho verzi jsme PŘEČETLI z package.json (data) a rozdíl přiznáme
+    expect(res.projectTsVersion).toBe("9.9.9-hostile");
+  });
+
+  it("projektová verze TS SHODNÁ s přibalenou → projectTsVersion undefined (žádná zbytečná poznámka)", async () => {
+    const root = await tmp();
+    const tsmod = (await import("typescript")) as { default?: { version: string }; version?: string };
+    const bundled = (tsmod.default ?? tsmod).version as string;
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["a.ts"] }));
+    await writeFile(path.join(root, "a.ts"), "export const x = 1;\n");
+    const tsDir = path.join(root, "node_modules", "typescript");
+    await mkdir(tsDir, { recursive: true });
+    await writeFile(path.join(tsDir, "package.json"), JSON.stringify({ name: "typescript", version: bundled }));
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.tsVersion).toBe(bundled);
+    expect(res.projectTsVersion).toBeUndefined();
   });
 });

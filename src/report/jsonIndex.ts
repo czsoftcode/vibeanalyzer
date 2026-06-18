@@ -18,8 +18,8 @@ export interface JsonIndex {
   eslint: EslintResult;
 }
 
-/** Bump 2 → 3: přidáno pole `eslint`. Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 3;
+/** Bump 3 → 4: tsc výsledek nese `tsVersion` (+ volitelně `projectTsVersion`). Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 4;
 
 export function buildJsonIndex(
   root: string,

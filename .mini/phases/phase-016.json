@@ -1,0 +1,45 @@
+{
+  "id": 16,
+  "title": "Soulad načítání TS s non-goalem",
+  "goal": "Odstranit (nebo explicitně a doloženě smířit) spouštění cizího kódu při načítání TypeScriptu z node_modules analyzovaného projektu, aby deklarace 'čte, nespouští' (non-goal č. 1) platila; konkrétní mechanismus (vždy přibalený TS vs. ponechat projektový) rozhodne discuss.",
+  "status": "done",
+  "fromFinding": "13-2",
+  "steps": [
+    {
+      "title": "Bump typescriptu na 5.9.3 + zelený build",
+      "status": "done",
+      "detail": "package.json ^5.6.0 -> ^5.9.3, npm install, projet tsc build + celou suitu; opravit případné nové type chyby z novější verze. Výstup: build čistý a suite zelená na 5.9.3 ještě PŘED změnou chování (izolovaný dopad bumpu)."
+    },
+    {
+      "title": "loadTypescript: jen přibalený TS, žádné require cizího",
+      "status": "done",
+      "detail": "Zahodit větev createRequire/req(tsPath)/realNodeModules; loadTypescript = import(typescript). LoadedTypescript.source -> version (= ts.version). Opravit zavádějící komentář. Výstup: loadTypescript nikdy nesáhne na projektový node_modules."
+    },
+    {
+      "title": "Test se zuby: hostile node_modules/typescript se NESPUSTÍ",
+      "status": "done",
+      "detail": "Fixtura node_modules/typescript/{package.json, lib/typescript.js}, kde lib/typescript.js při vyhodnocení hodí / zapíše marker. Assert: loadTypescript vrátí přibalený (jeho version), marker NEvznikl, nehodilo. Na starém kódu by test spadl. + test, že vrací version."
+    },
+    {
+      "title": "Čtení projektové verze TS (data, ne spuštění)",
+      "status": "done",
+      "detail": "Helper čte <root>/node_modules/typescript/package.json a vrátí .version (JSON.parse textu; try/catch -> undefined). findings.ts: TscResult ran rozšířit o tsVersion (povinná, použitá) + projectTsVersion? (jen když existuje a != tsVersion). tsc.ts je vyplní. Test: liší se -> vyplněno, shoduje -> undefined, chybí -> undefined."
+    },
+    {
+      "title": "Report + IPC: verze v progress, md poznámce, JSON (INDEX_VERSION 4)",
+      "status": "done",
+      "detail": "Přejmenovat source->version napříč fází 15 (StartedMessage, relay v analyzeChild, onStart signatura, cli.tscProgress -> Spouštím tsc (TS 5.9.x)). markdown.ts: u ran přidat poznámku typováno přibaleným TS X; projekt používá Y když je projectTsVersion. jsonIndex INDEX_VERSION 3->4. Testy: md poznámka (je/není), INDEX_VERSION=4, progress s verzí."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext): nikde se nespouští cizí kód (ani čtení verze), tři stavy se neslévají, cross-module kontrakt (INDEX_VERSION/verze) testem reálného kódu ne mockem, ripple do izolace z fáze 15 (IPC/progress) sedí, zuby testů. Pak self-check."
+    }
+  ],
+  "startedAt": "2026-06-18T20:06:24.456Z",
+  "completedAt": "2026-06-18T20:33:24.355Z",
+  "autoCommit": {
+    "preSha": "7231b457286b173c6cc249b03d899915732359ad",
+    "subject": "Phase 16: Soulad načítání TS s non-goalem"
+  }
+}

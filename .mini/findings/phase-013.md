@@ -13,7 +13,7 @@ ESLint hlásí na validním .jsx falešný 'Parsing error' jako error nález
 
 JS flat-config blok (files=**/*.js,.jsx,.mjs,.cjs) běží na espree bez parserOptions.ecmaFeatures.jsx. Ověřeno empiricky: soubor comp.jsx s 'export const A = () => <div>hi</div>' vrátí finding {severity:error, message:'Parsing error: Unexpected token <', line:1}. .tsx je v pořádku (tsParser autodetekuje JSX dle přípony), ale .jsx a .js s JSX ne. Cílová skupina (vibekodeři, často React) tím dostane do reportu falešné 'error' nálezy na zdravém kódu → podkopává důvěru v nástroj. Žádný test JSX nepokrývá (eslint.test.ts ani markdown.eslint.test.ts). Fix: do JS bloku přidat ecmaFeatures:{jsx:true}.
 
-## 13-2 · should-know · open
+## 13-2 · should-know · resolved
 **Where:** src/analyze/loadTypescript.ts:36-41
 **Reviewed-at:** 1d6e52e8198e9e583340337fa54419e2111b4069
 **Source:** project

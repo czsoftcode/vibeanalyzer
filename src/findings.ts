@@ -48,6 +48,14 @@ export type TscResult =
        * (TS2307 ap.) jsou očekávané a report to musí přiznat, ne vydávat za bug.
        */
       nodeModulesPresent: boolean;
+      /** verze PŘIBALENÉHO TypeScriptu, kterou se typovalo (vždy se použije náš TS) */
+      tsVersion: string;
+      /**
+       * Verze TS deklarovaná projektem – JEN když existuje a LIŠÍ SE od `tsVersion`.
+       * Report ji přizná, ať se nálezy posuzují s vědomím možného verzního rozdílu
+       * (typujeme naší verzí, ne projektovou – non-goal č. 1, viz loadTypescript).
+       */
+      projectTsVersion?: string;
     };
 
 /**

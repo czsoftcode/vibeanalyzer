@@ -5,14 +5,14 @@ import { buildJsonIndex, INDEX_VERSION } from "./jsonIndex.js";
 const noEslint: EslintResult = { kind: "skipped", reason: "žádné JS/TS soubory" };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 3 (přidáno pole eslint)", () => {
-    expect(INDEX_VERSION).toBe(3);
+  it("verze indexu je 4 (tsc výsledek nese tsVersion)", () => {
+    expect(INDEX_VERSION).toBe(4);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint);
-    expect(idx.version).toBe(3);
+    expect(idx.version).toBe(4);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
@@ -27,11 +27,13 @@ describe("buildJsonIndex", () => {
     expect(idx.eslint).toEqual(eslint);
   });
 
-  it("ran s nálezy projde do JSON včetně fileCount a nodeModulesPresent", () => {
+  it("ran s nálezy projde do JSON včetně fileCount, nodeModulesPresent a verzí", () => {
     const tsc: TscResult = {
       kind: "ran",
       fileCount: 2,
       nodeModulesPresent: false,
+      tsVersion: "5.9.3",
+      projectTsVersion: "5.4.0",
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2322", message: "x" }],
     };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint);
