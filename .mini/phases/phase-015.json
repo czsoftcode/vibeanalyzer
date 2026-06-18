@@ -1,0 +1,45 @@
+{
+  "id": 15,
+  "title": "Ochrana strojové vrstvy proti pádu",
+  "goal": "Zajistit, aby strojová vrstva (tsc + ESLint) na velmi velkém projektu místo tichého OOM/pádu čistě degradovala na 'přeskočeno: příliš velký projekt' (konkrétní mechanismus – oddělený proces s limitem paměti vs. strop na počet souborů – rozhodne discuss); ověřeno tím, že na extrémním vstupu nástroj dorobí report bez pádu.",
+  "status": "done",
+  "fromFinding": "13-3",
+  "steps": [
+    {
+      "title": "Modul limitů: paměťový strop + timeout",
+      "status": "done",
+      "detail": "Nový modul s čistou funkcí computeMemoryLimitMb(availableBytes) -> MB pro --max-old-space-size: process.availableMemory() (fallback os.freemem()), ~70 %, clamp na [podlaha ~1024 MB, rozumný strop]. Konstanty (procento, podlaha, strop, ANALYSIS_TIMEOUT_MS ~120 s) pojmenované. Unit test s injektovanými hodnotami paměti: trefí procento, podlahu i strop."
+    },
+    {
+      "title": "Child entry: běh analýzy + IPC výsledek",
+      "status": "done",
+      "detail": "Forkovaný vstupní skript: dostane zadání {layer:tsc|eslint, root, files}, naimportuje analyzeTypeScript/analyzeESLint, pošle rodiči nejdřív {type:started, fileCount} (kvůli progress hlášce), pak {type:result, payload} s diskriminovaným výsledkem a skončí. Žádné funkce (onStart) přes IPC. Výjimku nechá probublat -> rodič vyhodnotí jako pád."
+    },
+    {
+      "title": "Rodičovský harness: fork, limit, rozliš pád",
+      "status": "done",
+      "detail": "runIsolated({childPath, execArgv, payload, memMb, timeoutMs}): fork s --max-old-space-size=<memMb>, relayuje started, na result vrátí výsledek; timeout -> zabít dítě -> skip 'analýza trvala příliš dlouho (Ns)'; samovolný exit rozliš OOM (kód 134 / 'heap out of memory' ve stderr) -> 'příliš velký projekt (limit X MB)' vs obecný pád -> 'analýza selhala (viz stderr)' + vypsat stderr dítěte. Žádný zombie proces (úklid u všech větví). Limity injektovatelné pro testy."
+    },
+    {
+      "title": "Napojit obě vrstvy v cli.ts přes harness",
+      "status": "done",
+      "detail": "V cli.ts nahradit přímá volání analyzeTs/analyzeES během přes runIsolated (prod child path = dist/, mem z modulu limitů, timeout z konstanty). Progress hlášku 'Spouštím ... nad N souborů' tisknout z relayované started. Skip reason u přeskočené vrstvy obsahuje konkrétní limit (MB / s) -> propíše se do MD i JSON přes stávající render. Stávající try/catch nechat jako pojistku rodiče."
+    },
+    {
+      "title": "Testy: OOM / timeout / bug / happy-path",
+      "status": "done",
+      "detail": "Harness testovat fixturním child skriptem (ne reálným analyzátorem): alokuj-do-OOM (nízký memMb) -> skip 'příliš velký'; spi-donekonečna (krátký timeout) -> skip 'trvalo dlouho'; hoď -> skip 'selhala (viz stderr)', NE lživé velikost/čas. + happy-path: tsc i ESLint přes harness vrátí TYTÉŽ nálezy jako in-process běh nad fixturou. Vyřešit TS-ve-forku (loader/execArgv). Zuby: rozbití rozlišení větví test shodí."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext): tři stavy se neslévají, žádný důvod nelže, rozlišení OOM/timeout/bug správné, žádný osiřelý child proces, testy mají zuby, non-goal č.1 nedotčen (v dítěti běží náš kód, ne kód projektu). Pak self-check před reportem."
+    }
+  ],
+  "startedAt": "2026-06-18T19:10:43.603Z",
+  "completedAt": "2026-06-18T19:50:16.839Z",
+  "autoCommit": {
+    "preSha": "a76fa500c7f31121924df8f147eea860bc247ff5",
+    "subject": "Phase 15: Ochrana strojové vrstvy proti pádu"
+  }
+}

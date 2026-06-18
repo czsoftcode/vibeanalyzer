@@ -10,6 +10,9 @@ import { projectKey } from "./projectPaths.js";
  * Testy interaktivní nabídky vytvoření záměru. Vše přes INJEKTOVANÉ deps
  * (fake ask + isInteractive + homeDir) – žádný reálný stdin ani reálný ~.
  */
+// Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – interaktivní nabídka vytvoření záměru", () => {
   let proj: string;
   let home: string;

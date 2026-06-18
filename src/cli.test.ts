@@ -8,6 +8,9 @@ import { run } from "./cli.js";
 // ověřují MECHANISMUS izolovaně; tohle hlídá, že cli ten Set opravdu předá –
 // jinak by smazání jednoho řádku v cli.ts prošlo bez padlého testu a výstupní
 // adresář by se zase začal indexovat (regrese cíle 1-1).
+// Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – integrace cli s vyloučením outDir", () => {
   let proj: string;
 

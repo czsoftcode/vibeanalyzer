@@ -30,7 +30,7 @@ describe("analyzeTypeScript", () => {
     expect(hit?.line).toBe(2);
     expect(hit?.severity).toBe("error");
     expect(res.fileCount).toBe(1);
-  });
+  }, 30_000); // první volání = cold load typescriptu + createProgram; na vytíženém stroji přes 5s default
 
   it("čistý projekt → ran s 0 nálezy (NE skipped)", async () => {
     const root = await tmp();

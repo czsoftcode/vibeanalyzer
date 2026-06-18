@@ -22,7 +22,7 @@ loadTypescript spouští TS z node_modules cíle (req) – napětí s non-goalem
 
 Projekt deklaruje 'čte – nespouští' a non-goal č.1 'do not run or execute the analyzed code'. loadTypescript ale přes createRequire(target/package.json).resolve('typescript') a req(tsPath) NAČTE a vyhodnotí JS modul ležící uvnitř adresáře analyzovaného projektu (jeho node_modules/typescript). To je vykonání kódu z cíle, ne čtení. U běžného projektu neškodné, ale je to přímý rozpor s deklarovaným přístupem i non-goalem a otevírá to plochu (trojanizovaný node_modules/typescript/lib/typescript.js se spustí při require). Komentář v souboru tvrdí 'Schválně NIC neinstalujeme – čteme projekt tak, jak ho najdeme', což zastírá, že se cizí JS reálně spouští. Bezpečnostní dopad nechávám na samostatný mini security pass; tady jde o kontrakt vs. realita.
 
-## 13-3 · should-know · open
+## 13-3 · should-know · resolved
 **Where:** src/cli.ts:188-238; src/analyze/tsc.ts:84-92
 **Reviewed-at:** 1d6e52e8198e9e583340337fa54419e2111b4069
 **Source:** project

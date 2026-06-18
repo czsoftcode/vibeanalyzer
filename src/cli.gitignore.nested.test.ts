@@ -9,6 +9,9 @@ import { run } from "./cli.js";
 // gotcha (prořezaná složka ! neoživí) a degradaci vnořeného .gitignore. Jednotky
 // (loadDirIgnore, scanTree, ignoredByStack) jsou pokryté zvlášť; tohle hlídá, že
 // to cli reálně propojí přes skutečnou knihovnu `ignore`.
+// Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – respektuje vnořené .gitignore", () => {
   let proj: string;
   let outDir: string;

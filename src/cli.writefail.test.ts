@@ -18,6 +18,9 @@ vi.mock("./report/writeOutputs.js", () => ({
 
 import { run } from "./cli.js";
 
+// Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – selhání zápisu reportu → exit 1 (ne pád)", () => {
   let proj: string;
   let errors: string[];

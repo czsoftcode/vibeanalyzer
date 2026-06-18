@@ -42,7 +42,7 @@ describe("run – ESLint vrstva v reportu", () => {
     expect(md).toContain("`bad.js:2");
     expect(md).toContain("eqeqeq");
     expect(json.eslint.kind).toBe("ran");
-  });
+  }, 30_000); // reálný běh teď forkuje izolovaný proces (pod tsx transpile) → pomalejší
 
   it("projekt bez JS/TS souborů → ESLint přeskočeno", async () => {
     await writeFile(path.join(proj, "README.md"), "# demo\n");

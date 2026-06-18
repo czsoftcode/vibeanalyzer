@@ -2,7 +2,11 @@ import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { analyzeESLint } from "./analyze/eslint.js";
+import { ANALYSIS_TIMEOUT_MS, availableMemoryBytes, computeMemoryLimitMb } from "./analyze/limits.js";
+import { type IsolatedOutcome, runIsolated } from "./analyze/runIsolated.js";
 import { analyzeTypeScript } from "./analyze/tsc.js";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
 import type { EslintResult, TscResult } from "./findings.js";
@@ -13,7 +17,7 @@ import { renderProjectMd, writeIntentFile } from "./intentWriter.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
-import { ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
+import { type FileEntry, ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 import { fileTimestamp } from "./timestamp.js";
 import { readPackageVersion } from "./version.js";
 
@@ -33,6 +37,90 @@ Volby:
 Výstup:
   vibeanalyzer-<timestamp>.json  strojový strukturální index
   vibeanalyzer-<timestamp>.md    lidský report se seznamem souborů a Mermaid diagramem`;
+
+// Cesta k child skriptu pro izolovaný běh. Odvozená od PŘÍPONY tohoto modulu:
+// v provozu běžíme z dist (cli.js → analyzeChild.js), v dev/testu ze src přes tsx
+// (cli.ts → analyzeChild.ts). Nehledáme natvrdo "dist", ať to funguje v obojím.
+const SELF_PATH = fileURLToPath(import.meta.url);
+const SELF_EXT = path.extname(SELF_PATH); // ".js" v provozu, ".ts" pod tsx/vitest
+const CHILD_PATH = path.join(path.dirname(SELF_PATH), "analyze", `analyzeChild${SELF_EXT}`);
+
+/**
+ * Izolace (fork) je DEFAULT – success criterion „report bez pádu" stojí na tom,
+ * že OOM/zaseknutí strojové vrstvy shodí jen podproces, ne celý nástroj.
+ * `VIBE_ANALYSIS_INPROCESS=1` ji vypne (běh v našem procesu) – únikový ventil pro
+ * prostředí, kde fork nejde, a pro rychlé testy, které izolaci necílí (jinak by
+ * každý běh forkoval node + načítal typescript → pomalé a paralelně se dusí).
+ */
+function shouldIsolate(): boolean {
+  return process.env.VIBE_ANALYSIS_INPROCESS !== "1";
+}
+
+/** Node argumenty pro dítě: paměťový strop; ve vývoji (.ts) navíc tsx loader. */
+function childExecArgv(memMb: number): string[] {
+  const args = [`--max-old-space-size=${memMb}`];
+  if (SELF_EXT === ".ts") args.unshift("--import", "tsx");
+  return args;
+}
+
+const tscProgress = (fileCount: number, source?: string): string =>
+  `Spouštím tsc (${source}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`;
+const eslintProgress = (fileCount: number): string =>
+  `Spouštím ESLint nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`;
+
+/**
+ * Převede neúspěšný izolovaný běh na `skipped` s PRAVDIVÝM důvodem (tři odlišné
+ * příčiny se nesmí slít). `ok` vrací null = „použij hodnotu z dítěte".
+ */
+export function skipFromOutcome(
+  outcome: IsolatedOutcome<unknown>,
+  layerLabel: string,
+  memMb: number,
+): { kind: "skipped"; reason: string } | null {
+  switch (outcome.kind) {
+    case "ok":
+      return null;
+    case "oom":
+      return { kind: "skipped", reason: `projekt je příliš velký – ${layerLabel} překročil paměťový limit ${memMb} MB` };
+    case "timeout":
+      return {
+        kind: "skipped",
+        reason: `${layerLabel} trval příliš dlouho a byl přerušen (limit ${Math.round(ANALYSIS_TIMEOUT_MS / 1000)} s)`,
+      };
+    case "crashed":
+      // bug v našem kódu (ne velikost/čas): nahlas na stderr se stackem, ať se pozná
+      console.error(`Upozornění: ${layerLabel} v izolovaném procesu selhal a přeskočí se:\n${outcome.detail}`);
+      return { kind: "skipped", reason: `${layerLabel} v izolovaném procesu selhal (viz stderr)` };
+  }
+}
+
+/** tsc v odděleném procesu (limit paměti + čas). Pád/timeout → skipped, ne pád nástroje. */
+async function analyzeTypeScriptIsolated(root: string): Promise<TscResult> {
+  const memMb = computeMemoryLimitMb(availableMemoryBytes());
+  const payload: ChildPayload = { layer: "tsc", root };
+  const outcome = await runIsolated<TscResult>({
+    childPath: CHILD_PATH,
+    execArgv: childExecArgv(memMb),
+    payload,
+    timeoutMs: ANALYSIS_TIMEOUT_MS,
+    onStarted: (m) => console.log(tscProgress(m.fileCount, m.source)),
+  });
+  return skipFromOutcome(outcome, "tsc", memMb) ?? (outcome as { kind: "ok"; value: TscResult }).value;
+}
+
+/** ESLint v odděleném procesu (limit paměti + čas). Pád/timeout → skipped. */
+async function analyzeESLintIsolated(root: string, files: FileEntry[]): Promise<EslintResult> {
+  const memMb = computeMemoryLimitMb(availableMemoryBytes());
+  const payload: ChildPayload = { layer: "eslint", root, files };
+  const outcome = await runIsolated<EslintResult>({
+    childPath: CHILD_PATH,
+    execArgv: childExecArgv(memMb),
+    payload,
+    timeoutMs: ANALYSIS_TIMEOUT_MS,
+    onStarted: (m) => console.log(eslintProgress(m.fileCount)),
+  });
+  return skipFromOutcome(outcome, "ESLint", memMb) ?? (outcome as { kind: "ok"; value: EslintResult }).value;
+}
 
 /**
  * Injektované závislosti pro interaktivní vytvoření záměru. Drží `run()`
@@ -183,47 +271,51 @@ export async function run(
 
   // Strojová typová analýza (tsc). Běží mezi scanem a buildem. tsc jen TYPUJE,
   // nic nespouští (non-goal č. 1). Očekávané cizí stavy (chybí/rozbitý tsconfig)
-  // si analyzátor řeší sám a vrací skipped – na ně NEHÁZÍ. Catch je tu pro NEČEKANÉ
-  // selhání (bug v mapování, exotická verze tsc): report tím neshodíme, ale chybu
-  // NAHLAS vypíšeme na stderr (ne tiché spolknutí) a vrstvu označíme přeskočenou.
-  const analyzeTs = deps.analyzeTs ?? analyzeTypeScript;
+  // si analyzátor řeší sám a vrací skipped.
+  //
+  // REÁLNÝ běh jede v IZOLOVANÉM procesu (analyzeTypeScriptIsolated): tsc nad obřím
+  // projektem může vyčerpat paměť (OOM) nebo se zaseknout, a to by žádný try/catch
+  // tady nechytil (V8 by zabil celý proces). Ve forku spadne jen dítě a vrstvu
+  // čistě označíme za přeskočenou s pravdivým důvodem (velikost / čas / pád).
+  //
+  // INJEKTOVANÝ analyzátor (deps.analyzeTs, jen testy) běží in-process jako dřív –
+  // fork by injektáž obešel. Catch je pro NEČEKANÉ selhání toho injektovaného běhu.
+  // realTsc = in-process analyzátor: buď injektovaný (testy), nebo reálný, když je
+  // izolace vypnutá. Když je null → běžíme reálný tsc v izolovaném procesu.
+  const realTsc = deps.analyzeTs ?? (shouldIsolate() ? null : analyzeTypeScript);
   let tsc: TscResult;
-  try {
-    tsc = await analyzeTs(targetPath, {
-      onStart: (fileCount, source) => {
-        // PROGRESS, ne chyba → stdout. Kontrakt "úspěch = ticho na stderr"
-        // (cli.scanfail.test.ts) drží: stderr je vyhrazený pro skutečné problémy.
-        console.log(
-          `Spouštím tsc (${source}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`,
-        );
-      },
-    });
-  } catch (err: unknown) {
-    const e = err as Error;
-    // Vypíšeme stack (když je), ne jen message: tenhle catch maskuje i případnou
-    // PROGRAMOVOU chybu v našem mapování jako "tsc selhal" – ať ji v provozu
-    // aspoň poznáme ze stderr, i když report kvůli ní neshazujeme.
-    console.error(`Upozornění: typová analýza (tsc) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
-    tsc = { kind: "skipped", reason: "tsc během analýzy selhal (viz stderr)" };
+  if (realTsc) {
+    try {
+      tsc = await realTsc(targetPath, {
+        onStart: (fileCount, source) => console.log(tscProgress(fileCount, source)),
+      });
+    } catch (err: unknown) {
+      const e = err as Error;
+      console.error(`Upozornění: typová analýza (tsc) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      tsc = { kind: "skipped", reason: "tsc během analýzy selhal (viz stderr)" };
+    }
+  } else {
+    tsc = await analyzeTypeScriptIsolated(targetPath);
   }
 
-  // Strojová lint analýza (ESLint). Stejná logika jako tsc: jen parsuje (kód
+  // Strojová lint analýza (ESLint). Stejná logika jako tsc: reálný běh izolovaně
+  // (analyzeESLintIsolated), injektovaný in-process. ESLint jen parsuje (kód
   // projektu se nevykoná), s naším configem – projektový eslint.config.js se ani
-  // nehledá (overrideConfigFile). Lintuje JEN soubory ze scanu (respektuje
-  // .gitignore). Catch pro nečekané selhání: report neshodíme, chybu nahlas na stderr.
-  const analyzeES = deps.analyzeES ?? analyzeESLint;
+  // nehledá. Lintuje JEN soubory ze scanu (respektuje .gitignore).
+  const realEs = deps.analyzeES ?? (shouldIsolate() ? null : analyzeESLint);
   let eslint: EslintResult;
-  try {
-    eslint = await analyzeES(targetPath, result.files, {
-      onStart: (fileCount) => {
-        // PROGRESS na stdout (ne stderr) – viz tsc onStart výš.
-        console.log(`Spouštím ESLint nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`);
-      },
-    });
-  } catch (err: unknown) {
-    const e = err as Error;
-    console.error(`Upozornění: lint analýza (ESLint) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
-    eslint = { kind: "skipped", reason: "ESLint během analýzy selhal (viz stderr)" };
+  if (realEs) {
+    try {
+      eslint = await realEs(targetPath, result.files, {
+        onStart: (fileCount) => console.log(eslintProgress(fileCount)),
+      });
+    } catch (err: unknown) {
+      const e = err as Error;
+      console.error(`Upozornění: lint analýza (ESLint) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      eslint = { kind: "skipped", reason: "ESLint během analýzy selhal (viz stderr)" };
+    }
+  } else {
+    eslint = await analyzeESLintIsolated(targetPath, result.files);
   }
 
   const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint);

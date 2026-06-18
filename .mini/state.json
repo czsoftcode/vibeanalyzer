@@ -72,6 +72,11 @@
       "id": 14,
       "title": "Oprava falešného JSX parsing erroru",
       "status": "done"
+    },
+    {
+      "id": 15,
+      "title": "Ochrana strojové vrstvy proti pádu",
+      "status": "done"
     }
   ]
 }

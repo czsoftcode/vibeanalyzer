@@ -8,6 +8,9 @@ import { run } from "./cli.js";
 // reálně prořeže výstup (Symfony vendor/, var/cache/) a že bez .gitignore je
 // výstup beze změny. Jednotka loadGitignore i scanTree jsou pokryty zvlášť;
 // tohle hlídá, že je cli opravdu propojí (smazání napojení = padlý test).
+// Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – respektuje kořenový .gitignore", () => {
   let proj: string;
   let outDir: string;

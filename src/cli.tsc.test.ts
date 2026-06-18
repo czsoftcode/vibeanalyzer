@@ -45,7 +45,7 @@ describe("run – tsc vrstva v reportu", () => {
     expect(md).toContain("`bad.ts:2");
     expect(md).toContain("TS2322");
     expect(json.tsc.kind).toBe("ran");
-  });
+  }, 30_000); // reálný běh teď forkuje izolovaný proces (+ pod tsx transpile + načtení typescriptu) → pomalejší než in-process
 
   it("injected skipped projde 1:1 do md i JSON", async () => {
     await writeFile(path.join(proj, "index.ts"), "export const x = 1;\n");

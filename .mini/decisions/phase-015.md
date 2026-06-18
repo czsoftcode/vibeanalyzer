@@ -1,0 +1,7 @@
+# Strojová vrstva běží vždy v izolovaném podprocesu
+
+## Decision
+tsc i ESLint se v provozu spouští vždy v odděleném procesu (child_process.fork) s limitem paměti a časovým limitem – bezpodmínečně, i pro malý projekt. Únikový ventil VIBE_ANALYSIS_INPROCESS=1 izolaci vypne (běh v hlavním procesu); default je izolace.
+
+## Why
+Success criterion 'report bez pádu' porušuje hlavně tichý OOM nad obřím projektem – a ten žádný try/catch v hlavním procesu nechytí (V8 zabije celý proces). Zvažovaný levnější mechanismus 'strop na počet souborů s degradací' jsme zamítli: počet souborů není spolehlivý proxy za paměť (málo souborů s těžkými typy může OOMnout, hodně triviálních ne), takže by buď pouštěl OOM dál, nebo zbytečně přeskakoval zdravé projekty – tj. nezaručil by nic. Skutečnou záruku ('rodič přežije, i když dítě spadne') dává jen oddělený proces. Vědomě přijatá cena: každý běh platí ~1–2 s režie navíc (fork + načtení typescriptu) i tam, kde OOM nehrozil. Variantu 'izolovat jen velké projekty podle heuristiky' jsme zamítli, protože heuristika je přesně ten nespolehlivý strop, jen schovaný. Ventil VIBE_ANALYSIS_INPROCESS=1 existuje pro prostředí, kde fork nejde, a hlavně aby testy necílící izolaci neforkovaly (jinak desítky paralelních forků zahltí CPU a suita kaskádovitě timeoutuje). Je to interní/debug seam, ne uživatelská funkce – proto jen v kódu, ne v nápovědě; jeho zapnutí tiše ztrácí ochranu proti pádu (vědomý kompromis).

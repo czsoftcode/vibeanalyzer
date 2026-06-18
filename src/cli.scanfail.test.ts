@@ -18,6 +18,10 @@ import { ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 
 const mockedScan = vi.mocked(scanTree);
 
+// Necílí izolaci strojové vrstvy → in-process (bez forku): jinak by každý run()
+// forkoval node + načítal typescript a paralelně se dusil (timeouty).
+process.env.VIBE_ANALYSIS_INPROCESS = "1";
+
 describe("run – chybové větve analýzy (scan/build)", () => {
   let proj: string;
   let errors: string[];

@@ -35,6 +35,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Strojová analýza (tsc i ESLint) teď běží v odděleném podprocesu s limitem paměti
+  a časovým limitem. Na obřím projektu, kde by dřív mohla vyčerpat paměť (a shodit
+  celý nástroj) nebo se zaseknout, se místo pádu čistě označí jako přeskočená
+  s konkrétním důvodem („příliš velký projekt", „trvalo příliš dlouho") – report
+  vždy vznikne. Cena: každý běh má kvůli izolaci o ~1–2 s vyšší režii.
+
 - JSON index má nově verzi 3 (přibylo pole `tsc` a `eslint` s výsledky strojových analýz).
 
 - Když záměr projektu (`project.md`) nikde není a nástroj běží v terminálu, nabídne
