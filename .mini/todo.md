@@ -17,3 +17,5 @@
 - [ ] komplet parser project.md pro AI
 - [x] Interaktivní vytvoření project.md: když záměr není ani v .mini/, ani v ~/.vibeanalyzer/<název>/project.md, nabídnout uživateli vytvoření přes otázky (jako mini-orchestrator) podle vzoru .mini/project.md a uložit do ~/.vibeanalyzer/<název projektu>/project.md (read-only kontrakt cílového projektu zachován). Ošetřit práva/úklid při zápisu do domovského adresáře.
 - [x] ESLint analyzátor (druhá půlka původní todo 3): pustit ESLint nad analyzovaným projektem, namapovat výsledky do téhož modelu strojového nálezu a sekce "Strojové nálezy" jako tsc (fáze 12). Pozor: cizí ESLint config (flat vs. legacy) i pluginy v jejich node_modules mohou chybět/být rozbité → čistě přeskočit, ne pád. Ověření: schválně porušené lint pravidlo se objeví v reportu na správném soubor:řádek; projekt bez ESLint configu dá "ESLint přeskočeno".
+- [ ] Filtr na minifikované .min.js - signál/šum v reportu
+- [ ] Prověřit 5 transitivních zranitelností z podstromu ESLintu

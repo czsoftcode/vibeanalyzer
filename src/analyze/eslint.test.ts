@@ -45,6 +45,36 @@ describe("analyzeESLint", () => {
     expect(res.findings.some((f) => f.rule === "no-empty")).toBe(true);
   });
 
+  it("validní JSX v .jsx i .js → ran bez 'Parsing error' (regrese 13-1)", async () => {
+    const root = await tmp();
+    // bez ecmaFeatures.jsx vrátí espree fatal "Parsing error: Unexpected token <"
+    // jako error nález na zdravém kódu (cílovka = React vibekodeři).
+    await writeFile(path.join(root, "comp.jsx"), "export const A = () => <div>hi</div>;\n");
+    await writeFile(path.join(root, "comp.js"), "export const B = () => <span>yo</span>;\n");
+
+    const res = await analyzeESLint(root, [file("comp.jsx", ".jsx"), file("comp.js", ".js")]);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // žádný parsing-error nález na ANI jednom souboru
+    expect(res.findings.some((f) => /Parsing error/i.test(f.message))).toBe(false);
+  });
+
+  it("zdravý React (.jsx) → 0 nálezů, ŽÁDNÝ falešný no-unused-vars", async () => {
+    const root = await tmp();
+    // import komponenty + React pragma použité JEN v JSX. Jádrové no-unused-vars
+    // tomu nerozumí; kdyby bylo na JS zapnuté, vyhodí falešné "defined but never
+    // used" → šum na zdravém kódu cílovky. Pravidlo je na JS vypnuté právě proto.
+    await writeFile(
+      path.join(root, "App.jsx"),
+      "import React from 'react';\nimport Button from './Button';\nexport const App = () => <div><Button/></div>;\n",
+    );
+    const res = await analyzeESLint(root, [file("App.jsx", ".jsx")]);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.findings.some((f) => f.rule === "no-unused-vars")).toBe(false);
+    expect(res.findings).toHaveLength(0);
+  });
+
   it("čistý soubor → ran s 0 nálezy (NE skipped)", async () => {
     const root = await tmp();
     await writeFile(path.join(root, "ok.js"), "export const x = 1;\n");

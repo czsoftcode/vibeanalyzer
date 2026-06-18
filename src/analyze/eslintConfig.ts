@@ -51,12 +51,22 @@ const LINTER_OPTIONS = { reportUnusedDisableDirectives: "off" } as const;
 export const eslintConfig: Linter.Config[] = [
   {
     files: JS_FILES,
-    languageOptions: { ecmaVersion: "latest", sourceType: "module" },
+    // ecmaFeatures.jsx: espree (default JS parser) bez něj hlásí na validním .jsx
+    // i .js s JSX falešný fatal "Parsing error: Unexpected token <" jako error
+    // nález. Cílová skupina (vibekodeři, často React) by dostala šum na zdravém
+    // kódu. TS blok to nepotřebuje – tsParser autodetekuje JSX dle přípony (.tsx).
+    languageOptions: { ecmaVersion: "latest", sourceType: "module", parserOptions: { ecmaFeatures: { jsx: true } } },
     linterOptions: LINTER_OPTIONS,
     rules: {
       ...CORRECTNESS_RULES,
-      // na JS dává no-unused-vars smysl (žádné type-only použití)
-      "no-unused-vars": "warn",
+      // VYPNUTO i na JS: od zapnutí ecmaFeatures.jsx (výš) se JS soubory s JSX
+      // naparsují, jenže jádrové no-unused-vars NErozumí JSX použití → na zdravém
+      // React kódu hlásí falešné "'Button'/'React' is defined but never used"
+      // (importy komponent, JSX pragma). JSX-aware variantu (react/jsx-uses-vars)
+      // bez eslint-plugin-react nemáme. Cílovka jsou React vibekodeři → radši
+      // žádný nález než falešný (stejně jako TS blok níž). Bug-rules (eqeqeq,
+      // no-cond-assign, …) běží dál; ztrácíme jen hygienický signál mrtvého kódu.
+      "no-unused-vars": "off",
     },
   },
   {

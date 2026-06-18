@@ -1,0 +1,35 @@
+{
+  "id": 14,
+  "title": "Oprava falešného JSX parsing erroru",
+  "goal": "V JS bloku ESLint flat-configu zapnout parserOptions.ecmaFeatures.jsx, aby validní .jsx/.js s JSX nedávaly falešný 'error' nález, a pokrýt to testem s .jsx fixturou.",
+  "status": "done",
+  "fromFinding": "13-1",
+  "steps": [
+    {
+      "title": "Zapnout JSX v JS bloku flat-configu",
+      "status": "done",
+      "detail": "V src/analyze/eslintConfig.ts do JS bloku přidat languageOptions.parserOptions.ecmaFeatures.jsx = true. Platí na .js/.jsx/.mjs/.cjs; TS blok beze změny (tsParser řeší JSX dle přípony)."
+    },
+    {
+      "title": "Test: .jsx a .js s JSX -> ran bez parsing erroru",
+      "status": "done",
+      "detail": "Do src/analyze/eslint.test.ts přidat case se souborem comp.jsx (export const A = () => <div>hi</div>) a .js s JSX. Očekávat kind === ran a žádný finding s message obsahujícím Parsing error. Test má zuby: po vrácení opravy musí spadnout."
+    },
+    {
+      "title": "Ověřit, že JSX nerozbil neJSX JS ani TS větev",
+      "status": "done",
+      "detail": "Spustit celou test suite. Potvrdit, že eqeqeq/no-empty testy procházejí a v čistém .js zůstává a < b porovnáním. Mimo rozsah: .mts/.cts s JSX TS parser nepodporuje."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext) dle projektového checklistu – kontrakt přípon (LINTABLE_EXTENSIONS vs globy), dosažitelnost větve, zuby testu. Pak self-check před reportem."
+    }
+  ],
+  "startedAt": "2026-06-18T18:16:27.866Z",
+  "completedAt": "2026-06-18T18:48:43.212Z",
+  "autoCommit": {
+    "preSha": "1d6e52e8198e9e583340337fa54419e2111b4069",
+    "subject": "Phase 14: Oprava falešného JSX parsing erroru"
+  }
+}

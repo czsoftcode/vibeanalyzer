@@ -67,6 +67,11 @@
       "id": 13,
       "title": "Strojová analýza: ESLint nálezy",
       "status": "done"
+    },
+    {
+      "id": 14,
+      "title": "Oprava falešného JSX parsing erroru",
+      "status": "done"
     }
   ]
 }

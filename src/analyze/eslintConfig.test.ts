@@ -22,8 +22,16 @@ describe("eslintConfig", () => {
     expect(tsBlock?.rules?.["no-unused-vars"]).toBe("off");
   });
 
-  it("JS blok no-unused-vars zapnuté", () => {
+  it("JS blok má vypnuté no-unused-vars (false-positives na JSX)", () => {
+    // JSX použití (importy komponent, React pragma) jádrové no-unused-vars nevidí
+    // → na zdravém React kódu falešné nálezy. Proto vypnuto i na JS, ne jen TS.
     const jsBlock = eslintConfig.find((c) => c.files?.some((f) => String(f).includes("*.js")));
-    expect(jsBlock?.rules?.["no-unused-vars"]).toBe("warn");
+    expect(jsBlock?.rules?.["no-unused-vars"]).toBe("off");
+  });
+
+  it("JS blok má zapnuté JSX parsování (ecmaFeatures.jsx)", () => {
+    // bez něj espree padá na .jsx/.js s JSX fatal "Parsing error" (nález 13-1)
+    const jsBlock = eslintConfig.find((c) => c.files?.some((f) => String(f).includes("*.js")));
+    expect(jsBlock?.languageOptions?.parserOptions?.ecmaFeatures?.jsx).toBe(true);
   });
 });

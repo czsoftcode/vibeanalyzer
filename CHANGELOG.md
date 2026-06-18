@@ -13,7 +13,7 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   čte/parsuje, kód projektu nespouští ani nic nezapisuje) a hlásí pravděpodobné
   bugy, které typová kontrola nevidí – `==` místo `===`, prázdný `catch`,
   zapomenutý `debugger`, omylem přiřazení v podmínce, duplicitní klíče, nedosažitelný
-  kód, `switch` bez `break`, nepoužité proměnné. Nálezy jsou v nové sekci „Strojové
+  kód, `switch` bez `break`. Nálezy jsou v nové sekci „Strojové
   nálezy (ESLint)" v MD i v poli `eslint` JSON indexu, se `soubor:řádek:sloupec`,
   závažností, pravidlem a zprávou. Z bezpečnostních důvodů se používá pevný ruleset
   vibeanalyzeru (jen pravidla na bugy, žádný styl) a projektový `eslint.config.js`
@@ -72,6 +72,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Fixed
 
+- ESLint vrstva už nehlásí falešný „Parsing error" na zdravém JSX. Validní `.jsx`
+  a `.js` se syntaxí JSX (typicky React) se teď korektně naparsují místo toho, aby
+  skončily jako falešný `error` nález na řádku 1. Zároveň se přestaly vypisovat
+  falešné nálezy „nepoužitá proměnná" na importech komponent a React pragmě
+  (jádrový lint JSX použití nevidí); detekce nepoužitých proměnných je proto
+  vypnutá – ostatní kontroly bugů běží beze změny.
 - Výstupní adresář ležící uvnitř analyzované složky se už nezapočítá do indexu –
   a to i když je zadán přes symlink (jinak by report rostl každým během).
 - Položky neznámého/zvláštního typu (na souborových systémech bez `d_type`, dále
