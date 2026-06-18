@@ -15,4 +15,4 @@
 - [ ] Tok logiky od vstupu po výstupy (AI): Claude přečte kód a nakreslí běh od vstupního bodu po výstupy. Každý uzel MUSÍ odkazovat na konkrétní místo v kódu (obrana proti halucinaci) a report uvede, že je to neúplná aproximace. Spadá k AI logické analýze (fáze 6).
 - [x] nechat vibeanalyzerem vytvorit project.md, pokud neexistuje od mini
 - [ ] komplet parser project.md pro AI
-- [ ] Interaktivní vytvoření project.md: když záměr není ani v .mini/, ani v ~/.vibeanalyzer/<název>/project.md, nabídnout uživateli vytvoření přes otázky (jako mini-orchestrator) podle vzoru .mini/project.md a uložit do ~/.vibeanalyzer/<název projektu>/project.md (read-only kontrakt cílového projektu zachován). Ošetřit práva/úklid při zápisu do domovského adresáře.
+- [x] Interaktivní vytvoření project.md: když záměr není ani v .mini/, ani v ~/.vibeanalyzer/<název>/project.md, nabídnout uživateli vytvoření přes otázky (jako mini-orchestrator) podle vzoru .mini/project.md a uložit do ~/.vibeanalyzer/<název projektu>/project.md (read-only kontrakt cílového projektu zachován). Ošetřit práva/úklid při zápisu do domovského adresáře.

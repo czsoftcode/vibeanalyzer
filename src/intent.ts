@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
-import { projectKey } from "./projectPaths.js";
+import { homeIntentPath, safeHomedir } from "./projectPaths.js";
 
 /**
  * Pevné nadpisy sekcí, jak je generuje `mini init` do project.md. Jsou to
@@ -36,26 +35,6 @@ export type IntentResult =
   | { kind: "unreadable"; path: string; code: string };
 
 /**
- * Domácí kandidát `~/.vibeanalyzer/<projectKey>/project.md`. Vrátí null, když
- * domovský adresář není znám (prázdný/nedostupný) – pak ho z hledání jen
- * vynecháme, ať absence domova nezhatí čtení z `.mini/`.
- */
-function homeCandidate(targetPath: string, homeDir: string | undefined): string | null {
-  if (!homeDir) return null;
-  return path.join(homeDir, ".vibeanalyzer", projectKey(targetPath), "project.md");
-}
-
-/** Domovský adresář, defenzivně: prázdný/výjimka → undefined (kandidát vypadne). */
-function safeHomedir(): string | undefined {
-  try {
-    const home = os.homedir();
-    return home && home.length > 0 ? home : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Najde a načte záměr. Pořadí: `<cíl>/.mini/project.md`, pak `<cíl>/project.md`,
  * pak mimo cíl `~/.vibeanalyzer/<projectKey>/project.md`. Čistě READ-ONLY – nikam
  * (ani do cíle, ani do `~/.vibeanalyzer`) nic nezapisuje.
@@ -77,7 +56,7 @@ export async function loadIntent(
   const candidates = [
     path.join(targetPath, ".mini", "project.md"),
     path.join(targetPath, "project.md"),
-    homeCandidate(targetPath, homeDir),
+    homeIntentPath(homeDir, targetPath),
   ].filter((candidate): candidate is string => candidate !== null);
 
   for (const candidate of candidates) {

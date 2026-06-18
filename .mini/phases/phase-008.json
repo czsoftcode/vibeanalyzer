@@ -1,0 +1,39 @@
+{
+  "id": 8,
+  "title": "Bezpečný zápis project.md do domova",
+  "goal": "Přidat čistě testovatelný modul, který z dodaného záměru (text 'co stavím' + seznam non-goalů) vyrenderuje project.md podle vzoru a bezpečně ho zapíše do ~/.vibeanalyzer/<projectKey>/project.md — odmítne přepis existujícího souboru, ošetří chybu práv/mkdir a uklidí po sobě adresáře vytvořené kvůli zápisu; cestu sdílí s loadIntent přes jednu funkci v projectPaths.ts (kontrakt ověřený round-tripem přes reálný parser, ne mockem). Renderuje jen sekce '## What I'm building' a '## Non-goals', které loadIntent reálně čte.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Sdílená cesta k domácímu project.md v projectPaths.ts",
+      "status": "done",
+      "detail": "Vytáhnout homeIntentPath(homeDir, targetPath) vracející ~/.vibeanalyzer/<projectKey>/project.md; přepojit privátní homeCandidate v intent.ts na ni, ať writer i loadIntent čtou/píší pořád stejnou cestu. Existující testy intent.ts jsou pojistka."
+    },
+    {
+      "title": "Render project.md ze záměru",
+      "status": "done",
+      "detail": "Čistá funkce renderProjectMd({building, nonGoals}) → markdown se sekcemi ## What I'm building (text) a ## Non-goals (odrážky '- '). Nadpisy bere z INTENT_HEADINGS (sdílený literál s parserem), aby render zapsal přesně to, co parseIntent umí přečíst."
+    },
+    {
+      "title": "Bezpečný zápis writeIntentFile",
+      "status": "done",
+      "detail": "Zápis přes flag wx (atomicky nepřepíše existující — bez TOCTOU); mkdir {recursive:true} a podržení nejvyššího vytvořeného adresáře pro úklid; návratový typ written/exists/unwritable/no-home. Při selhání zápisu smaže jen adresáře, které sám vytvořil (nálezy 3-10/3-14 jako vzor)."
+    },
+    {
+      "title": "Testy se zuby",
+      "status": "done",
+      "detail": "Round-trip render→write→loadIntent vrátí stejné building/nonGoals přes reálný parser (ne mock); existující soubor → exists, obsah nezměněn; vynucené selhání zápisu → žádný osiřelý adresář; neznámý domov → no-home bez zápisu."
+    },
+    {
+      "title": "Adversariální self-review nezávislým sub-agentem + finální kontrola",
+      "status": "done",
+      "detail": "Fáze sahá na zápis (chybové cesty + úklid) a na kontrakt mezi moduly (cesta + nadpisy) → před reportem nezávislý sub-agent s čerstvým kontextem dle CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-18T06:26:32.573Z",
+  "completedAt": "2026-06-18T06:39:13.205Z",
+  "autoCommit": {
+    "preSha": "d443666f42d3296ea13a8580c7d8e8a130d032f5",
+    "subject": "Phase 8: Bezpečný zápis project.md do domova"
+  }
+}

@@ -37,6 +37,11 @@
       "id": 7,
       "title": "Vnořené .gitignore v podadresářích",
       "status": "done"
+    },
+    {
+      "id": 8,
+      "title": "Bezpečný zápis project.md do domova",
+      "status": "done"
     }
   ]
 }
