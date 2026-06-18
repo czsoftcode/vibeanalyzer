@@ -57,6 +57,11 @@
       "id": 11,
       "title": "Oprava záměru: odrážky + test bin.ts",
       "status": "done"
+    },
+    {
+      "id": 12,
+      "title": "Strojová analýza: tsc nálezy",
+      "status": "done"
     }
   ]
 }

@@ -1,0 +1,47 @@
+{
+  "id": 12,
+  "title": "Strojová analýza: tsc nálezy",
+  "goal": "Zavést datový model strojového nálezu (soubor:řádek:sloupec, závažnost, pravidlo, zdroj) a sekci \"Strojové nálezy\" do .md i JSON indexu, a naplnit ji diagnostikou z tsc puštěného nad analyzovaným projektem; když projekt nemá tsconfig/není TS nebo je config rozbitý, vrstva se čistě přeskočí (ne pád). Ověření: schválně vložená typová chyba se objeví v reportu na správném soubor:řádek; projekt bez tsconfig dá \"tsc přeskočeno\".",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Datový model nálezu + tsc-result typ",
+      "status": "done",
+      "detail": "Nový modul (src/findings.ts): Finding (source, severity, file?, line?, column?, rule?, message — file/line/column VOLITELNÉ) a diskriminovaný TscResult ({kind:skipped,reason} | {kind:ran,findings,fileCount,nodeModulesPresent}). Sdílený kontrakt pro md i JSON. Unit test tvaru."
+    },
+    {
+      "title": "Sekce Strojové nálezy v md + findings v JSON",
+      "status": "done",
+      "detail": "buildMarkdown vykreslí 3 stavy ODLIŠITELNĚ (tsc: N nálezů se soubor:řádek / tsc: čistý 0 chyb / tsc: přeskočeno důvod) + poznámku při chybějícím node_modules; buildJsonIndex přidá findings a bump INDEX_VERSION 1->2. Testy nad syntetickým TscResult. Nálezy nemění exit kód."
+    },
+    {
+      "title": "Hybridní načtení TypeScriptu + přesun do dependencies",
+      "status": "done",
+      "detail": "Loader dynamicky importuje typescript z node_modules cílového projektu, fallback na přibalený; vrací modul + zdroj (project/bundled). typescript přesunout v package.json z devDependencies do dependencies. Test: s podvrženým node_modules vs bez něj."
+    },
+    {
+      "title": "tsc analyzátor: tsconfig -> diagnostika -> Finding[]",
+      "status": "done",
+      "detail": "Najít kořenový tsconfig.json; chybí -> skipped(není tsconfig); rozbitý/neparsovatelný -> skipped(rozbitý tsconfig), ne pád. Jinak createProgram s noEmit (nic nezapsat do projektu), getPreEmitDiagnostics -> Finding[] (cesty relativně ke kořeni /, TS kód jako rule, severity z kategorie; diagnostika bez souboru -> file/line nevyplněné). Detekce node_modules -> nodeModulesPresent. Fixture s úmyslnou typovou chybou -> nález na správném soubor:řádek."
+    },
+    {
+      "title": "Napojení do run() + hláška o rozsahu",
+      "status": "done",
+      "detail": "cli.ts zavolá analyzátor mezi scanem a buildem, výsledek předá do build*; před během tsc vypíše spouštím tsc nad N souborů (callback/log). Selhání analyzátoru NESHODÍ běh (skipped, ne výjimka ven). Test větví run(): projekt s tsconfig+chybou vs bez tsconfig."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext): exit kódy, rozsah catch, zuby testů, kontrakt INDEX_VERSION/Finding mezi moduly, žádný zápis do analyzovaného projektu, unhappy path (prázdný projekt, tsconfig bez souborů, diagnostika bez file). Checklist z CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-18T16:23:38.421Z",
+  "resolvedVerify": [
+    "Reálný běh nad cizím JS/TS projektem (vizuální kontrola reportu)"
+  ],
+  "completedAt": "2026-06-18T16:50:24.179Z",
+  "autoCommit": {
+    "preSha": "bd56573afee1ca2792cd679535fdf233678a4189",
+    "subject": "Phase 12: Strojová analýza: tsc nálezy"
+  }
+}

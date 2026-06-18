@@ -9,6 +9,23 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Strojová typová analýza (tsc): nástroj pustí TypeScript kompilátor v režimu
+  kontroly (jen čte, nic nespouští ani nezapisuje do projektu) nad analyzovaným
+  projektem a typové chyby zapíše do reportu jako `soubor:řádek:sloupec` se
+  závažností, kódem (např. `TS2322`) a zprávou – v nové sekci „Strojové nálezy
+  (tsc)" v MD i v poli `tsc` JSON indexu. Report odlišuje tři stavy: nálezy /
+  čistý projekt (0 chyb) / přeskočeno (s důvodem) – „čistý" se neplete s
+  „neproběhlo". Když projekt nemá `tsconfig.json` nebo je rozbitý, vrstva se čistě
+  přeskočí (report nespadne). Chyby konfigurace (např. `extends` na neexistující
+  soubor, neznámá volba) se hlásí jako nálezy, ne tiše zahodí. Když v projektu
+  chybí `node_modules`, report to přizná (chyby „nenalezený modul" jsou za té
+  situace očekávané). TypeScript se bere z `node_modules` projektu (jeho verze),
+  jinak z přibaleného. Nálezy v analyzovaném projektu nemění návratový kód.
+
+### Changed
+
+- JSON index má nově verzi 2 (přibylo pole `tsc` s výsledkem typové analýzy).
+
 - Když záměr projektu (`project.md`) nikde není a nástroj běží v terminálu, nabídne
   jeho vytvoření: pár otázek (co stavíš + non-goaly), uloží `project.md` do
   `~/.vibeanalyzer/<jméno projektu>-<hash cesty>/` a rovnou ho použije pro tenhle

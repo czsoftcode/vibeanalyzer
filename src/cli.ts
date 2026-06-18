@@ -2,7 +2,9 @@ import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
+import { analyzeTypeScript } from "./analyze/tsc.js";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+import type { TscResult } from "./findings.js";
 import { loadDirIgnore } from "./gitignore.js";
 import { INTENT_HEADINGS, type Intent, loadIntent, parseIntent } from "./intent.js";
 import { type AskFn, collectIntentDraft } from "./intentPrompt.js";
@@ -44,6 +46,8 @@ export interface RunDeps {
   isInteractive?: boolean;
   /** Domov pro zápis záměru (test si podstrčí svůj; jinak safeHomedir v writeIntentFile). */
   homeDir?: string;
+  /** Injektovatelný tsc analyzátor (test si podstrčí svůj; jinak reálný). */
+  analyzeTs?: typeof analyzeTypeScript;
 }
 
 export async function run(
@@ -174,13 +178,38 @@ export async function run(
     );
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files);
+  // Strojová typová analýza (tsc). Běží mezi scanem a buildem. tsc jen TYPUJE,
+  // nic nespouští (non-goal č. 1). Očekávané cizí stavy (chybí/rozbitý tsconfig)
+  // si analyzátor řeší sám a vrací skipped – na ně NEHÁZÍ. Catch je tu pro NEČEKANÉ
+  // selhání (bug v mapování, exotická verze tsc): report tím neshodíme, ale chybu
+  // NAHLAS vypíšeme na stderr (ne tiché spolknutí) a vrstvu označíme přeskočenou.
+  const analyzeTs = deps.analyzeTs ?? analyzeTypeScript;
+  let tsc: TscResult;
+  try {
+    tsc = await analyzeTs(targetPath, {
+      onStart: (fileCount, source) => {
+        console.error(
+          `Spouštím tsc (${source}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`,
+        );
+      },
+    });
+  } catch (err: unknown) {
+    const e = err as Error;
+    // Vypíšeme stack (když je), ne jen message: tenhle catch maskuje i případnou
+    // PROGRAMOVOU chybu v našem mapování jako "tsc selhal" – ať ji v provozu
+    // aspoň poznáme ze stderr, i když report kvůli ní neshazujeme.
+    console.error(`Upozornění: typová analýza (tsc) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+    tsc = { kind: "skipped", reason: "tsc během analýzy selhal (viz stderr)" };
+  }
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
     files: result.files,
     skippedUnreadable: result.skippedUnreadable,
     intent,
+    tsc,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);

@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
 
@@ -9,6 +10,8 @@ export interface MarkdownInput {
   skippedUnreadable: string[];
   /** Záměr z project.md analyzovaného projektu; null/undefined = nedodán. */
   intent?: Intent | null;
+  /** Výsledek tsc vrstvy; když chybí, sekce se vykreslí jako "přeskočeno". */
+  tsc?: TscResult;
 }
 
 export interface MarkdownOptions {
@@ -31,6 +34,72 @@ function escapeLabel(s: string): string {
  */
 function neutralizeFences(line: string): string {
   return line.replace(/`{3,}/g, "`");
+}
+
+/**
+ * Zploští cizí text (zpráva z tsc) do jednoho řádku odrážky: víceřádkové zprávy
+ * (tsc spojuje řetězené diagnostiky `\n`) by jinak rozbily seznam, backtick by
+ * otevřel/zavřel inline kód uprostřed věty. Newline → mezera, backtick → '.
+ */
+function sanitizeInline(text: string): string {
+  return text.replace(/[\r\n]+/g, " ").replace(/`/g, "'").trim();
+}
+
+const NODE_MODULES_NOTE =
+  "> Pozor: v projektu chybí `node_modules` – tsc běžel bez nainstalovaných závislostí. " +
+  "Chyby typu „nenalezený modul“ (TS2307 ap.) jsou za téhle situace očekávané, ne nutně chyba projektu.";
+
+/**
+ * Sekce "## Strojové nálezy (tsc)". Vykreslí TŘI stavy odlišitelně, ať se "čistý
+ * projekt" neplete s "vrstva neproběhla" (tichý falešný úspěch):
+ *   - skipped → "_tsc přeskočeno: důvod_"
+ *   - ran, 0 nálezů → "Žádné typové chyby."
+ *   - ran, N nálezů → seznam se soubor:řádek, závažností, kódem a zprávou.
+ * Když tsc běžel bez node_modules, přidá upozornění (chyby nenalezených modulů).
+ */
+function tscSection(tsc: TscResult | undefined): string[] {
+  const out: string[] = ["## Strojové nálezy (tsc)", ""];
+
+  if (!tsc || tsc.kind === "skipped") {
+    const reason = tsc?.reason ?? "typová analýza se nespustila";
+    out.push(`_tsc přeskočeno: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  out.push(`tsc proběhl nad ${tsc.fileCount} soubory.`);
+  out.push("");
+  if (!tsc.nodeModulesPresent) {
+    out.push(NODE_MODULES_NOTE);
+    out.push("");
+  }
+
+  if (tsc.findings.length === 0) {
+    out.push("_Žádné typové chyby._");
+    out.push("");
+    return out;
+  }
+
+  for (const f of tsc.findings) {
+    out.push(renderFinding(f));
+  }
+  out.push("");
+  return out;
+}
+
+/** Jedna odrážka nálezu: `- **error** `soubor:řádek:sloupec` TS2322: zpráva`. */
+function renderFinding(f: Finding): string {
+  // backtick v cestě (legální znak souboru na Linuxu) by ukončil inline code span
+  const loc = formatLocation(f).replace(/`/g, "'");
+  const rule = f.rule ? ` ${f.rule}` : "";
+  return `- **${f.severity}** \`${loc}\`${rule}: ${sanitizeInline(f.message)}`;
+}
+
+/** Krátké shrnutí stavu tsc do hlavičky reportu (rychlý přehled). */
+function tscSummaryLine(tsc: TscResult | undefined): string {
+  if (!tsc || tsc.kind === "skipped") return "- tsc: přeskočeno";
+  if (tsc.findings.length === 0) return "- tsc: čistý (0 nálezů)";
+  return `- tsc: ${tsc.findings.length} nálezů`;
 }
 
 /**
@@ -150,9 +219,12 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   if (input.skippedUnreadable.length > 0) {
     out.push(`- Přeskočeno (nečitelné): ${input.skippedUnreadable.length}`);
   }
+  out.push(tscSummaryLine(input.tsc));
   out.push("");
 
   out.push(...intentSection(input.intent));
+
+  out.push(...tscSection(input.tsc));
 
   out.push("## Struktura složek");
   out.push("");
