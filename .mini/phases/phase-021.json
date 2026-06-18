@@ -1,0 +1,39 @@
+{
+  "id": 21,
+  "title": "Upgrade vitest na 4.1.9 (CVE-2026-47429)",
+  "goal": "Zvednout vitest z 2.1.9 na ^4.1.9, opravit případné breaking changes v testech a ověřit, že celá testovací sada zůstane zelená a kritický supply-chain nález (path traversal ve Vitest UI serveru) zmizí.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Zvednout vitest na ^4.1.9 a přegenerovat lock",
+      "status": "done",
+      "detail": "package.json vitest -> ^4.1.9, npm install. Ověření: npm ls vitest hlásí 4.x; v package-lock.json už není vitest@2.1.9."
+    },
+    {
+      "title": "Spustit testy a zachytit breaking changes",
+      "status": "done",
+      "detail": "npm test (vitest run). Ověření: zaznamenat konkrétní padající testy/chyby, nebo doložit rovnou zelenou sadu."
+    },
+    {
+      "title": "Opravit breakage v testech (jen pokud nějaký je)",
+      "status": "skipped",
+      "detail": "Cílit na vi.spyOn/restoreAllMocks/vi.mock/importActual. Ověření: npm test celá zelená. Pokud nic nepadlo, uzavřít jako N/A s odůvodněním."
+    },
+    {
+      "title": "Ověřit zmizení kritického nálezu",
+      "status": "done",
+      "detail": "Ve stromu závislostí ani v package-lock.json už není vitest 2.1.9. CVE-2026-47429 se váže jen na 2.x."
+    },
+    {
+      "title": "Self-review unhappy path + zápis do reportu",
+      "status": "done",
+      "detail": "Projít, že upgrade nerozbil tiše žádnou chybovou větev testů (ne jen happy path). Do reportu zapsat: major skok 2->4, co se reálně měnilo, nález opraven."
+    }
+  ],
+  "startedAt": "2026-06-18T23:38:14.211Z",
+  "completedAt": "2026-06-18T23:44:46.621Z",
+  "autoCommit": {
+    "preSha": "ce6499682b63fcf76803bfa3e2eac32db3cc50da",
+    "subject": "Phase 21: Upgrade vitest na 4.1.9 (CVE-2026-47429)"
+  }
+}

@@ -9,6 +9,10 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Vývojový test runner `vitest` povýšen z řady 2 (2.1.9) na 4.1.9. Šlo o major
+  skok, protože 2.1.9 byla poslední verze řady 2 a žádný 2.x patch neexistoval.
+  Bez dopadu na chování nástroje – mění se jen dev toolchain, publikuje se dál
+  jen `dist/`. Celá testová sada (241 testů) zůstává zelená.
 - Klíč adresáře projektu pod `~/.vibeanalyzer/` (kam se ukládá report i záměr) se
   nově odvozuje pomocí SHA-256 místo SHA-1. Jde o úklid kvůli bezpečnostnímu
   skeneru, ne o reálnou bezpečnostní díru – hash tu jen tvoří krátký deterministický
@@ -16,6 +20,13 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   analyzované starší verzí dostanou pod `~/.vibeanalyzer/` novou složku a dříve
   uložené reporty/záměry zůstanou pod původním (starým) klíčem jako osiřelé. Tvar
   klíče (`jméno-složky-<8 hex>`) i chování jinak zůstávají stejné.
+
+### Security
+
+- Odstraněn kritický supply-chain nález CVE-2026-47429 (path traversal ve Vitest
+  UI serveru) povýšením `vitest` na 4.1.9. Zranitelnost se týkala jen řady 2.x a
+  v projektu byla i tak nedosažitelná (`@vitest/ui` se neinstaluje, test runner je
+  dev-only a nepublikuje se). `npm audit` nově hlásí 0 zranitelností.
 
 ## [0.2.0] - 2026-06-19
 
