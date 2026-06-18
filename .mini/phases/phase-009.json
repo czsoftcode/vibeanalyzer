@@ -1,0 +1,39 @@
+{
+  "id": 9,
+  "title": "Interaktivní sběr záměru – modul",
+  "goal": "Přidat čistě testovatelný modul collectIntentDraft(ask, …) s injektovaným dotazovačem (ask: (otázka) => Promise<string | null>, null = EOF/zrušení), který posbírá odpovědi (text 'co stavím' + seznam non-goalů), vynutí precondici renderu z fáze 8 (zahodí/normalizuje code-fence, '##' řádky a víceřádkové položky → nálezy S1/S2) a vrátí IntentDraft nebo zrušení (EOF/prázdný vstup). Samotná readline-glue, TTY gate a napojení do run() jsou MIMO rozsah – přijdou v navazující fázi. Plně unit-testovatelné přes injektovaný ask, bez čtení z reálného stdin.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "validateAnswerLine – precondice na jeden řádek",
+      "status": "done",
+      "detail": "Čistý helper: trimne; odmítne řádek obsahující code-fence (` ``` `/~~~) nebo začínající '## ' (heading); vrátí {ok, value} / {chyba, důvod}. Uzavírá S2; S1 je vyloučen sběrem po řádcích. Unit testy."
+    },
+    {
+      "title": "collectIntentDraft – sběrová smyčka přes injektovaný ask",
+      "status": "done",
+      "detail": "async (ask) => {kind:draft, draft} | {kind:cancelled}. Posbírá povinný 'co stavím' (1 řádek) a non-goaly (0+ řádků do prázdného řádku); každou odpověď žene přes validateAnswerLine, při porušení se zeptá znovu s hláškou. ask vrátí null (EOF) → cancelled; prázdný building → cancelled. Vrací IntentDraft z intentWriter.ts (reuse)."
+    },
+    {
+      "title": "Kontraktní round-trip se renderem a parserem",
+      "status": "done",
+      "detail": "Test: collectIntentDraft → renderProjectMd → parseIntent vrátí přesně posbíraná data; pokus o fence/##/víceřádek se přes sběr nedostane do renderu tak, aby porušil round-trip (S1/S2 uzavřeny u zdroje)."
+    },
+    {
+      "title": "Testy se zuby – unhappy path sběru",
+      "status": "done",
+      "detail": "Fake ask = pole odpovědí (ne reálný stdin). EOF uprostřed (ask→null) = cancelled bez výjimky; prázdný building = cancelled; nevalidní řádek → re-ask, po opravě projde; hned prázdný řádek u non-goalů = prázdný seznam; víc nevalidních pokusů za sebou."
+    },
+    {
+      "title": "Adversariální self-review nezávislým sub-agentem + finální kontrola",
+      "status": "done",
+      "detail": "Fáze sahá na vstupní validaci a kontrakt s renderem/parserem (S1/S2) → před reportem nezávislý sub-agent s čerstvým kontextem dle CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-18T07:26:39.307Z",
+  "completedAt": "2026-06-18T07:38:04.324Z",
+  "autoCommit": {
+    "preSha": "81eef58f80883e9209404207f716fa76d362a928",
+    "subject": "Phase 9: Interaktivní sběr záměru – modul"
+  }
+}
