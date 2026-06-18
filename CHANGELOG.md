@@ -7,6 +7,19 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-19
+
+### Changed
+
+- Přibalený TypeScript povýšen z 5.9 na 6.0.3. Strojová typová analýza (tsc) tak
+  běží na aktuální stabilní řadě před příchodem nativního TypeScriptu 7. Přechod je
+  bez dopadu na chování nástroje (build, typecheck i celá testová sada zelené, tvar
+  nálezů beze změny). Pozor: jelikož cizí projekty analyzujeme tímto přibaleným
+  TypeScriptem, ne jejich vlastní verzí, může se u projektů bez explicitní
+  konfigurace `tsconfig` (nové výchozí hodnoty 6.0 – strict, novější knihovna) report
+  o něco více lišit od toho, co by nahlásil jejich vlastní toolchain; verze
+  projektového TS zůstává v reportu uvedená.
+
 ### Security
 
 - Typová analýza (tsc) už nepřečte soubory mimo analyzovaný projekt, i když na ně

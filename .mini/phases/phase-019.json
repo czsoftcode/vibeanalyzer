@@ -1,0 +1,39 @@
+{
+  "id": 19,
+  "title": "Prozkoumat dopady TS 6.0",
+  "goal": "Na samostatné větvi ověřit kompatibilitu TS 6.0.3 s naším použitím Compiler API (src/analyze/tsc.ts) a s @typescript-eslint, spustit zkušební build + celou testovou sadu, a zapsat go/no-go rozhodnutí (ADR) s konkrétními nálezy; povýšení provést jen pokud je vše zelené, jinak zůstat na 5.9 s odůvodněním.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Experimentální větev + bump na 6.0.3",
+      "status": "done",
+      "detail": "Vytvořit větev (např. ts6-spike), npm install typescript@6.0.3 --save-exact; nedotýkat se main. Výstup: čistá instalace bez peer-konfliktů, nebo zachycený konflikt s @typescript-eslint."
+    },
+    {
+      "title": "Zkušební build + typecheck",
+      "status": "done",
+      "detail": "Spustit npm run build a npm run typecheck; zapsat všechny chyby, deprecation hlášky a změny chování. Výstup: seznam nálezů (nebo 0 chyb)."
+    },
+    {
+      "title": "Plná testová sada + tvar diagnostik",
+      "status": "done",
+      "detail": "npm run test (vitest run); cíleně ověřit tsc.test.ts a loadTypescript.test.ts, zda TS 6.0 nezměnil tvar/text diagnostik, které testy očekávají. Výstup: zelená sada, nebo konkrétní rozdíly."
+    },
+    {
+      "title": "Kompatibilita Compiler API + eslint",
+      "status": "done",
+      "detail": "Projít použité symboly v src/analyze/tsc.ts proti TS 6.0 release notes na breaking/deprecated; ověřit, že @typescript-eslint/parser ^8 reálně podporuje TS 6.0 (ne jen peer rozsah). Výstup: tabulka symbol → stav (OK/deprecated/removed)."
+    },
+    {
+      "title": "Go/no-go rozhodnutí (ADR)",
+      "status": "done",
+      "detail": "Shrnout zisk vs. riziko a rozhodnout. Pokud vše zelené → ponechat bump a aktualizovat package.json/lock; jinak revert na 5.9 s odůvodněním. Výstup: zapsané rozhodnutí."
+    }
+  ],
+  "startedAt": "2026-06-18T22:07:59.019Z",
+  "completedAt": "2026-06-18T22:59:07.634Z",
+  "autoCommit": {
+    "preSha": "66fbf57994f17bbbd9b812466b516ec2e7d7ff92",
+    "subject": "Phase 19: Prozkoumat dopady TS 6.0"
+  }
+}

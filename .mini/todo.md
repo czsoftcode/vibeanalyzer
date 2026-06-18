@@ -19,6 +19,6 @@
 - [x] ESLint analyzátor (druhá půlka původní todo 3): pustit ESLint nad analyzovaným projektem, namapovat výsledky do téhož modelu strojového nálezu a sekce "Strojové nálezy" jako tsc (fáze 12). Pozor: cizí ESLint config (flat vs. legacy) i pluginy v jejich node_modules mohou chybět/být rozbité → čistě přeskočit, ne pád. Ověření: schválně porušené lint pravidlo se objeví v reportu na správném soubor:řádek; projekt bez ESLint configu dá "ESLint přeskočeno".
 - [ ] Filtr na minifikované .min.js - signál/šum v reportu
 - [ ] Prověřit 5 transitivních zranitelností z podstromu ESLintu
-- [ ] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
+- [x] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
 - [ ] Plný sandbox vč. importů
 - [x] Mermaid vertikálně ne horizontálně a plný počet adresářů i když budou stovky
