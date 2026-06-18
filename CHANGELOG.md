@@ -9,6 +9,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Když záměr projektu (`project.md`) nikde není a nástroj běží v terminálu, nabídne
+  jeho vytvoření: pár otázek (co stavíš + non-goaly), uloží `project.md` do
+  `~/.vibeanalyzer/<jméno projektu>-<hash cesty>/` a rovnou ho použije pro tenhle
+  report. Do analyzovaného projektu se nic nezapisuje. Při běhu bez terminálu
+  (pipe, CI, přesměrování) se nástroj na nic neptá a chová se jako dosud (vypíše
+  jen tip, jak záměr dodat ručně). Vytvoření záměru nikdy neshodí samotný report –
+  i když se uložení nepovede, report přesto vznikne.
+
 - CLI `vibeanalyzer [cesta] [--out <dir>]`: projde strom projektu a vygeneruje
   strojový JSON index a lidský MD report s Mermaid diagramem struktury (jen složky).
 - Procházení přeskakuje pomocné složky (`node_modules`, `.git`, `.mini`, `dist`,

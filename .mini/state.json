@@ -47,6 +47,11 @@
       "id": 9,
       "title": "Interaktivní sběr záměru – modul",
       "status": "done"
+    },
+    {
+      "id": 10,
+      "title": "Napojení interaktivního záměru do CLI",
+      "status": "done"
     }
   ]
 }

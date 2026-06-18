@@ -1,0 +1,44 @@
+{
+  "id": 10,
+  "title": "Napojení interaktivního záměru do CLI",
+  "goal": "Když záměr chybí (a běh je interaktivní – stdin i stdout je TTY), run() nabídne vytvoření project.md přes collectIntentDraft z fáze 9, zapíše ho přes writeIntentFile a rovnou ho použije pro tenhle report; neinteraktivní běh (pipe/CI/ne-TTY) se NEPTÁ, zachová dnešní 'Tip' a nikdy neblokuje. Reálné ask nad readline a detekce TTY žijí v bin.ts; run() je dostává injektované (DI), aby šel celý tok otestovat bez reálného stdin. Unhappy path: odmítnutí nabídky (y/N default Ne) → pokračovat bez záměru; zrušený sběr (EOF) → nepadnout; writeIntentFile exists/unwritable/no-home → smysluplná hláška, ale report se STEJNĚ vygeneruje (vytvoření záměru nesmí shodit běh).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "run() přijme injektované interaktivní závislosti",
+      "status": "done",
+      "detail": "Rozšířit run(argv, cwd, deps?) o deps {ask?: AskFn; isInteractive?: boolean; homeDir?: string}; default isInteractive=false → dnešní chování beze změny (stávající cli.test.ts projdou bez úprav). Zatím jen průchozí signatura + protažení homeDir do writeIntentFile."
+    },
+    {
+      "title": "Offer-flow při absent záměru",
+      "status": "done",
+      "detail": "Když intentResult.kind==='absent' && isInteractive && ask: zeptat se [y/N] (default Ne; a/ano/y/yes = ano). Na ano → collectIntentDraft(ask) → renderProjectMd → writeIntentFile(targetPath, …, {homeDir}). Na ne → dnešní Tip. Neinteraktivní běh a empty-skeleton → Tip beze změny."
+    },
+    {
+      "title": "Zpracování výsledku zápisu + použití v reportu",
+      "status": "done",
+      "detail": "written → hláška + záměr (parseIntent(render, path)) se použije pro TENHLE report; exists/unwritable/no-home → smysluplná hláška, ale report se STEJNĚ vygeneruje bez záměru (vytvoření nesmí shodit běh → exit 0); cancelled (EOF/prázdný building) → krátká zpráva, pokračovat bez záměru."
+    },
+    {
+      "title": "Reálné ask + TTY gate v bin.ts",
+      "status": "done",
+      "detail": "ask nad readline (question → Promise<string|null>, null na EOF/close, strip terminátoru, interface vždy zavřít); isInteractive = stdin.isTTY && stdout.isTTY; v ne-TTY se readline vůbec nevytvoří a run dostane isInteractive=false → nikdy neblokuje."
+    },
+    {
+      "title": "Testy se zuby (offer flow přes injektovaný ask + homeDir)",
+      "status": "done",
+      "detail": "run(…, {ask: fakeAsk, isInteractive:true, homeDir}): ano → vznikne soubor v injektovaném home a report má '## Záměr projektu'; odmítnutí (N) → Tip + žádný zápis; cancelled (EOF) → žádný zápis, report bez záměru, exit 0; isInteractive=false → ani se nezeptá; writeIntentFile exists/unwritable → hláška, exit 0, report vznikne. Stávající cli.test.ts (bez deps) musí projít beze změny."
+    },
+    {
+      "title": "Adversariální self-review nezávislým sub-agentem + finální kontrola",
+      "status": "done",
+      "detail": "Fáze sahá na vstupní bod run(), TTY/ne-TTY hranici, chybové cesty zápisu i kontrakt run↔moduly → nezávislý sub-agent dle CLAUDE.md (hang v ne-TTY, exit kódy, readline glue: EOF→null, CRLF)."
+    }
+  ],
+  "startedAt": "2026-06-18T08:01:34.351Z",
+  "completedAt": "2026-06-18T08:55:53.000Z",
+  "autoCommit": {
+    "preSha": "2f7f2aa347506f6a567449922b8fff867e0a31bb",
+    "subject": "Phase 10: Napojení interaktivního záměru do CLI"
+  }
+}

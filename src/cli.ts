@@ -4,7 +4,9 @@ import * as path from "node:path";
 import process from "node:process";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
 import { loadDirIgnore } from "./gitignore.js";
-import { INTENT_HEADINGS, type Intent, loadIntent } from "./intent.js";
+import { INTENT_HEADINGS, type Intent, loadIntent, parseIntent } from "./intent.js";
+import { type AskFn, collectIntentDraft } from "./intentPrompt.js";
+import { renderProjectMd, writeIntentFile } from "./intentWriter.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
@@ -29,9 +31,25 @@ Výstup:
   vibeanalyzer-<timestamp>.json  strojový strukturální index
   vibeanalyzer-<timestamp>.md    lidský report se seznamem souborů a Mermaid diagramem`;
 
+/**
+ * Injektované závislosti pro interaktivní vytvoření záměru. Drží `run()`
+ * testovatelný bez reálného stdin/TTY: testy podstrčí fake `ask`, `isInteractive`
+ * a `homeDir`. Výchozí stav (prázdné `deps`) = NEinteraktivní: `run()` se nikdy
+ * neptá a chová se jako dosud (žádná regrese stávajících testů, žádný hang v ne-TTY).
+ */
+export interface RunDeps {
+  /** Dotazovač nad readline (bin.ts). Bez něj se nikdy neptáme. */
+  ask?: AskFn;
+  /** True jen když je stdin i stdout TTY – jinak nabídku vůbec nespustíme. */
+  isInteractive?: boolean;
+  /** Domov pro zápis záměru (test si podstrčí svůj; jinak safeHomedir v writeIntentFile). */
+  homeDir?: string;
+}
+
 export async function run(
   argv: readonly string[] = process.argv.slice(2),
   cwd: string = process.cwd(),
+  deps: RunDeps = {},
 ): Promise<number> {
   const parsed = parseArgs(argv, cwd);
 
@@ -125,7 +143,7 @@ export async function run(
   // "soubor není" (běžné) nepleť s "nešel přečíst" (problém k nahlášení).
   // READ-ONLY: do analyzovaného projektu nic nezapisujeme (non-goal č. 1) –
   // při chybějícím záměru jen poradíme, jak ho dodat.
-  const intentResult = await loadIntent(targetPath);
+  const intentResult = await loadIntent(targetPath, { homeDir: deps.homeDir });
   let intent: Intent | null = null;
   if (intentResult.kind === "loaded") {
     intent = intentResult.intent;
@@ -134,6 +152,12 @@ export async function run(
       `Upozornění: našel jsem ${intentResult.path}, ale nešel přečíst (${intentResult.code}). ` +
         `Záměr se do reportu nedoplní.`,
     );
+  } else if (intentResult.kind === "absent" && deps.isInteractive && deps.ask) {
+    // Záměr NIKDE není a běžíme interaktivně (TTY na obou koncích) → nabídneme
+    // vytvoření. JEN pro 'absent': u 'unreadable' už jsme varovali a u prázdného
+    // skeletonu (kind=loaded bez obsahu) má .mini přednost, psát do home by report
+    // stejně nepoužil. Vytvoření NESMÍ shodit běh – cokoli se pokazí, report jede dál.
+    intent = await offerIntentCreation(deps.ask, targetPath, deps.homeDir);
   }
 
   // Nápověda se odvíjí od OBSAHU, ne od existence souboru: vypíšeme ji, když
@@ -204,5 +228,58 @@ export async function run(
   console.log(`JSON index: ${jsonPath}`);
   console.log(`MD report:  ${mdPath}`);
   return 0;
+}
+
+/** Odpověď na [a/N]: ano jen explicitní 'a/ano/y/yes'; null (EOF), prázdné i cokoli jiného = ne. */
+function isYes(answer: string | null): boolean {
+  return answer !== null && /^(a|ano|y|yes)$/i.test(answer.trim());
+}
+
+/**
+ * Interaktivní nabídka vytvoření záměru. Vrací `Intent` k použití v TOMTO reportu,
+ * nebo `null` (uživatel odmítl / zrušil / zápis selhal). NIKDY nehází ani nevrací
+ * chybový kód – vytvoření záměru je nadstavba, která nesmí shodit hlavní běh.
+ * Když vrátí null, volající dál vypíše běžný „Tip", jak záměr dodat ručně.
+ *
+ * READ-ONLY vůči analyzovanému projektu zůstává: writeIntentFile píše VÝHRADNĚ do
+ * domova (`~/.vibeanalyzer/...`), ne do `targetPath`.
+ */
+async function offerIntentCreation(
+  ask: AskFn,
+  targetPath: string,
+  homeDir: string | undefined,
+): Promise<Intent | null> {
+  const answer = await ask("Záměr projektu (project.md) nikde nenašel. Vytvořit ho teď? [a/N]");
+  if (!isYes(answer)) return null; // ne / EOF / prázdné → bez záměru, padneme na Tip
+
+  const collected = await collectIntentDraft(ask);
+  if (collected.kind === "cancelled") {
+    console.log("Vytvoření záměru zrušeno – pokračuju bez něj.");
+    return null;
+  }
+
+  // Vyrenderujeme JEDNOU a stejný obsah jak zapíšeme, tak (při úspěchu) přečteme
+  // zpět parserem do Intent – report tak ukazuje přesně to, co se uložilo.
+  const content = renderProjectMd(collected.draft);
+  const result = await writeIntentFile(targetPath, content, { homeDir });
+  switch (result.kind) {
+    case "written":
+      console.log(`Záměr uložen do ${result.path}. Použiju ho i pro tenhle report.`);
+      return parseIntent(content, result.path);
+    case "exists":
+      // Mezi loadIntent a zápisem soubor vznikl (TOCTOU) – nepřepisujeme cizí.
+      console.log(`Záměr už mezitím existuje (${result.path}) – nepřepisuji, použij ho příště.`);
+      return null;
+    case "unwritable":
+      console.error(
+        `Upozornění: záměr nešlo uložit (${result.code}): ${result.path}. Report vznikne bez něj.`,
+      );
+      return null;
+    case "no-home":
+      console.error(
+        "Upozornění: neznámý domovský adresář – záměr nelze uložit. Report vznikne bez něj.",
+      );
+      return null;
+  }
 }
 

@@ -66,6 +66,14 @@ describe("bin.ts launcher – chování při běhu run()", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "vibe-launch-"));
     try {
       await writeFile(path.join(dir, "cli.js"), cliBody, "utf8");
+      // bin.js importuje i ./readlineAsk.js – v izolaci ho musíme podvrhnout, ať
+      // se ESM import vyřeší. V neinteraktivním běhu (stdio pipe) se nevolá, jen
+      // musí existovat, aby launcher vůbec naběhl.
+      await writeFile(
+        path.join(dir, "readlineAsk.js"),
+        "export function createReadlineAsk() { return { ask: undefined, close() {} }; }\n",
+        "utf8",
+      );
       await copyFile(distBin, path.join(dir, "bin.js")); // reálný shipovaný launcher
       try {
         // stdio pipe: stderr zachytit do proměnné, ne nechat protéct do logu testů
