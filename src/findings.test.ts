@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Finding, formatLocation, type TscResult } from "./findings.js";
+import { type EslintResult, type Finding, formatLocation, type TscResult } from "./findings.js";
 
 describe("formatLocation", () => {
   it("plné umístění soubor:řádek:sloupec", () => {
@@ -31,5 +31,20 @@ describe("TscResult diskriminace", () => {
     expect(skipped.kind).toBe("skipped");
     // "ran s 0 nálezy" NENÍ "skipped" – to je celé jádro kontraktu
     if (ran.kind === "ran") expect(ran.findings).toHaveLength(0);
+  });
+});
+
+describe("EslintResult diskriminace", () => {
+  it("ran a skipped jsou rozlišitelné podle kind", () => {
+    const ran: EslintResult = { kind: "ran", findings: [], fileCount: 2 };
+    const skipped: EslintResult = { kind: "skipped", reason: "žádné JS/TS soubory" };
+    expect(ran.kind).toBe("ran");
+    expect(skipped.kind).toBe("skipped");
+    if (ran.kind === "ran") expect(ran.fileCount).toBe(2);
+  });
+
+  it("Finding přijme source eslint", () => {
+    const f: Finding = { source: "eslint", severity: "error", file: "a.js", line: 1, column: 1, rule: "eqeqeq", message: "x" };
+    expect(f.source).toBe("eslint");
   });
 });

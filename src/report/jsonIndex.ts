@@ -1,10 +1,11 @@
-import type { TscResult } from "../findings.js";
+import type { EslintResult, TscResult } from "../findings.js";
 import type { FileEntry } from "../scan.js";
 
 /**
- * Strojový strukturální index. Od verze 2 nese i výsledek tsc vrstvy (`tsc`):
- * celý diskriminovaný TscResult, ne jen pole nálezů – aby ze strojového výstupu
- * šlo poznat i "přeskočeno" vs "čistý projekt" (jinak by i JSON tiše lhal).
+ * Strojový strukturální index. Od verze 2 nese výsledek tsc vrstvy (`tsc`), od
+ * verze 3 i ESLint vrstvy (`eslint`) – celé diskriminované výsledky, ne jen pole
+ * nálezů, aby ze strojového výstupu šlo poznat i "přeskočeno" vs "čistý projekt"
+ * (jinak by i JSON tiše lhal).
  */
 export interface JsonIndex {
   version: number;
@@ -13,16 +14,19 @@ export interface JsonIndex {
   files: FileEntry[];
   /** výsledek strojové typové analýzy (tsc) */
   tsc: TscResult;
+  /** výsledek lint analýzy (ESLint) */
+  eslint: EslintResult;
 }
 
-/** Bump 1 → 2: přidáno pole `tsc`. Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 2;
+/** Bump 2 → 3: přidáno pole `eslint`. Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 3;
 
 export function buildJsonIndex(
   root: string,
   generatedAt: string,
   files: FileEntry[],
   tsc: TscResult,
+  eslint: EslintResult,
 ): JsonIndex {
   return {
     version: INDEX_VERSION,
@@ -30,5 +34,6 @@ export function buildJsonIndex(
     root,
     files,
     tsc,
+    eslint,
   };
 }

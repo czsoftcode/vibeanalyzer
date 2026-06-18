@@ -23,7 +23,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
     const md = buildMarkdown({ ...base, tsc });
     expect(md).toContain("_Žádné typové chyby._");
     expect(md).toContain("- tsc: čistý (0 nálezů)");
-    expect(md).not.toContain("přeskočeno");
+    expect(md).not.toContain("tsc přeskočeno");
   });
 
   it("ran s nálezy: soubor:řádek:sloupec, závažnost, kód, zpráva", () => {

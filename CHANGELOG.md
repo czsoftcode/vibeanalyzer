@@ -9,6 +9,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Strojová lint analýza (ESLint): nástroj projede JS/TS soubory projektu (jen je
+  čte/parsuje, kód projektu nespouští ani nic nezapisuje) a hlásí pravděpodobné
+  bugy, které typová kontrola nevidí – `==` místo `===`, prázdný `catch`,
+  zapomenutý `debugger`, omylem přiřazení v podmínce, duplicitní klíče, nedosažitelný
+  kód, `switch` bez `break`, nepoužité proměnné. Nálezy jsou v nové sekci „Strojové
+  nálezy (ESLint)" v MD i v poli `eslint` JSON indexu, se `soubor:řádek:sloupec`,
+  závažností, pravidlem a zprávou. Z bezpečnostních důvodů se používá pevný ruleset
+  vibeanalyzeru (jen pravidla na bugy, žádný styl) a projektový `eslint.config.js`
+  se záměrně nenačítá (jeho spuštění by znamenalo spustit cizí kód). Když projekt
+  nemá JS/TS soubory, vrstva se čistě přeskočí. Nálezy nemění návratový kód.
+
 - Strojová typová analýza (tsc): nástroj pustí TypeScript kompilátor v režimu
   kontroly (jen čte, nic nespouští ani nezapisuje do projektu) nad analyzovaným
   projektem a typové chyby zapíše do reportu jako `soubor:řádek:sloupec` se
@@ -24,7 +35,7 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
-- JSON index má nově verzi 2 (přibylo pole `tsc` s výsledkem typové analýzy).
+- JSON index má nově verzi 3 (přibylo pole `tsc` a `eslint` s výsledky strojových analýz).
 
 - Když záměr projektu (`project.md`) nikde není a nástroj běží v terminálu, nabídne
   jeho vytvoření: pár otázek (co stavíš + non-goaly), uloží `project.md` do

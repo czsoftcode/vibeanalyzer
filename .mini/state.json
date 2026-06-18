@@ -62,6 +62,11 @@
       "id": 12,
       "title": "Strojová analýza: tsc nálezy",
       "status": "done"
+    },
+    {
+      "id": 13,
+      "title": "Strojová analýza: ESLint nálezy",
+      "status": "done"
     }
   ]
 }

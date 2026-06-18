@@ -1,0 +1,47 @@
+{
+  "id": 13,
+  "title": "Strojová analýza: ESLint nálezy",
+  "goal": "Pustit ESLint nad analyzovaným projektem (hybridně z jeho node_modules, fallback přeskočit) a namapovat výsledky do existujícího modelu Finding a do téže sekce \"Strojové nálezy\" (md i JSON) jako tsc. Chybějící/rozbitý ESLint config, chybějící pluginy nebo nenačtitelný flat config → vrstva se čistě přeskočí (ne pád). Pozor na non-goal č. 1: flat config (eslint.config.js) je spustitelný JS – jeho načtení spustí kód projektu; jak s tím naložit se rozhodne v discuss. Ověření: schválně porušené lint pravidlo se objeví v reportu na správném soubor:řádek; projekt bez ESLint configu dá \"ESLint přeskočeno\".",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Rozšířit model o ESLint: source + EslintResult",
+      "status": "done",
+      "detail": "Finding.source na \"tsc\" | \"eslint\"; přidat diskriminovaný EslintResult ({kind:skipped,reason} | {kind:ran,findings,fileCount}) bez nodeModulesPresent. Unit test tvaru."
+    },
+    {
+      "title": "Sekce ESLint v md + eslint v JSON",
+      "status": "done",
+      "detail": "buildMarkdown přidá paralelní sekci Strojové nálezy (ESLint) se 3 stavy odlišitelně (N nálezů / čistý 0 / přeskočeno) + souhrnný řádek; buildJsonIndex přidá pole eslint a bump INDEX_VERSION 2->3. Testy nad syntetickým EslintResult. Nálezy nemění exit kód."
+    },
+    {
+      "title": "Přibalený ESLint config + závislosti",
+      "status": "done",
+      "detail": "Modul s naším flat-config polem, ruleset jen correctness (eqeqeq, no-empty, no-debugger, no-cond-assign, no-dupe-keys, no-dupe-args, no-unreachable, no-fallthrough, no-constant-condition, no-self-compare, no-unused-vars; no-unused-vars na .ts vypnout, na .js ponechat). Pro TS přípony @typescript-eslint/parser. Přidat eslint + @typescript-eslint/parser do dependencies. Test: config je validní flat-config pole s očekávanými pravidly."
+    },
+    {
+      "title": "ESLint analyzátor: lint souborů -> Finding[]",
+      "status": "done",
+      "detail": "analyzeESLint(root, files): vyfiltruje JS/TS přípony ze scanu; new ESLint({overrideConfigFile:true, overrideConfig: náš config, cwd:root, fix:false}); výsledky -> Finding[] (source eslint, severity 2->error/1->warning, ruleId->rule, cesta relativně ke kořeni /, line/column). Žádné JS/TS soubory -> skipped. Ověřit fixturou s nepřátelským eslint.config.js, že se NESPUSTÍ. Fixture s porušeným pravidlem (if a==b) -> nález na správném soubor:řádek."
+    },
+    {
+      "title": "Napojení do run() + hláška o rozsahu",
+      "status": "done",
+      "detail": "cli.ts zavolá analyzeESLint (předá scanované soubory), výsledek do build*; před během vypíše spouštím ESLint nad N soubory; selhání NESHODÍ běh (skipped + nahlas na stderr se stackem), exit kód se nemění. Test větví run(): projekt s porušeným pravidlem vs bez JS/TS."
+    },
+    {
+      "title": "Adversariální self-review (sub-agent) + finální kontrola",
+      "status": "done",
+      "detail": "Nezávislý sub-agent (čerstvý kontext): non-goal (projektový config se nespustí, žádný zápis ani --fix), ran 0 != skipped, exit kódy, kontrakt INDEX_VERSION/source mezi moduly, zuby testů, unhappy path (prázdný projekt, neparsovatelný soubor, soubor mimo kořen, hostile config). Checklist CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-18T17:21:18.778Z",
+  "resolvedVerify": [
+    "Reálný běh nad cizím JS/TS projektem (čitelnost a relevance nálezů)"
+  ],
+  "completedAt": "2026-06-18T17:49:48.001Z",
+  "autoCommit": {
+    "preSha": "90c451a14588124b8828e1cca94f02dbec87d7d1",
+    "subject": "Phase 13: Strojová analýza: ESLint nálezy"
+  }
+}

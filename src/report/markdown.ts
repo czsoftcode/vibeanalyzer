@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { type Finding, formatLocation, type TscResult } from "../findings.js";
+import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
 
@@ -12,6 +12,8 @@ export interface MarkdownInput {
   intent?: Intent | null;
   /** Výsledek tsc vrstvy; když chybí, sekce se vykreslí jako "přeskočeno". */
   tsc?: TscResult;
+  /** Výsledek ESLint vrstvy; když chybí, sekce se vykreslí jako "přeskočeno". */
+  eslint?: EslintResult;
 }
 
 export interface MarkdownOptions {
@@ -100,6 +102,44 @@ function tscSummaryLine(tsc: TscResult | undefined): string {
   if (!tsc || tsc.kind === "skipped") return "- tsc: přeskočeno";
   if (tsc.findings.length === 0) return "- tsc: čistý (0 nálezů)";
   return `- tsc: ${tsc.findings.length} nálezů`;
+}
+
+/**
+ * Sekce "## Strojové nálezy (ESLint)". Stejné tři stavy jako tsc – "čistý projekt"
+ * se nesmí splést s "vrstva neproběhla". Nálezy jsou dle pravidel vibeanalyzeru
+ * (projektový ESLint config se z bezpečnostních důvodů nenačítá), což report uvede.
+ */
+function eslintSection(eslint: EslintResult | undefined): string[] {
+  const out: string[] = ["## Strojové nálezy (ESLint)", ""];
+
+  if (!eslint || eslint.kind === "skipped") {
+    const reason = eslint?.reason ?? "lint analýza se nespustila";
+    out.push(`_ESLint přeskočeno: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  out.push(`ESLint zkontroloval ${eslint.fileCount} souborů (pravidla vibeanalyzeru, ne config projektu).`);
+  out.push("");
+
+  if (eslint.findings.length === 0) {
+    out.push("_Žádné nálezy._");
+    out.push("");
+    return out;
+  }
+
+  for (const f of eslint.findings) {
+    out.push(renderFinding(f));
+  }
+  out.push("");
+  return out;
+}
+
+/** Krátké shrnutí stavu ESLint do hlavičky reportu (rychlý přehled). */
+function eslintSummaryLine(eslint: EslintResult | undefined): string {
+  if (!eslint || eslint.kind === "skipped") return "- ESLint: přeskočeno";
+  if (eslint.findings.length === 0) return "- ESLint: čistý (0 nálezů)";
+  return `- ESLint: ${eslint.findings.length} nálezů`;
 }
 
 /**
@@ -220,11 +260,14 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
     out.push(`- Přeskočeno (nečitelné): ${input.skippedUnreadable.length}`);
   }
   out.push(tscSummaryLine(input.tsc));
+  out.push(eslintSummaryLine(input.eslint));
   out.push("");
 
   out.push(...intentSection(input.intent));
 
   out.push(...tscSection(input.tsc));
+
+  out.push(...eslintSection(input.eslint));
 
   out.push("## Struktura složek");
   out.push("");

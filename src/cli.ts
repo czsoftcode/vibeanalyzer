@@ -2,9 +2,10 @@ import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
+import { analyzeESLint } from "./analyze/eslint.js";
 import { analyzeTypeScript } from "./analyze/tsc.js";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
-import type { TscResult } from "./findings.js";
+import type { EslintResult, TscResult } from "./findings.js";
 import { loadDirIgnore } from "./gitignore.js";
 import { INTENT_HEADINGS, type Intent, loadIntent, parseIntent } from "./intent.js";
 import { type AskFn, collectIntentDraft } from "./intentPrompt.js";
@@ -48,6 +49,8 @@ export interface RunDeps {
   homeDir?: string;
   /** Injektovatelný tsc analyzátor (test si podstrčí svůj; jinak reálný). */
   analyzeTs?: typeof analyzeTypeScript;
+  /** Injektovatelný ESLint analyzátor (test si podstrčí svůj; jinak reálný). */
+  analyzeES?: typeof analyzeESLint;
 }
 
 export async function run(
@@ -188,7 +191,9 @@ export async function run(
   try {
     tsc = await analyzeTs(targetPath, {
       onStart: (fileCount, source) => {
-        console.error(
+        // PROGRESS, ne chyba → stdout. Kontrakt "úspěch = ticho na stderr"
+        // (cli.scanfail.test.ts) drží: stderr je vyhrazený pro skutečné problémy.
+        console.log(
           `Spouštím tsc (${source}) nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`,
         );
       },
@@ -202,7 +207,26 @@ export async function run(
     tsc = { kind: "skipped", reason: "tsc během analýzy selhal (viz stderr)" };
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc);
+  // Strojová lint analýza (ESLint). Stejná logika jako tsc: jen parsuje (kód
+  // projektu se nevykoná), s naším configem – projektový eslint.config.js se ani
+  // nehledá (overrideConfigFile). Lintuje JEN soubory ze scanu (respektuje
+  // .gitignore). Catch pro nečekané selhání: report neshodíme, chybu nahlas na stderr.
+  const analyzeES = deps.analyzeES ?? analyzeESLint;
+  let eslint: EslintResult;
+  try {
+    eslint = await analyzeES(targetPath, result.files, {
+      onStart: (fileCount) => {
+        // PROGRESS na stdout (ne stderr) – viz tsc onStart výš.
+        console.log(`Spouštím ESLint nad ${fileCount} soubory – u velkého projektu může chvíli trvat…`);
+      },
+    });
+  } catch (err: unknown) {
+    const e = err as Error;
+    console.error(`Upozornění: lint analýza (ESLint) selhala a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+    eslint = { kind: "skipped", reason: "ESLint během analýzy selhal (viz stderr)" };
+  }
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
@@ -210,6 +234,7 @@ export async function run(
     skippedUnreadable: result.skippedUnreadable,
     intent,
     tsc,
+    eslint,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);

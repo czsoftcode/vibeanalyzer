@@ -4,8 +4,8 @@
  * vykreslují). Pozdější ESLint i AI vrstva se nabalí sem, ne každá zvlášť.
  */
 
-/** Který nástroj nález vyrobil. (ESLint/AI rozšíří v dalších fázích.) */
-export type FindingSource = "tsc";
+/** Který nástroj nález vyrobil. (AI vrstva rozšíří v dalších fázích.) */
+export type FindingSource = "tsc" | "eslint";
 
 /** Závažnost nálezu, sjednocená napříč nástroji. */
 export type Severity = "error" | "warning" | "info";
@@ -48,6 +48,21 @@ export type TscResult =
        * (TS2307 ap.) jsou očekávané a report to musí přiznat, ne vydávat za bug.
        */
       nodeModulesPresent: boolean;
+    };
+
+/**
+ * Výsledek ESLint vrstvy. Stejný kontrakt jako TscResult: "ran s 0 nálezy"
+ * (čistý projekt) se NESMÍ splést s "skipped" (vrstva neproběhla – žádné JS/TS
+ * soubory nebo interní selhání). Bez `nodeModulesPresent` – ESLint běží s naším
+ * configem, na node_modules projektu nezáleží.
+ */
+export type EslintResult =
+  | { kind: "skipped"; reason: string }
+  | {
+      kind: "ran";
+      findings: Finding[];
+      /** počet souborů, které ESLint zkontroloval */
+      fileCount: number;
     };
 
 /**
