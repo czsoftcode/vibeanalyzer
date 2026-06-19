@@ -4,7 +4,7 @@ import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
-import type { SecretsResult } from "../secrets.js";
+import type { SecretsResult, SecretsSkipped } from "../secrets.js";
 
 export interface MarkdownInput {
   root: string;
@@ -208,6 +208,25 @@ function eslintSummaryLine(eslint: EslintResult | undefined): string {
  * MASKOVANÝ náznak (renderFinding tiskne `f.message`, který už je maskovaný ve
  * skeneru) – report je commitovaný a nesmí tajemství unést dál.
  */
+/**
+ * Řádek se souhrnem ZÁMĚRNĚ přeskočených souborů (balast). Vždy se vypíše – i s
+ * nulami – aby report neměl tiché vynechání (zásada fází 25/26). Rozpad podle
+ * důvodu je `label: počet` schválně bez plurálové gramatiky (vyhne se i18n; stejný
+ * styl jako jinde v reportu). I/O selhání tu NEjsou – nejsou to filtry balastu.
+ */
+function secretsSkippedLine(skipped: SecretsSkipped): string {
+  const total = skipped.minified + skipped.large + skipped.longLine + skipped.binary;
+  if (total === 0) return "Přeskočeno 0 souborů jako balast.";
+  // Pořadí odpovídá pořadí kontrol ve scanSecrets (jméno → velikost → NUL → řádek).
+  const parts = [
+    `minifikáty: ${skipped.minified}`,
+    `velké (>1 MiB): ${skipped.large}`,
+    `binárky: ${skipped.binary}`,
+    `dlouhé řádky: ${skipped.longLine}`,
+  ];
+  return `Přeskočeno ${total} souborů jako balast (${parts.join(", ")}). Ty se na tajemství neprohledávaly.`;
+}
+
 function secretsSection(secrets: SecretsResult | undefined): string[] {
   const out: string[] = ["## Strojové nálezy (tajemství)", ""];
 
@@ -219,6 +238,8 @@ function secretsSection(secrets: SecretsResult | undefined): string[] {
   }
 
   out.push(`Prohledáno ${secrets.fileCount} souborů na známé tvary tajemství (klíče, tokeny).`);
+  out.push("");
+  out.push(secretsSkippedLine(secrets.skipped));
   out.push("");
   out.push(
     "> Pozor: hledají se jen známé tvary a jen u kořene projektu se nahlíží do " +

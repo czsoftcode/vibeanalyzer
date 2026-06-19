@@ -1,0 +1,39 @@
+{
+  "id": 27,
+  "title": "Secrets: přiznat přeskočené soubory",
+  "goal": "Rozšířit SecretsResult o počitadla přeskočených souborů (minifikáty, velké >1 MiB, dlouhé řádky, binárky) a uvést je explicitně v reportu i JSON indexu, aby secrets vrstva neměla tiché vynechání – v souladu se zásadou zavedenou ve fázích 25/26. I/O selhání (stat/readFile) se do počítadel netahá (to není záměrný filtr, scanTree je hlásí zvlášť).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Rozšířit SecretsResult o počitadla skipů",
+      "status": "done",
+      "detail": "Do ran varianty přidat skipped: { minified, large, longLine, binary }. Počty mutuálně výlučné – první důvod vyhrává dle pořadí continue."
+    },
+    {
+      "title": "Počítat skipy v scanSecrets",
+      "status": "done",
+      "detail": "Inkrementovat na každém záměrném continue (minifikát, velký >1 MiB, binárka, dlouhý řádek). I/O continue (stat/readFile) se vědomě NEpočítá. Test v secrets.test.ts se zuby: vynulování inkrementu → test padne."
+    },
+    {
+      "title": "Report: řádek přeskočených v secretsSection",
+      "status": "done",
+      "detail": "markdown.ts vypíše počty přeskočených (i když 0 – žádné tiché vynechání). Test v markdown.secrets.test.ts ověří konkrétní čísla, ne jen přítomnost slova."
+    },
+    {
+      "title": "JSON index: bump verze 8 → 9",
+      "status": "done",
+      "detail": "secrets nese skipped 1:1; INDEX_VERSION 8→9; aktualizovat jsonIndex.test.ts a fixtury (noSecrets) na nový tvar."
+    },
+    {
+      "title": "Nezávislý self-review + e2e",
+      "status": "done",
+      "detail": "Čerstvý sub-agent na cross-module kontrakt (SecretsResult ↔ markdown ↔ JSON) – reálně rozbít každého konzumenta a ověřit pád testu. Plný build+test+lint zelený."
+    }
+  ],
+  "startedAt": "2026-06-19T14:39:46.189Z",
+  "completedAt": "2026-06-19T15:13:00.807Z",
+  "autoCommit": {
+    "preSha": "982ce1094fdc3bf2ff310750395c01b59f67db71",
+    "subject": "Phase 27: Secrets: přiznat přeskočené soubory"
+  }
+}

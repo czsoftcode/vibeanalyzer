@@ -7,7 +7,12 @@ import type { SecretsResult } from "../secrets.js";
 import { buildJsonIndex, INDEX_VERSION } from "./jsonIndex.js";
 
 const noEslint: EslintResult = { kind: "skipped", reason: "žádné JS/TS soubory" };
-const noSecrets: SecretsResult = { kind: "ran", fileCount: 0, findings: [] };
+const noSecrets: SecretsResult = {
+  kind: "ran",
+  fileCount: 0,
+  findings: [],
+  skipped: { minified: 0, large: 0, longLine: 0, binary: 0 },
+};
 const noAudit: AuditResult = { kind: "skipped", reason: "audit nevyžádán (--audit)" };
 const noGraph: ModuleGraphResult = {
   kind: "ran",
@@ -21,14 +26,14 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 8 (FileEntry.minified + moduleGraph.minified)", () => {
-    expect(INDEX_VERSION).toBe(8);
+  it("verze indexu je 9 (secrets.skipped počty přeskočených)", () => {
+    expect(INDEX_VERSION).toBe(9);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph);
-    expect(idx.version).toBe(8);
+    expect(idx.version).toBe(9);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
@@ -73,9 +78,10 @@ describe("buildJsonIndex", () => {
       kind: "ran",
       fileCount: 3,
       findings: [{ source: "secret", severity: "error", file: ".env", line: 1, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" }],
+      skipped: { minified: 2, large: 1, longLine: 0, binary: 1 },
     };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets, noAudit, noGraph);
-    expect(idx.secrets).toEqual(secrets);
+    expect(idx.secrets).toEqual(secrets); // skipped musí projít 1:1 (ne tiché zahození)
   });
 
   it("nese moduleGraph výsledek 1:1 (hrany, osamělé i počty)", () => {

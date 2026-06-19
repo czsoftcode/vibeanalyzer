@@ -12,6 +12,9 @@ import type { SecretsResult } from "../secrets.js";
  * strojového výstupu šlo poznat i "přeskočeno" vs "čistý projekt" (jinak by i
  * JSON tiše lhal). Od verze 8 nese každý `files[]` příznak `minified` (jméno
  * `*.min.<ext>`) a `moduleGraph.minified` počítadlo z grafu vyřazených minifikátů.
+ * Od verze 9 nese `secrets.skipped` počty záměrně přeskočených souborů skeneru
+ * tajemství (minifikáty / velké / binárky / dlouhé řádky) – aby ani JSON tiše
+ * nevynechával balast.
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -33,9 +36,9 @@ export interface JsonIndex {
   moduleGraph: ModuleGraphResult;
 }
 
-/** Bump 7 → 8: `FileEntry` nese příznak `minified` (a `moduleGraph.minified`
- *  počítadlo vyřazených minifikátů). Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 8;
+/** Bump 8 → 9: `secrets.skipped` nese počty záměrně přeskočených souborů
+ *  (minifikáty / velké / dlouhé řádky / binárky). Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 9;
 
 export function buildJsonIndex(
   root: string,

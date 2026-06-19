@@ -56,7 +56,7 @@ describe("run – e2e graf modulů", () => {
 
     // JSON nese graf 1:1 s vyřešenou hranou .js → .ts.
     const index = JSON.parse(json);
-    expect(index.version).toBe(8);
+    expect(index.version).toBe(9);
     expect(index.moduleGraph.kind).toBe("ran");
     expect(index.moduleGraph.edges).toEqual([{ from: "src/a.ts", to: "src/b.ts" }]);
     expect(index.moduleGraph.isolated).toEqual(["src/lonely.ts"]);

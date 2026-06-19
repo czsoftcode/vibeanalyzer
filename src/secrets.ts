@@ -150,6 +150,26 @@ export function detectSecrets(text: string): SecretHit[] {
  * "ran s 0 nálezy" (čistý projekt) se NESMÍ splést s "skipped" (skener vůbec
  * neproběhl) – sloučení obojího do "nic v reportu" = tichý falešný úspěch.
  */
+/**
+ * Počty souborů ZÁMĚRNĚ vyřazených z prohledávání (balast, ne chyba). Kategorie
+ * jsou mutuálně výlučné: jeden soubor padne do první kategorie podle pořadí
+ * kontrol ve `scanSecrets`, ne do více najednou. I/O selhání (nečitelný soubor,
+ * `stat` selhal) sem ZÁMĚRNĚ NEpatří – to není filtr balastu, ale chyba čtení,
+ * a `scanTree` ji hlásí zvlášť. Smysl: žádné tiché vynechání (zásada fází 25/26).
+ */
+// Pořadí polí odpovídá pořadí kontrol ve `scanSecrets` (jméno → velikost → NUL
+// bajt → dlouhý řádek); soubor splňující víc důvodů padne do té první.
+export interface SecretsSkipped {
+  /** vyřazeno podle jména souboru (`.min.*` apod.) přes `isMinifiedName` */
+  minified: number;
+  /** vyřazeno kvůli velikosti > 1 MiB */
+  large: number;
+  /** vyřazeno jako binárka (obsahuje NUL bajt) */
+  binary: number;
+  /** vyřazeno kvůli extrémně dlouhému řádku (bundle/minifikát bez `.min.`) */
+  longLine: number;
+}
+
 export type SecretsResult =
   | { kind: "skipped"; reason: string }
   | {
@@ -157,6 +177,8 @@ export type SecretsResult =
       findings: Finding[];
       /** počet souborů, jejichž OBSAH se skutečně přečetl a prohledal */
       fileCount: number;
+      /** počty záměrně přeskočených souborů podle důvodu (žádné tiché vynechání) */
+      skipped: SecretsSkipped;
     };
 
 /** Strop velikosti čteného souboru (1 MiB). Zdrojáky jsou drobné; větší soubor
@@ -258,30 +280,43 @@ export async function scanSecrets(root: string, files: FileEntry[]): Promise<Sec
 
   const findings: Finding[] = [];
   let fileCount = 0;
+  const skipped: SecretsSkipped = { minified: 0, large: 0, binary: 0, longLine: 0 };
 
   for (const c of candidates) {
     const name = c.relPath.split("/").pop() ?? c.relPath;
-    if (isMinifiedName(name)) continue;
+    if (isMinifiedName(name)) {
+      skipped.minified++;
+      continue;
+    }
 
     let size = c.sizeKnown;
     if (size === undefined) {
       try {
         size = (await stat(c.absPath)).size;
       } catch {
-        continue; // probe soubor zmizel/nedá se statovat → přeskoč
+        continue; // probe soubor zmizel/nedá se statovat → přeskoč (I/O, nepočítá se)
       }
     }
-    if (size > MAX_FILE_SIZE) continue;
+    if (size > MAX_FILE_SIZE) {
+      skipped.large++;
+      continue;
+    }
 
     let content: string;
     try {
       content = await readFile(c.absPath, "utf8");
     } catch {
-      continue; // nečitelný → přeskoč (scanTree nečitelné stejně hlásí zvlášť)
+      continue; // nečitelný → přeskoč (I/O, scanTree nečitelné stejně hlásí zvlášť)
     }
 
-    if (content.includes("\u0000")) continue; // binárka
-    if (longestLineLength(content) > MAX_LINE_LENGTH) continue; // minifikát/bundle
+    if (content.includes("\u0000")) {
+      skipped.binary++;
+      continue; // binárka
+    }
+    if (longestLineLength(content) > MAX_LINE_LENGTH) {
+      skipped.longLine++;
+      continue; // minifikát/bundle
+    }
 
     fileCount++;
     for (const hit of detectSecrets(content)) {
@@ -296,5 +331,5 @@ export async function scanSecrets(root: string, files: FileEntry[]): Promise<Sec
     }
   }
 
-  return { kind: "ran", findings, fileCount };
+  return { kind: "ran", findings, fileCount, skipped };
 }

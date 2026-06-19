@@ -9,6 +9,15 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Skener tajemství už **netiše nepřeskakuje balast**. Soubory, které z prohledávání
+  vyřadí (minifikáty podle jména, velké > 1 MiB, binárky s NUL bajtem, soubory s
+  extrémně dlouhým řádkem), report nově **počítá a explicitně uvádí** – řádek
+  `Přeskočeno N souborů jako balast (minifikáty: …, velké: …, binárky: …, dlouhé
+  řádky: …)` se zobrazí vždy, i s nulami. Stejná zásada „žádné tiché vynechání", jakou
+  už zavedly ESLint vrstva a graf modulů. Vědomé omezení: I/O selhání (nečitelný
+  soubor) se do těchto počtů netahá – není to filtr balastu, ale chyba čtení, kterou
+  hlásí strom souborů zvlášť. JSON index proto povýšil na verzi 9 (`secrets.skipped`
+  nese počty po kategoriích).
 - Minifikáty (`*.min.js`, `*.min.css` apod.) report nově řeší **konzistentně napříč
   všemi sekcemi**, ne jen v ESLintu. Dřív jedna sekce bundle přeskočila a o pár řádků
   níž ho strom i počty zase vypsaly – report si protiřečil. Nově: počet souborů uvádí

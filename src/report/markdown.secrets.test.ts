@@ -9,6 +9,8 @@ const base: MarkdownInput = {
   skippedUnreadable: [],
 };
 
+const noSkip = { minified: 0, large: 0, longLine: 0, binary: 0 } as const;
+
 describe("buildMarkdown – sekce tajemství: tři rozlišitelné stavy", () => {
   it("chybějící secrets → přeskočeno (ne tiché 'čisto')", () => {
     const md = buildMarkdown(base);
@@ -18,7 +20,7 @@ describe("buildMarkdown – sekce tajemství: tři rozlišitelné stavy", () => 
   });
 
   it("ran s 0 nálezy → 'čistý', ne 'přeskočeno'", () => {
-    const secrets: SecretsResult = { kind: "ran", fileCount: 5, findings: [] };
+    const secrets: SecretsResult = { kind: "ran", fileCount: 5, findings: [], skipped: noSkip };
     const md = buildMarkdown({ ...base, secrets });
     expect(md).toContain("_Žádná tajemství nenalezena._");
     expect(md).toContain("- Tajemství: čistý (0 nálezů)");
@@ -32,6 +34,7 @@ describe("buildMarkdown – sekce tajemství: tři rozlišitelné stavy", () => 
       findings: [
         { source: "secret", severity: "error", file: ".env", line: 2, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" },
       ],
+      skipped: noSkip,
     };
     const md = buildMarkdown({ ...base, secrets });
     expect(md).toContain("- Tajemství: 1 nálezů");
@@ -50,8 +53,33 @@ describe("buildMarkdown – ÚNIK: celá hodnota tajemství se v reportu NIKDY n
         // tak, jak ji vyrobí skener: jen maskovaný náznak
         { source: "secret", severity: "error", file: ".env", line: 1, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" },
       ],
+      skipped: noSkip,
     };
     const md = buildMarkdown({ ...base, secrets });
     expect(md.includes(fullSecret)).toBe(false);
+  });
+});
+
+describe("buildMarkdown – sekce tajemství: přeskočené soubory se přiznají (žádné tiché vynechání)", () => {
+  it("nenulové skipy → vypíše součet i rozpad s konkrétními čísly", () => {
+    const secrets: SecretsResult = {
+      kind: "ran",
+      fileCount: 3,
+      findings: [],
+      skipped: { minified: 2, large: 1, longLine: 4, binary: 1 },
+    };
+    const md = buildMarkdown({ ...base, secrets });
+    // součet 2+1+4+1 = 8 a rozpad s konkrétními hodnotami (ne jen slovo "přeskočeno")
+    expect(md).toContain("Přeskočeno 8 souborů jako balast");
+    expect(md).toContain("minifikáty: 2");
+    expect(md).toContain("velké (>1 MiB): 1");
+    expect(md).toContain("dlouhé řádky: 4");
+    expect(md).toContain("binárky: 1");
+  });
+
+  it("nulové skipy → explicitní '0', ne tiché vynechání řádku", () => {
+    const secrets: SecretsResult = { kind: "ran", fileCount: 3, findings: [], skipped: noSkip };
+    const md = buildMarkdown({ ...base, secrets });
+    expect(md).toContain("Přeskočeno 0 souborů jako balast.");
   });
 });

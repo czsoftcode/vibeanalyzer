@@ -132,6 +132,11 @@
       "id": 26,
       "title": "Sjednotit filtr minifikátů v reportu",
       "status": "done"
+    },
+    {
+      "id": 27,
+      "title": "Secrets: přiznat přeskočené soubory",
+      "status": "done"
     }
   ]
 }
