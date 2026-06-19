@@ -114,6 +114,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   od začátku by ji zahodilo a běh by se chybně oznámil jako obecný pád místo „došla
   paměť".
 
+- Nálezy auditu závislostí teď **ukazují na skutečný lockfile**. Když projekt používá
+  `npm-shrinkwrap.json` (ne `package-lock.json`), report dřív natvrdo odkazoval na
+  `package-lock.json`, který v projektu vůbec není. Nově se jméno auditovaného
+  lockfilu propíše do každého nálezu.
+
+- Počty zranitelností v reportu auditu už **nelžou, když chybí souhrnná metadata**.
+  Ve výjimečném výstupu `npm audit` bez sekce `metadata` report dřív vypsal „N
+  zranitelností (kritických 0, vysokých 0, …)" – součet kategorií neseděl s celkem.
+  Počty po závažnosti se nově dopočítají přímo z nalezených zranitelností, takže
+  součet vždy odpovídá celku.
+
 ## [0.2.0] - 2026-06-19
 
 ### Changed

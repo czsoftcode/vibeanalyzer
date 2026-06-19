@@ -137,7 +137,7 @@ export const defaultNpmAuditRunner: NpmAuditRunner = (input) => {
 
 /** Surový výstup auditu pro parser, nebo důvod přeskočení (rozlišitelně). */
 export type AuditOutput =
-  | { kind: "output"; stdout: string }
+  | { kind: "output"; stdout: string; lockfile: string }
   | { kind: "skipped"; reason: string };
 
 async function exists(p: string): Promise<boolean> {
@@ -208,7 +208,9 @@ export async function collectAuditOutput(
     if (outcome.kind === "spawn-failed") {
       return { kind: "skipped", reason: outcome.reason };
     }
-    return { kind: "output", stdout: outcome.stdout };
+    // lockfile předáváme dál: parser ho použije jako `file` nálezu (ne natvrdo
+    // package-lock.json), ať report míří na soubor, který v projektu opravdu je.
+    return { kind: "output", stdout: outcome.stdout, lockfile };
   } finally {
     // Úklid VŽDY – i při výjimce z copyFile/runneru. Žádný osiřelý temp adresář.
     await rm(tmp, { recursive: true, force: true }).catch(() => {});
@@ -281,7 +283,7 @@ function fixText(fixAvailable: unknown): string {
  * položka je BUĎ string (jméno jiné zranitelné závislosti v řetězu) NEBO objekt
  * (konkrétní advisory s title/url/severity) – ošetřujeme obojí.
  */
-function vulnToFinding(name: string, vuln: Record<string, unknown>): Finding {
+function vulnToFinding(name: string, vuln: Record<string, unknown>, lockfile: string): Finding {
   const severity = mapSeverity(vuln.severity);
   const range = typeof vuln.range === "string" ? vuln.range : "*";
 
@@ -305,13 +307,14 @@ function vulnToFinding(name: string, vuln: Record<string, unknown>): Finding {
   return {
     source: "audit",
     severity,
-    file: "package-lock.json",
+    file: lockfile,
     rule,
     message: `${name}@${range} – ${detail} (závažnost: ${String(vuln.severity ?? "neznámá")}); ${fixText(vuln.fixAvailable)}`,
   };
 }
 
-/** Spočítá counts z metadata, nebo (když chybí) dopočítá z nálezů podle severity. */
+/** Spočítá counts z metadata, nebo (když chybí) dopočítá z vuln.severity tak, aby
+ *  součet kategorií seděl s total (žádné rozporné „N zranitelností, ze všech 0"). */
 function readCounts(parsed: Record<string, unknown>, findings: Finding[]): AuditCounts {
   const meta = isObject(parsed.metadata) ? parsed.metadata : undefined;
   const mv = meta && isObject(meta.vulnerabilities) ? meta.vulnerabilities : undefined;
@@ -326,15 +329,32 @@ function readCounts(parsed: Record<string, unknown>, findings: Finding[]): Audit
       total: num("total"),
     };
   }
-  // metadata chybí → hrubý odhad z našich nálezů (1 nález = 1 balík).
-  return {
-    critical: 0,
-    high: 0,
-    moderate: 0,
-    low: 0,
-    info: 0,
-    total: findings.length,
-  };
+  // metadata chybí → dopočítej počty po závažnosti přímo z vuln.severity, ať report
+  // nelže (dřív vracel total = N, ale všechny závažnosti 0 → „N zranitelností,
+  // kritických 0, vysokých 0…"). Iterujeme STEJNOU množinu vulns jako findings
+  // (isObject filtr), takže součet kategorií == total == findings.length.
+  const counts: AuditCounts = { critical: 0, high: 0, moderate: 0, low: 0, info: 0, total: findings.length };
+  const vulns = isObject(parsed.vulnerabilities) ? parsed.vulnerabilities : {};
+  for (const raw of Object.values(vulns)) {
+    if (!isObject(raw)) continue;
+    switch (raw.severity) {
+      case "critical":
+        counts.critical++;
+        break;
+      case "high":
+        counts.high++;
+        break;
+      case "moderate":
+        counts.moderate++;
+        break;
+      case "low":
+        counts.low++;
+        break;
+      default:
+        counts.info++; // info i neznámá/chybějící severity
+    }
+  }
+  return counts;
 }
 
 /**
@@ -342,9 +362,11 @@ function readCounts(parsed: Record<string, unknown>, findings: Finding[]): Audit
  * `skipped` s důvodem. Skip nastane u: nevalidního JSON, top-level `error`
  * (síť/ENOAUDIT), a u jiného formátu než auditReportVersion 2 (npm v6 má
  * `advisories` – v1 nepodporujeme). Past s exit kódem řeší runner výš; sem chodí
- * stdout bez ohledu na kód.
+ * stdout bez ohledu na kód. `lockfile` = jméno skutečně auditovaného lockfilu
+ * (package-lock.json / npm-shrinkwrap.json) – stane se `file` každého nálezu, ať
+ * report neukazuje na soubor, který v projektu není (volající zná, parser sám ne).
  */
-export function parseAuditJson(stdout: string): AuditResult {
+export function parseAuditJson(stdout: string, lockfile: string): AuditResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout);
@@ -373,7 +395,7 @@ export function parseAuditJson(stdout: string): AuditResult {
   const vulns = isObject(parsed.vulnerabilities) ? parsed.vulnerabilities : {};
   const findings: Finding[] = [];
   for (const [name, raw] of Object.entries(vulns)) {
-    if (isObject(raw)) findings.push(vulnToFinding(name, raw));
+    if (isObject(raw)) findings.push(vulnToFinding(name, raw, lockfile));
   }
 
   return { kind: "ran", findings, counts: readCounts(parsed, findings) };
@@ -389,5 +411,5 @@ export async function auditDependencies(
 ): Promise<AuditResult> {
   const out = await collectAuditOutput(projectRoot, options);
   if (out.kind === "skipped") return out;
-  return parseAuditJson(out.stdout);
+  return parseAuditJson(out.stdout, out.lockfile);
 }

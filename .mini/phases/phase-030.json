@@ -1,0 +1,48 @@
+{
+  "id": 30,
+  "title": "Audit: jméno lockfilu a counts",
+  "goal": "Protáhnout skutečné jméno lockfilu (package-lock.json vs npm-shrinkwrap.json) z collectAuditOutput až do vulnToFinding, ať nálezy auditu míří na reálný soubor (28-1, s testem nad npm-shrinkwrap.json), a opravit rozporná čísla readCounts ve fallbacku bez metadat tak, aby report nelhal (28-2).",
+  "status": "done",
+  "fromFinding": "28-2",
+  "steps": [
+    {
+      "title": "Protáhnout jméno lockfilu do AuditOutput",
+      "status": "done",
+      "detail": "Přidat lockfile: string do varianty kind:output v AuditOutput (audit.ts:139) a naplnit ho v collectAuditOutput (audit.ts:211) z už zjištěného lockfile. Typecheck zelený."
+    },
+    {
+      "title": "Předat lockfile do parseAuditJson a vulnToFinding",
+      "status": "done",
+      "detail": "parseAuditJson(stdout, lockfile) → vulnToFinding(name, raw, lockfile); file: použije předané jméno místo natvrdo package-lock.json (audit.ts:308). auditDependencies předá out.lockfile. Upravit přímá volání v testech."
+    },
+    {
+      "title": "Test 28-1: nález míří na npm-shrinkwrap.json",
+      "status": "done",
+      "detail": "Test přes REÁLNOU cestu collectAuditOutput→parseAuditJson (injektovaný runner) nad projektem s npm-shrinkwrap.json: findings[].file === npm-shrinkwrap.json. Mutace zpět na natvrdo package-lock.json test shodí. Ne mock s natvrdo zadanou hodnotou."
+    },
+    {
+      "title": "Konzistentní counts ve fallbacku bez metadat (28-2)",
+      "status": "done",
+      "detail": "V readCounts fallbacku (audit.ts:329) dopočítat critical/high/moderate/low/info z vuln.severity napříč parsed.vulnerabilities, ať součet sedí s total (= počet nálezů). Report netvrdí kritických 0, když nálezy jsou."
+    },
+    {
+      "title": "Test 28-2: fallback counts nelžou",
+      "status": "done",
+      "detail": "V audit.parse.test.ts report bez metadata s vulns různých závažností → counts po závažnostech odpovídají vulns (ne samé 0), total = počet. Mutace (fallback → samé 0) test shodí."
+    },
+    {
+      "title": "Nezávislý self-review + e2e",
+      "status": "done",
+      "detail": "Sub-agent v čerstvém kontextu (cross-module kontrakt lockfilu, dosažitelnost fallbacku, prázdný/poškozený vstup); npm test + typecheck + build zelené."
+    }
+  ],
+  "startedAt": "2026-06-19T18:40:19.699Z",
+  "completedAt": "2026-06-19T18:53:11.451Z",
+  "autoCommit": {
+    "preSha": "b60431d2163c36cbb07ae202a5b5059e9018a575",
+    "subject": "Phase 30: Audit: jméno lockfilu a counts"
+  },
+  "resolvedFindings": [
+    "28-1"
+  ]
+}

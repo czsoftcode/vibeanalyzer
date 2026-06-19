@@ -4,7 +4,7 @@
 > Each entry is `## <id> · <severity> · <status>`; do not hand-edit those header
 > lines.
 
-## 28-1 · should-know · open
+## 28-1 · should-know · resolved
 **Where:** src/audit.ts:308
 **Reviewed-at:** b9f438efcec50adea6848bece9dec5e809599497
 **Source:** project
@@ -13,7 +13,7 @@ Audit findings natvrdo ukazují package-lock.json i při npm-shrinkwrap.json
 
 vulnToFinding hardcode 'file: "package-lock.json"' bez ohledu na to, který lockfile byl skutečně nalezen a audítován. LOCKFILES (řádek 22) explicitně zahrnuje npm-shrinkwrap.json a findLockfile ho umí najít, ale parseAuditJson/vulnToFinding dostane jen stdout – jméno lockfilu se ztratí na hranici collectAuditOutput → parseAuditJson. Když projekt používá npm-shrinkwrap.json, report ukazuje nálezy na soubor package-lock.json, který v projektu neexistuje. Není testováno – žádný test nepoužívá npm-shrinkwrap.json (audit.run.test.ts a audit.parse.test.ts vždy create package-lock.json). Cross-module kontrakt: collectAuditOutput zná jméno lockfilu, parseAuditJson ne – chybí předání této informace.
 
-## 28-2 · nit · open
+## 28-2 · nit · resolved
 **Where:** src/audit.ts:330-337
 **Reviewed-at:** b9f438efcec50adea6848bece9dec5e809599497
 **Source:** project
