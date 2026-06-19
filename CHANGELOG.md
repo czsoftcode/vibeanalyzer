@@ -103,6 +103,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   v projektu byla i tak nedosažitelná (`@vitest/ui` se neinstaluje, test runner je
   dev-only a nepublikuje se). `npm audit` nově hlásí 0 zranitelností.
 
+### Fixed
+
+- Izolovaný běh strojové vrstvy (`tsc`/ESLint ve forku) už **nehromadí chybový výstup
+  dítěte bez stropu**. Patologicky upovídaný podproces mohl po celou dobu timeoutu
+  (120 s) nafukovat paměť rodiče zápisem na stderr – vedlejší kanál, kterým mohl
+  navzdory izolaci nástroj udusit. Stderr se nově ořezává na posledních 64 KiB.
+  Záměrně se drží **konec** výstupu, ne začátek: signatura docházející paměti
+  (`FATAL ERROR … heap out of memory`) přichází až těsně před pádem, takže ořezání
+  od začátku by ji zahodilo a běh by se chybně oznámil jako obecný pád místo „došla
+  paměť".
+
 ## [0.2.0] - 2026-06-19
 
 ### Changed

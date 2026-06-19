@@ -1,0 +1,39 @@
+{
+  "id": 29,
+  "title": "Doběh sandboxu fáze 28",
+  "goal": "Přidat regresní test symlinkové obrany realpath (28-4), omezit hromadění stderr v runIsolated stropem (28-3) a doplnit komentář k vědomě nezadrženému readDirectory/getDirectories v contained hostu (28-5); vše v src/analyze/, audit nálezy 28-1 a 28-2 zůstávají na samostatnou fázi.",
+  "status": "done",
+  "fromFinding": "28-5",
+  "steps": [
+    {
+      "title": "Regresní test symlinkového sync-gate (28-4)",
+      "status": "done",
+      "detail": "Nový test v tsc.test.ts: symlink uvnitř root mířící VEN + import na něj (volitelně i /// <reference path>). Assert: marker cizího souboru se neobjeví v findings, žádný file nemíří ven, pozitivní signál TS2307/TS6053. Zuby ověřit mutací: záměna isUnderRootRealSync→isUnderRoot v allowed() (tsc.ts:226) tento test shodí, stávajících 18 zůstává zelených."
+    },
+    {
+      "title": "Strop stderr v runIsolated se zachováním OOM (28-3)",
+      "status": "done",
+      "detail": "Omezit akumulaci stderr (runIsolated.ts:104) na pevný strop (~64 KiB) tail-preserving (zachovat KONEC výstupu), aby OOM_STDERR_RE na konci dál matchla. Head-only řešení zakázané (zahodí FATAL ERROR signaturu)."
+    },
+    {
+      "title": "Test stropu stderr + detekce OOM na konci",
+      "status": "done",
+      "detail": "Test: stderr delší než strop zakončený OOM signaturou je dál vyhodnocen jako crashed/OOM; uložený stderr nepřekročí strop. Mutace na head-only tento test shodí. 28-5 odškrtnuto jako už dokumentováno (tsc.ts:207-209), bez kódu."
+    },
+    {
+      "title": "Nezávislý self-review + e2e",
+      "status": "done",
+      "detail": "Sub-agent v čerstvém kontextu na chybové cesty (hranice stropu stderr, symlink vektory, prázdný/patologický vstup); npm test + lint + build zelené."
+    }
+  ],
+  "startedAt": "2026-06-19T18:13:28.627Z",
+  "completedAt": "2026-06-19T18:33:35.713Z",
+  "autoCommit": {
+    "preSha": "68106b7a3573bc524161be4b88d281f59dd06d69",
+    "subject": "Phase 29: Doběh sandboxu fáze 28"
+  },
+  "resolvedFindings": [
+    "28-4",
+    "28-3"
+  ]
+}

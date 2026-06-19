@@ -290,6 +290,53 @@ describe("analyzeTypeScript", () => {
     expect(res.findings.some((f) => f.rule === "TS6053")).toBe(true);
   }, 30_000);
 
+  it("ZUBY (fáze 28, SYMLINK import): symlink uvnitř root mířící VEN se NEpřečte – jen TS2307", async () => {
+    // ROZDÍL od testu na :243: tam je import LITERÁLNĚ "../secret" (chytí už isUnderRoot
+    // bez realpathu). Tady je importovaná cesta "./link" LITERÁLNĚ uvnitř root, ale link.ts
+    // je symlink mířící VEN. Zadrží to JEN realpath v allowed() (tsc.ts:226). Mutace
+    // isUnderRootRealSync→isUnderRoot tenhle test shodí, zatímco ostatní zůstanou zelené.
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    // marker: kdyby se obsah symlinku přečetl, TS ohlásí "Cannot find name <MARKER>"
+    await writeFile(path.join(outer, "secret.ts"), "export const leak = SYMLINK_IMPORT_LEAK_MARKER;\n");
+    // link.ts LEŽÍ uvnitř root, realpath ale míří VEN na secret.ts
+    await symlink(path.join(outer, "secret.ts"), path.join(root, "link.ts"));
+    await writeFile(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { strict: true, module: "esnext", moduleResolution: "bundler" }, files: ["a.ts"] }),
+    );
+    await writeFile(path.join(root, "a.ts"), 'import { leak } from "./link";\nexport const y = leak;\n');
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // obsah za symlinkem se NEVTÁHL (marker se nikde v hláškách neobjeví)
+    expect(res.findings.some((f) => f.message.includes("SYMLINK_IMPORT_LEAK_MARKER"))).toBe(false);
+    // POZITIVNÍ signál: gate vrátil "modul neexistuje" → TS2307 (ne tichý průchod)
+    expect(res.findings.some((f) => f.rule === "TS2307")).toBe(true);
+  }, 30_000);
+
+  it("ZUBY (fáze 28, SYMLINK reference): /// <reference path> na symlink ven se NEpřečte", async () => {
+    // druhý vektor (triple-slash reference míjí modulový resolver) přes symlink:
+    // referencovaná cesta je literálně uvnitř root, ale symlink míří ven. Opět zadrží
+    // jen realpath v sync gate containedCompilerHost.
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(outer, "refsecret.ts"), "const REF = SYMLINK_REF_LEAK_MARKER;\n");
+    await symlink(path.join(outer, "refsecret.ts"), path.join(root, "reflink.ts"));
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true }, files: ["a.ts"] }));
+    await writeFile(path.join(root, "a.ts"), '/// <reference path="./reflink.ts" />\nexport const x = 1;\n');
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.findings.some((f) => f.message.includes("SYMLINK_REF_LEAK_MARKER"))).toBe(false);
+    // POZITIVNÍ signál: gate vrátil "neexistuje" → TS6053 "File not found"
+    expect(res.findings.some((f) => f.rule === "TS6053")).toBe(true);
+  }, 30_000);
+
   it("zdravý projekt (relativní importy + lib Promise/Array) typuje BEZ falešných chyb", async () => {
     // ověření, že gate nerozbil legitimní cesty: import uvnitř root se resolvuje
     // a lib.es*.d.ts (Promise/Array – MIMO root, v přibaleném TS) se načte.

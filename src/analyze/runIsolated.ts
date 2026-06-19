@@ -55,6 +55,15 @@ export interface RunIsolatedOptions {
 // a abortuje (na Linuxu SIGABRT / kód 134), ale kód/signál se mezi platformami liší.
 const OOM_STDERR_RE = /heap out of memory|Allocation failed|out of memory|FATAL ERROR/i;
 
+// Strop akumulace stderru dítěte. Bez něj by patologicky upovídané dítě (verbose
+// výstup, NE OOM) nafukovalo paměť rodiče po celý timeout (vedlejší kanál, kterým
+// dítě udusí rodiče navzdory izolaci). Držíme KONEC, ne začátek: OOM signatura
+// („FATAL ERROR: … heap out of memory") přichází až těsně před abortem, takže
+// head-only strop by ji zahodil a looksLikeOom by OOM přestal poznat. Strop je
+// v UTF-16 znacích (ne striktně bajtech) – na ASCII OOM signaturu i přeposlání
+// stderru při pádu to bohatě stačí.
+export const STDERR_CAP = 64 * 1024;
+
 function looksLikeOom(code: number | null, signal: NodeJS.Signals | null, stderr: string): boolean {
   if (OOM_STDERR_RE.test(stderr)) return true;
   if (signal === "SIGABRT") return true;
@@ -102,6 +111,8 @@ export function runIsolated<T>(opts: RunIsolatedOptions): Promise<IsolatedOutcom
 
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
+      // tail-preserving: necháme jen poslední STDERR_CAP znaků (OOM signatura je na konci)
+      if (stderr.length > STDERR_CAP) stderr = stderr.slice(stderr.length - STDERR_CAP);
     });
 
     child.on("message", (msg: ChildMessage<T>) => {

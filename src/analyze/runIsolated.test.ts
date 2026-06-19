@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { runIsolated } from "./runIsolated.js";
+import { runIsolated, STDERR_CAP } from "./runIsolated.js";
 
 // Harness testujeme drobnými .mjs fixturami (ne reálným analyzátorem): node je
 // spustí přímo, bez tsx, deterministicky a rychle. Reálný běh tsc/ESLint přes
@@ -87,6 +87,45 @@ describe("runIsolated", () => {
     expect(outcome.kind).toBe("crashed");
     if (outcome.kind !== "crashed") return;
     expect(outcome.detail).toContain("rozbil jsem se");
+  }, 15_000);
+
+  it("strop stderr: upovídané dítě s OOM signaturou na KONCI → stále 'oom'", async () => {
+    // dítě vychrlí >strop balastu a OOM signaturu napíše až NAKONEC. Head-only strop
+    // by FATAL ERROR zahodil → 'crashed'. Tail-preserving ho zachová → 'oom'.
+    // writeSync(2,…): synchronní zápis na fd 2 zaručí, že balast i koncová signatura
+    // dorazí rodiči ještě před process.exit (na rozdíl od asynchronního stderr.write).
+    const child = await fixture(
+      "verbose-oom.mjs",
+      `import { writeSync } from 'node:fs';
+       process.on('message', () => {
+         const line = 'x'.repeat(1024) + '\\n';
+         for (let i = 0; i < 200; i++) writeSync(2, line); // ~200 KiB balastu (> strop)
+         writeSync(2, 'FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory\\n');
+         process.exit(1); // ne OOM exit kód: detekce MUSÍ stát na stderru
+       });`,
+    );
+    const outcome = await runIsolated({ childPath: child, payload: {}, timeoutMs: 10_000 });
+    expect(outcome.kind).toBe("oom");
+  }, 15_000);
+
+  it("strop stderr: balast dítěte je oříznut na STDERR_CAP (ne neomezené hromadění)", async () => {
+    // dítě vychrlí ~500 KiB stderru a spadne BEZ OOM signatury → 'crashed' s detailem.
+    // detail = "kód 3\\n" + stderr; stderr musí být oříznutý na strop. Bez stropu by
+    // detail měl ~500 KiB a tento assert padl.
+    const child = await fixture(
+      "verbose-crash.mjs",
+      `import { writeSync } from 'node:fs';
+       process.on('message', () => {
+         const line = 'y'.repeat(1024) + '\\n';
+         for (let i = 0; i < 500; i++) writeSync(2, line); // ~500 KiB
+         process.exit(3); // plain pád, žádná OOM signatura
+       });`,
+    );
+    const outcome = await runIsolated({ childPath: child, payload: {}, timeoutMs: 10_000 });
+    expect(outcome.kind).toBe("crashed");
+    if (outcome.kind !== "crashed") return;
+    expect(outcome.detail).not.toContain("memory"); // OOM signatura tu nesmí být (falešné 'oom')
+    expect(outcome.detail.length).toBeLessThanOrEqual(STDERR_CAP + 16); // "kód 3\\n" prefix se vejde do rezervy
   }, 15_000);
 
   it("crash: chybný child skript (fork selže nebo hned umře) → 'crashed', ne hang", async () => {

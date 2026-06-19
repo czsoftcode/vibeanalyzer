@@ -142,6 +142,11 @@
       "id": 28,
       "title": "Sandbox importů: CompilerHost tsc",
       "status": "done"
+    },
+    {
+      "id": 29,
+      "title": "Doběh sandboxu fáze 28",
+      "status": "done"
     }
   ]
 }
