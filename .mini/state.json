@@ -112,6 +112,11 @@
       "id": 22,
       "title": "Strojová bezpečnost: hledání tajemství",
       "status": "done"
+    },
+    {
+      "id": 23,
+      "title": "Strojová bezpečnost: audit závislostí",
+      "status": "done"
     }
   ]
 }

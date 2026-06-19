@@ -1,0 +1,44 @@
+{
+  "id": 23,
+  "title": "Strojová bezpečnost: audit závislostí",
+  "goal": "Spustit npm audit --json jako podproces v analyzovaném projektu, převést zranitelné závislosti na strojové nálezy (balík, závažnost, CVE, dostupná oprava) a vykreslit je v reportu; bez sítě / bez package-lock.json / bez npm se vrstva čistě přeskočí (jako AI vrstva), ne spadne. Report rozliší 'čistý' vs 'přeskočeno'. Ošetřit timeout/izolaci jako u tsc/ESLint.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Flagy --audit a --dev v args.ts",
+      "status": "done",
+      "detail": "Rozšířit ParsedArgs (run) o audit:boolean a dev:boolean, naparsovat oba. args.ts zůstává bez vedlejších efektů (varování '--dev bez --audit' patří do CLI). Testy parseArgs: --audit, --audit --dev, samotné --dev, nic."
+    },
+    {
+      "title": "Spuštění npm audit izolovaně (temp kopie + sanitace + timeout)",
+      "status": "done",
+      "detail": "Nový src/audit.ts: ověří package-lock.json/npm-shrinkwrap.json, zkopíruje package.json+lock do dočasného adresáře, spustí npm audit --json [--omit=dev] s --registry=npmjs.org a sanitovaným prostředím (smaž npm_config_*/*_proxy), tvrdý timeout + zabití procesu. Vrací surový {stdout, code} nebo důvod skipu. Spouštěč npm injektovatelný (testy bez sítě). Úklid temp dir VŽDY. Testy: nenulový exit != selhání, timeout -> skip, chybějící lockfile -> skip, temp dir uklizen."
+    },
+    {
+      "title": "Parser npm audit JSON -> nálezy (AuditResult)",
+      "status": "done",
+      "detail": "Z auditReportVersion:2 vyrobit Finding[]: source audit (rozšířit FindingSource), file=package-lock.json, rule=CVE/GHSA, message=balík@rozsah + advisory + 'oprava: ano/ne' (bez příkazu k fixu). Severity mapping critical/high->error, moderate->warning, low->info. Ošetřit via (string|objekt) i fixAvailable (bool|objekt); v6/neznámý tvar -> skip. Union ran|skipped. Testy nad fixními JSON (nálezy/čisto/nevalidní/starý formát)."
+    },
+    {
+      "title": "Render auditu v reportu (md + JSON)",
+      "status": "done",
+      "detail": "Sekce 'Strojové nálezy (závislosti)' + souhrnný řádek, rozlišit ran-nálezy / ran-čisto / skipped-s-konkrétním-důvodem. JsonIndex nese audit, bump INDEX_VERSION 5->6. Testy tří+ stavů, důvod skipu je v reportu i JSON."
+    },
+    {
+      "title": "Napojení do CLI",
+      "status": "done",
+      "detail": "cli.ts: když parsed.audit, zavolá audit vrstvu (předá dev), výsledek do buildJsonIndex/buildMarkdown; jinak AuditResult skipped 'audit nevyžádán (--audit)'. --dev bez --audit -> jemná pozn. na stderr. Ověření: typecheck + build zelené."
+    },
+    {
+      "title": "End-to-end + nezávislý self-review",
+      "status": "done",
+      "detail": "E2e přes run() s injektovaným auditem: --audit s nálezem -> report ho označí; bez --audit -> 'přeskočeno (nevyžádán)'; bez lockfilu -> skip s důvodem. Pak nezávislý sub-agent (čerstvý kontext) na past s exit kódem, chybové cesty, úklid temp dir a kontrakt mezi moduly."
+    }
+  ],
+  "startedAt": "2026-06-19T01:09:46.229Z",
+  "completedAt": "2026-06-19T01:29:14.093Z",
+  "autoCommit": {
+    "preSha": "31061f055a175d7dc6d3815092c053256733fe4c",
+    "subject": "Phase 23: Strojová bezpečnost: audit závislostí"
+  }
+}

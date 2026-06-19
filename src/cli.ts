@@ -4,6 +4,7 @@ import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
+import { auditDependencies, type AuditResult } from "./audit.js";
 import { analyzeESLint } from "./analyze/eslint.js";
 import { ANALYSIS_TIMEOUT_MS, availableMemoryBytes, computeMemoryLimitMb } from "./analyze/limits.js";
 import { type IsolatedOutcome, runIsolated } from "./analyze/runIsolated.js";
@@ -142,6 +143,8 @@ export interface RunDeps {
   analyzeES?: typeof analyzeESLint;
   /** Injektovatelný skener tajemství (test si podstrčí svůj; jinak reálný). */
   scanSecretsFn?: typeof scanSecrets;
+  /** Injektovatelný audit závislostí (test si podstrčí svůj; jinak reálný npm audit). */
+  auditFn?: typeof auditDependencies;
 }
 
 export async function run(
@@ -167,6 +170,13 @@ export async function run(
 
   const { targetPath } = parsed;
   const outDir = parsed.outDir ?? defaultOutDir(homedir(), targetPath);
+
+  // `--dev` má smysl jen s `--audit` (rozšiřuje audit o vývojové závislosti).
+  // Samotné `--dev` je neúčinné – řekneme to nahlas, ať uživatel netápe, proč se
+  // nic nestalo (ne tiché spolknutí volby).
+  if (parsed.dev && !parsed.audit) {
+    console.error("Pozn.: --dev nemá bez --audit žádný efekt (audit se nespustí). Použij --audit --dev.");
+  }
 
   const valid = await validateTarget(targetPath);
   if (!valid.ok) {
@@ -336,7 +346,26 @@ export async function run(
     secrets = { kind: "skipped", reason: "skener tajemství během analýzy selhal (viz stderr)" };
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets);
+  // Audit závislostí je OPT-IN (--audit) a síťový. Bez --audit se vrstva čistě
+  // přeskočí s konkrétním důvodem (ne tiché „čisto"). Stejný defenzivní catch jako
+  // ostatní vrstvy: auditDependencies sám nepadá (mapuje chyby na skipped), catch je
+  // pro NEČEKANÉ selhání, ať jeden problém neshodí celý report.
+  let audit: AuditResult;
+  if (parsed.audit) {
+    const auditReal = deps.auditFn ?? auditDependencies;
+    try {
+      console.log("Audit závislostí (npm audit) běží…");
+      audit = await auditReal(targetPath, { dev: parsed.dev });
+    } catch (err: unknown) {
+      const e = err as Error;
+      console.error(`Upozornění: audit závislostí selhal a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      audit = { kind: "skipped", reason: "audit závislostí během běhu selhal (viz stderr)" };
+    }
+  } else {
+    audit = { kind: "skipped", reason: "audit nevyžádán (spusť s --audit)" };
+  }
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
@@ -346,6 +375,7 @@ export async function run(
     tsc,
     eslint,
     secrets,
+    audit,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);

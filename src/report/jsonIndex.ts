@@ -1,12 +1,14 @@
+import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
 import type { FileEntry } from "../scan.js";
 import type { SecretsResult } from "../secrets.js";
 
 /**
  * Strojový strukturální index. Od verze 2 nese výsledek tsc vrstvy (`tsc`), od
- * verze 3 i ESLint vrstvy (`eslint`), od verze 5 i skeneru tajemství (`secrets`)
- * – celé diskriminované výsledky, ne jen pole nálezů, aby ze strojového výstupu
- * šlo poznat i "přeskočeno" vs "čistý projekt" (jinak by i JSON tiše lhal).
+ * verze 3 i ESLint vrstvy (`eslint`), od verze 5 i skeneru tajemství (`secrets`),
+ * od verze 6 i auditu závislostí (`audit`) – celé diskriminované výsledky, ne jen
+ * pole nálezů, aby ze strojového výstupu šlo poznat i "přeskočeno" vs "čistý
+ * projekt" (jinak by i JSON tiše lhal).
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -22,10 +24,12 @@ export interface JsonIndex {
   eslint: EslintResult;
   /** výsledek skeneru tajemství (klíče, tokeny) */
   secrets: SecretsResult;
+  /** výsledek auditu závislostí (npm audit); přeskočeno, když není --audit */
+  audit: AuditResult;
 }
 
-/** Bump 4 → 5: index nese `secrets` (skener tajemství). Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 5;
+/** Bump 5 → 6: index nese `audit` (audit závislostí). Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 6;
 
 export function buildJsonIndex(
   root: string,
@@ -34,6 +38,7 @@ export function buildJsonIndex(
   tsc: TscResult,
   eslint: EslintResult,
   secrets: SecretsResult,
+  audit: AuditResult,
 ): JsonIndex {
   return {
     version: INDEX_VERSION,
@@ -43,5 +48,6 @@ export function buildJsonIndex(
     tsc,
     eslint,
     secrets,
+    audit,
   };
 }

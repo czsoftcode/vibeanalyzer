@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
@@ -17,6 +18,8 @@ export interface MarkdownInput {
   eslint?: EslintResult;
   /** Výsledek skeneru tajemství; když chybí, sekce se vykreslí jako "přeskočeno". */
   secrets?: SecretsResult;
+  /** Výsledek auditu závislostí; když chybí, sekce se vykreslí jako "přeskočeno". */
+  audit?: AuditResult;
 }
 
 export interface MarkdownOptions {
@@ -203,6 +206,49 @@ function secretsSummaryLine(secrets: SecretsResult | undefined): string {
 }
 
 /**
+ * Sekce "## Strojové nálezy (závislosti)". Stejné tři stavy jako ostatní vrstvy.
+ * Skip nese KONKRÉTNÍ důvod (audit nevyžádán / bez lockfilu / bez sítě …), ať se
+ * "nic se neměřilo" neplete s "čisto". Audit je opt-in (`--audit`), takže výchozí
+ * běh tu uvidí "přeskočeno (audit nevyžádán)".
+ */
+function auditSection(audit: AuditResult | undefined): string[] {
+  const out: string[] = ["## Strojové nálezy (závislosti)", ""];
+
+  if (!audit || audit.kind === "skipped") {
+    const reason = audit?.reason ?? "audit nevyžádán (spusť s --audit)";
+    out.push(`_Audit závislostí přeskočen: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  const c = audit.counts;
+  out.push(
+    `npm audit našel ${c.total} zranitelností ` +
+      `(kritických ${c.critical}, vysokých ${c.high}, středních ${c.moderate}, nízkých ${c.low}).`,
+  );
+  out.push("");
+
+  if (audit.findings.length === 0) {
+    out.push("_Žádné zranitelné závislosti._");
+    out.push("");
+    return out;
+  }
+
+  for (const f of audit.findings) {
+    out.push(renderFinding(f));
+  }
+  out.push("");
+  return out;
+}
+
+/** Krátké shrnutí stavu auditu závislostí do hlavičky reportu. */
+function auditSummaryLine(audit: AuditResult | undefined): string {
+  if (!audit || audit.kind === "skipped") return "- Závislosti: přeskočeno";
+  if (audit.findings.length === 0) return "- Závislosti: čistý (0 nálezů)";
+  return `- Závislosti: ${audit.findings.length} nálezů`;
+}
+
+/**
  * Vloží cizí text jako blockquote (každý řádek `> `). Spolu s neutralizeFences
  * tím udržíme cizí `#` nadpisy i fence uvnitř citace – nerozbijí strukturu
  * našich sekcí ani Mermaid blok.
@@ -324,6 +370,7 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(tscSummaryLine(input.tsc));
   out.push(eslintSummaryLine(input.eslint));
   out.push(secretsSummaryLine(input.secrets));
+  out.push(auditSummaryLine(input.audit));
   out.push("");
 
   out.push(...intentSection(input.intent));
@@ -333,6 +380,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(...eslintSection(input.eslint));
 
   out.push(...secretsSection(input.secrets));
+
+  out.push(...auditSection(input.audit));
 
   out.push("## Struktura složek");
   out.push("");

@@ -1,6 +1,6 @@
 {
   "name": "vibeanalyzer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Lokální CLI analyzátor projektů psaných AI agenty – kód, bezpečnost, struktura, logika a non-goaly.",
   "type": "module",
   "bin": {

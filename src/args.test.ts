@@ -8,24 +8,39 @@ import { projectKey } from "./projectPaths.js";
 describe("parseArgs", () => {
   const cwd = "/home/user/proj";
 
-  it("bez argumentu bere aktuální složku a výchozí výstup (null)", () => {
+  it("bez argumentu bere aktuální složku a výchozí výstup (null), audit/dev vypnuté", () => {
     const r = parseArgs([], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: false });
   });
 
   it("vezme cestu jako pozicní argument, výstup zůstává výchozí", () => {
     const r = parseArgs(["./sub"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null, audit: false, dev: false });
   });
 
   it("--out přepíše výstupní adresář", () => {
     const r = parseArgs(["./sub", "--out", "/tmp/out"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out", audit: false, dev: false });
   });
 
   it("--out= varianta funguje taky", () => {
     const r = parseArgs(["--out=/tmp/out", "x"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false });
+  });
+
+  it("--audit zapne audit, dev zůstává vypnuté", () => {
+    const r = parseArgs(["--audit"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false });
+  });
+
+  it("--audit --dev zapne obojí", () => {
+    const r = parseArgs(["--audit", "--dev", "./p"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./p"), outDir: null, audit: true, dev: true });
+  });
+
+  it("samotné --dev (bez --audit) se zaznamená, ale audit zůstává vypnutý", () => {
+    const r = parseArgs(["--dev"], cwd);
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: true });
   });
 
   it("--help a --version mají přednost", () => {

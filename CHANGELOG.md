@@ -9,6 +9,16 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Audit závislostí (volitelný, přepínač `--audit`): report nově hlásí zranitelné npm
+  závislosti přes `npm audit` (balík, závažnost, CVE/GHSA, jestli existuje oprava).
+  Je to síťová operace, proto se spustí jen na výslovné přání – bez `--audit` se
+  vrstva přeskočí a výchozí běh zůstává offline. `--audit --dev` zahrne i vývojové
+  závislosti (jinak jen produkční). Kvůli bezpečnosti se `npm audit` pouští nad kopií
+  `package.json`+`package-lock.json` v dočasném adresáři s vynuceným oficiálním
+  registry, takže se nepřečte `.npmrc` analyzovaného projektu (obrana proti
+  přesměrování na cizí registry). Podporován je jen npm lockfile (ne yarn/pnpm);
+  bez lockfilu nebo bez sítě se vrstva čistě přeskočí s konkrétním důvodem. JSON
+  index proto povýšil na verzi 6 (nese pole `audit`).
 - Strojové hledání tajemství: report nově hlásí pravděpodobné klíče a tokeny v kódu
   (privátní PEM klíče, AWS, GitHub, Google, Slack, Stripe) s odkazem na `soubor:řádek`.
   Skener čte i jinak ignorované soubory typu `.env`/`*.pem`/`id_rsa` u kořene projektu,

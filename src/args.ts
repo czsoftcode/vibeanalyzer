@@ -7,7 +7,7 @@ import { projectKey } from "./projectPaths.js";
 export type ParsedArgs =
   | { kind: "help" }
   | { kind: "version" }
-  | { kind: "run"; targetPath: string; outDir: string | null }
+  | { kind: "run"; targetPath: string; outDir: string | null; audit: boolean; dev: boolean }
   | { kind: "error"; message: string };
 
 /**
@@ -23,13 +23,19 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
 
 /**
  * Zpracuje argumenty (bez vedlejších efektů – nesahá na disk).
- * `vibeanalyzer [cesta] [--out <adresář>]`; bez cesty se bere ".".
+ * `vibeanalyzer [cesta] [--out <adresář>] [--audit] [--dev]`; bez cesty se bere ".".
  * `outDir === null` znamená "použij výchozí" (viz defaultOutDir) – samotné
  * parsování nezná home adresář, ten dopočítá až volající.
+ *
+ * `--audit` zapne (opt-in) audit závislostí přes `npm audit` (síťová operace).
+ * `--dev` k auditu přidá i vývojové závislosti; SAMOTNÉ `--dev` (bez `--audit`)
+ * je neúčinné – parser ho jen zaznamená, varování řeší CLI (args bez side efektů).
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let target: string | undefined;
   let out: string | undefined;
+  let audit = false;
+  let dev = false;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
@@ -48,6 +54,14 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       out = a.slice("--out=".length);
       continue;
     }
+    if (a === "--audit") {
+      audit = true;
+      continue;
+    }
+    if (a === "--dev") {
+      dev = true;
+      continue;
+    }
     if (a.startsWith("-")) {
       return { kind: "error", message: `Neznámá volba: ${a}` };
     }
@@ -60,7 +74,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir };
+  return { kind: "run", targetPath, outDir, audit, dev };
 }
 
 /** Výsledek validace cílové cesty. */
