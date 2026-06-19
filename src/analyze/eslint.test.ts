@@ -2,6 +2,7 @@ import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { isMinifiedName } from "../minified.js";
 import type { FileEntry } from "../scan.js";
 import { analyzeESLint } from "./eslint.js";
 import { LINTABLE_EXTENSIONS } from "./eslintConfig.js";
@@ -17,7 +18,7 @@ afterEach(async () => {
 });
 
 function file(p: string, ext: string): FileEntry {
-  return { path: p, type: "file", ext, size: 1, depth: 1 };
+  return { path: p, type: "file", ext, size: 1, depth: 1, minified: isMinifiedName(p.split("/").pop() ?? p) };
 }
 
 describe("analyzeESLint", () => {
@@ -86,7 +87,7 @@ describe("analyzeESLint", () => {
 
   it("žádné JS/TS soubory → skipped", async () => {
     const root = await tmp();
-    const res = await analyzeESLint(root, [file("README.md", ".md"), { path: "src", type: "dir", ext: "", size: 0, depth: 1 }]);
+    const res = await analyzeESLint(root, [file("README.md", ".md"), { path: "src", type: "dir", ext: "", size: 0, depth: 1, minified: false }]);
     expect(res.kind).toBe("skipped");
     if (res.kind !== "skipped") return;
     expect(res.reason).toContain("JS/TS");

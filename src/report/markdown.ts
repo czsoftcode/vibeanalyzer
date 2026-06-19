@@ -293,7 +293,8 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
 /** Krátké shrnutí stavu grafu modulů do hlavičky reportu. */
 function moduleGraphSummaryLine(mg: ModuleGraphResult | undefined): string {
   if (!mg || mg.kind === "skipped") return "- Graf modulů: přeskočeno";
-  return `- Graf modulů: ${mg.edges.length} hran mezi ${mg.fileCount} soubory`;
+  const minSuffix = mg.minified > 0 ? ` (${mg.minified} minifikátů vyřazeno)` : "";
+  return `- Graf modulů: ${mg.edges.length} hran mezi ${mg.fileCount} soubory${minSuffix}`;
 }
 
 /**
@@ -498,17 +499,21 @@ function moduleGraphSection(
   if (mg.unreadable > 0) skippedNotes.push(`${mg.unreadable} nečitelných`);
   if (mg.unparsable > 0) skippedNotes.push(`${mg.unparsable} nezparsovatelných`);
   if (mg.tooLarge > 0) skippedNotes.push(`${mg.tooLarge} příliš velkých (bundle?)`);
+  if (mg.minified > 0) skippedNotes.push(`${mg.minified} minifikátů (podle jména)`);
   if (skippedNotes.length > 0) {
     out.push(`> Přeskočené soubory: ${skippedNotes.join(", ")}.`);
     out.push("");
   }
 
   if (mg.edges.length === 0) {
-    // Odliš "vážně nic" od "vše se přeskočilo" (tichý falešný "čisto"): když se
-    // nezparsoval ani jeden zdrojový soubor, ale nějaké se přeskočily, řekni to.
-    const allSkipped = mg.fileCount === 0 && mg.unreadable + mg.unparsable + mg.tooLarge > 0;
+    // Odliš "vážně nic" od "vše se přeskočilo/vyřadilo" (tichý falešný "čisto"):
+    // když nezbyl k sestavení grafu ani jeden zdrojový soubor, ale nějaké se
+    // přeskočily NEBO vyřadily (vč. minifikátů), řekni to – jinak by projekt jen
+    // z bundlů (fileCount=0, minified>0) lživě hlásil "žádné importní hrany".
+    const allSkipped =
+      mg.fileCount === 0 && mg.unreadable + mg.unparsable + mg.tooLarge + mg.minified > 0;
     if (allSkipped) {
-      out.push("_Žádný zdrojový soubor se nepodařilo přečíst/zparsovat – graf nelze sestavit (viz přeskočené výše)._");
+      out.push("_Žádný zdrojový soubor nezbyl k sestavení grafu – všechny byly přeskočeny nebo vyřazeny (viz přeskočené výše)._");
     } else {
       out.push("_Žádné importní hrany mezi soubory projektu._");
     }
@@ -559,7 +564,9 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push("");
   out.push(`- Kořen: \`${input.root}\``);
   out.push(`- Vygenerováno: ${input.generatedAt}`);
-  out.push(`- Souborů: ${fileEntries.length}`);
+  const minifiedCount = fileEntries.filter((f) => f.minified).length;
+  const minifiedSuffix = minifiedCount > 0 ? ` (z toho ${minifiedCount} minifikátů)` : "";
+  out.push(`- Souborů: ${fileEntries.length}${minifiedSuffix}`);
   out.push(`- Složek: ${dirPaths.length}`);
   if (input.skippedUnreadable.length > 0) {
     out.push(`- Přeskočeno (nečitelné): ${input.skippedUnreadable.length}`);
@@ -602,7 +609,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
     out.push("_Žádné soubory._");
   } else {
     for (const f of fileEntries) {
-      out.push(`- \`${f.path}\` (${f.size} B)`);
+      const tag = f.minified ? " — minifikát (nelintuje se / mimo graf)" : "";
+      out.push(`- \`${f.path}\` (${f.size} B)${tag}`);
     }
   }
   out.push("");

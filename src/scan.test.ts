@@ -110,6 +110,20 @@ describe("scanTree", () => {
     expect(srcDir?.depth).toBe(1);
   });
 
+  it("minified příznak: *.min.<ext> → true, běžný soubor i složka → false", async () => {
+    await writeFile(path.join(root, "src", "app.min.js"), "var a=1;\n", "utf8");
+    const { files } = await scanTree(root);
+
+    const min = files.find((f) => f.path === "src/app.min.js");
+    expect(min?.minified).toBe(true); // jméno vypadá jako minifikát
+
+    const idx = files.find((f) => f.path === "src/index.ts");
+    expect(idx?.minified).toBe(false); // běžný zdroják
+
+    const srcDir = files.find((f) => f.path === "src");
+    expect(srcDir?.minified).toBe(false); // složka nikdy
+  });
+
   it("nesleduje symlinky (žádné zacyklení)", async () => {
     // symlink mířící na sebe/rodiče by při sledování zacyklil
     await symlink(root, path.join(root, "loop")).catch(() => {});

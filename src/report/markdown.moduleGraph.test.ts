@@ -34,6 +34,7 @@ describe("buildMarkdown – sekce Graf modulů", () => {
       unreadable: 0,
       unparsable: 0,
       tooLarge: 0,
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
     expect(md).toContain("```mermaid");
@@ -53,6 +54,7 @@ describe("buildMarkdown – sekce Graf modulů", () => {
       unreadable: 0,
       unparsable: 0,
       tooLarge: 0,
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
     expect(md).toContain("Žádné importní hrany");
@@ -69,6 +71,7 @@ describe("buildMarkdown – sekce Graf modulů", () => {
       unreadable: 0,
       unparsable: 0,
       tooLarge: 0,
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
     expect(md).toContain("**Osamělé moduly (bez importní vazby):** 2");
@@ -87,9 +90,10 @@ describe("buildMarkdown – sekce Graf modulů", () => {
       unreadable: 0,
       unparsable: 0,
       tooLarge: 5, // všechny zdrojáky jsou bundly nad limitem
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
-    expect(md).toContain("graf nelze sestavit");
+    expect(md).toContain("nezbyl k sestavení grafu");
     expect(md).not.toContain("Žádné importní hrany mezi soubory projektu");
   });
 
@@ -102,11 +106,65 @@ describe("buildMarkdown – sekce Graf modulů", () => {
       unreadable: 2,
       unparsable: 1,
       tooLarge: 3,
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
     expect(md).toContain("2 nečitelných");
     expect(md).toContain("1 nezparsovatelných");
     expect(md).toContain("3 příliš velkých");
+  });
+
+  it("projekt JEN z minifikátů (fileCount=0, minified>0) NElže 'žádné importní hrany'", () => {
+    // Reálná díra: bez minified v allSkipped sumě by report spadl do else větve
+    // a tvrdil 'žádné importní hrany mezi soubory' = tichý falešný 'čisto', ač se
+    // jen vše vyřadilo jako bundle. Když rozbiju opravu, tenhle test padne.
+    const mg: ModuleGraphResult = {
+      kind: "ran",
+      edges: [],
+      isolated: [],
+      fileCount: 0,
+      unreadable: 0,
+      unparsable: 0,
+      tooLarge: 0,
+      minified: 3,
+    };
+    const md = buildMarkdown(input(mg));
+    expect(md).not.toContain("Žádné importní hrany mezi soubory projektu"); // lež
+    expect(md).toContain("nezbyl k sestavení grafu"); // pravdivá hláška
+    expect(md).toContain("3 minifikátů (podle jména)"); // a přiznaný počet
+  });
+
+  it("vyřazené minifikáty se přiznají v souhrnu i v sekci grafu", () => {
+    const mg: ModuleGraphResult = {
+      kind: "ran",
+      edges: [{ from: "src/a.ts", to: "src/b.ts" }],
+      isolated: [],
+      fileCount: 2,
+      unreadable: 0,
+      unparsable: 0,
+      tooLarge: 0,
+      minified: 3,
+    };
+    const md = buildMarkdown(input(mg));
+    expect(md).toContain("- Graf modulů: 1 hran mezi 2 soubory (3 minifikátů vyřazeno)"); // souhrn
+    expect(md).toContain("3 minifikátů (podle jména)"); // poznámka v sekci
+  });
+
+  it("minified: 0 → souhrn ani poznámka o minifikátech nelže (žádný dovětek)", () => {
+    const mg: ModuleGraphResult = {
+      kind: "ran",
+      edges: [{ from: "src/a.ts", to: "src/b.ts" }],
+      isolated: [],
+      fileCount: 2,
+      unreadable: 0,
+      unparsable: 0,
+      tooLarge: 0,
+      minified: 0,
+    };
+    const md = buildMarkdown(input(mg));
+    expect(md).toContain("- Graf modulů: 1 hran mezi 2 soubory");
+    expect(md).not.toContain("minifikátů vyřazeno");
+    expect(md).not.toContain("minifikátů (podle jména)");
   });
 });
 
@@ -122,6 +180,7 @@ describe("buildMarkdown – výchozí strop respektuje limit Mermaidu (500 hran)
       unreadable: 0,
       unparsable: 0,
       tooLarge: 0,
+      minified: 0,
     };
     const md = buildMarkdown(input(mg));
     const arrowCount = (md.match(/ --> /g) ?? []).length;

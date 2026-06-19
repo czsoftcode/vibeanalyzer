@@ -1,0 +1,42 @@
+{
+  "id": 26,
+  "title": "Sjednotit filtr minifikátů v reportu",
+  "goal": "Nasadit sdílený isMinifiedName napříč zbytkem reportu (strom souborů, počet souborů, graf modulů, JSON index) tak, aby s minifikáty nakládal konzistentně a počet vyřazených/označených uváděl explicitně (žádné tiché vynechání); obsahová detekce dlouhých řádků (bundle.js bez .min.) zůstává mimo rozsah jako samostatná pozdější věc.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "minified příznak na FileEntry (scan.ts)",
+      "status": "done",
+      "detail": "Přidat minified: boolean do FileEntry, spočítat při stavbě záznamu přes isMinifiedName(basename) (složky vždy false). Jediný zdroj pravdy. Test v scan.test.ts: a.min.js → true, a.js → false, složka → false."
+    },
+    {
+      "title": "Graf modulů: minifikáty ven, počítat zvlášť",
+      "status": "done",
+      "detail": "V buildModuleGraph vyřadit f.minified zdrojáky z parsování i ze sady platných cílů hran a započítat je novým počítadlem minified ve variantě ran (odděleně od tooLarge). Test v moduleGraph.test.ts: malý app.min.js se nestane uzlem ani hranou a minified se inkrementuje."
+    },
+    {
+      "title": "Report: počet + seznam + souhrn grafu",
+      "status": "done",
+      "detail": "V markdown.ts rozpadnout počet na 'Souborů: N (z toho M minifikátů)' (dovětek jen když M>0), v ## Soubory označit minifikáty značkou [minifikát], a souhrn/sekci grafu modulů doplnit o počet vyřazených minifikátů. Upravit dotčené report testy/fixtures."
+    },
+    {
+      "title": "JSON index: bump verze 7 → 8",
+      "status": "done",
+      "detail": "FileEntry.minified a ModuleGraphResult.minified mění kontrakt JSONu → zvednout INDEX_VERSION na 8. Test jsonIndex.test.ts: verze = 8 a files[].minified je přítomné."
+    },
+    {
+      "title": "Kontraktové testy se zuby + e2e + nezávislý self-review",
+      "status": "done",
+      "detail": "Ověřit, že dočasné rozbití isMinifiedName / INDEX_VERSION shodí test u KAŽDÉHO konzumenta (ne jen mock). E2e CLI test s reálným .min.js fixture: report nakládá s minifikátem konzistentně napříč počtem, seznamem i grafem. Na závěr nezávislý sub-agent (čerstvý kontext) na cross-module a JSON kontrakt."
+    }
+  ],
+  "startedAt": "2026-06-19T08:06:53.225Z",
+  "resolvedVerify": [
+    "Vizuální čtení reportu na projektu s minifikáty"
+  ],
+  "completedAt": "2026-06-19T09:01:46.376Z",
+  "autoCommit": {
+    "preSha": "9b270ee582b0e7eecbad3e75299667b8aa25c4d3",
+    "subject": "Phase 26: Sjednotit filtr minifikátů v reportu"
+  }
+}

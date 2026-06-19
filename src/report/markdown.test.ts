@@ -3,9 +3,9 @@ import type { FileEntry } from "../scan.js";
 import { buildFolderDiagram, buildMarkdown } from "./markdown.js";
 
 const SAMPLE: FileEntry[] = [
-  { path: "src", type: "dir", ext: "", size: 0, depth: 1 },
-  { path: "src/index.ts", type: "file", ext: ".ts", size: 20, depth: 2 },
-  { path: "README.md", type: "file", ext: ".md", size: 10, depth: 1 },
+  { path: "src", type: "dir", ext: "", size: 0, depth: 1, minified: false },
+  { path: "src/index.ts", type: "file", ext: ".ts", size: 20, depth: 2, minified: false },
+  { path: "README.md", type: "file", ext: ".md", size: 10, depth: 1, minified: false },
 ];
 
 describe("buildMarkdown", () => {
@@ -21,6 +21,28 @@ describe("buildMarkdown", () => {
     expect(md).toContain("`src/index.ts`");
     expect(md).toContain("Souborů: 2");
     expect(md).toContain("Složek: 1");
+  });
+
+  it("minifikát: počet má dovětek a soubor v seznamu je označený", () => {
+    const md = buildMarkdown({
+      root: "/p",
+      generatedAt: "t",
+      files: [
+        { path: "src/index.ts", type: "file", ext: ".ts", size: 20, depth: 2, minified: false },
+        { path: "src/app.min.js", type: "file", ext: ".js", size: 999, depth: 2, minified: true },
+      ],
+      skippedUnreadable: [],
+    });
+    expect(md).toContain("Souborů: 2 (z toho 1 minifikátů)"); // počet přizná minifikát
+    expect(md).toContain("`src/app.min.js` (999 B) — minifikát"); // značka v seznamu
+    expect(md).not.toMatch(/`src\/index\.ts`[^\n]*minifikát/); // běžný soubor značku nemá
+  });
+
+  it("bez minifikátů: počet nemá dovětek (nelže o nule)", () => {
+    const md = buildMarkdown({ root: "/p", generatedAt: "t", files: SAMPLE, skippedUnreadable: [] });
+    expect(md).toContain("Souborů: 2");
+    expect(md).not.toContain("z toho");
+    expect(md).not.toContain("— minifikát");
   });
 
   it("nečitelné soubory dostanou vlastní sekci", () => {
@@ -138,7 +160,7 @@ describe("buildFolderDiagram", () => {
     const md = buildMarkdown({
       root: "/p/proj",
       generatedAt: "2026-06-15T18:00:00.000Z",
-      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1 })),
+      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1, minified: false })),
       skippedUnreadable: [],
     });
     expect(md).toContain("graph LR");
@@ -169,7 +191,7 @@ describe("buildFolderDiagram", () => {
     const md = buildMarkdown({
       root: "/p/proj",
       generatedAt: "2026-06-15T18:00:00.000Z",
-      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1 })),
+      files: dirs.map((p) => ({ path: p, type: "dir" as const, ext: "", size: 0, depth: 1, minified: false })),
       skippedUnreadable: [],
     });
     expect(md).toContain("zobrazeno 999 z 1001 složek");

@@ -2,6 +2,7 @@ import type { Dirent } from "node:fs";
 import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { DirIgnoreMatcher, DirIgnoreResult } from "./gitignore.js";
+import { isMinifiedName } from "./minified.js";
 
 /** Jeden záznam ve strukturálním indexu. */
 export interface FileEntry {
@@ -14,6 +15,12 @@ export interface FileEntry {
   size: number;
   /** hloubka od kořene; přímé děti kořene = 1 */
   depth: number;
+  /** `true`, když jméno souboru vypadá jako minifikát (`*.min.<ext>`); složky vždy
+   *  `false`. Spočítáno zde přes `isMinifiedName`. Report-level konzumenti (počty,
+   *  seznam, graf modulů, JSON) ČTOU tento příznak. Jediný zdroj pravdy o ROZHODNUTÍ
+   *  je sdílená funkce `isMinifiedName` – eslint/secrets si ji volají samostatně na
+   *  basename (ne přes tento příznak), ale na týž regex, takže se nemůžou rozejít. */
+  minified: boolean;
 }
 
 /** Vnořený/kořenový `.gitignore`, který existuje, ale nešel použít – degradace
@@ -227,7 +234,7 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
           ignoredByGitignore++;
           continue;
         }
-        files.push({ path: rel, type: "dir", ext: "", size: 0, depth });
+        files.push({ path: rel, type: "dir", ext: "", size: 0, depth, minified: false });
         await walk(abs, rel, depth + 1);
       } else {
         if (isOutputArtifact(ent.name)) continue;
@@ -251,6 +258,7 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
           ext: path.extname(ent.name).toLowerCase(),
           size,
           depth,
+          minified: isMinifiedName(ent.name),
         });
       }
     }

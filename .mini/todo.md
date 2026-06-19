@@ -18,8 +18,9 @@
 - [x] Interaktivní vytvoření project.md: když záměr není ani v .mini/, ani v ~/.vibeanalyzer/<název>/project.md, nabídnout uživateli vytvoření přes otázky (jako mini-orchestrator) podle vzoru .mini/project.md a uložit do ~/.vibeanalyzer/<název projektu>/project.md (read-only kontrakt cílového projektu zachován). Ošetřit práva/úklid při zápisu do domovského adresáře.
 - [x] ESLint analyzátor (druhá půlka původní todo 3): pustit ESLint nad analyzovaným projektem, namapovat výsledky do téhož modelu strojového nálezu a sekce "Strojové nálezy" jako tsc (fáze 12). Pozor: cizí ESLint config (flat vs. legacy) i pluginy v jejich node_modules mohou chybět/být rozbité → čistě přeskočit, ne pád. Ověření: schválně porušené lint pravidlo se objeví v reportu na správném soubor:řádek; projekt bez ESLint configu dá "ESLint přeskočeno".
 - [x] Filtr na minifikované .min.js - signál/šum v reportu
-- [ ] Prověřit 5 transitivních zranitelností z podstromu ESLintu
+- [x] Prověřit 5 transitivních zranitelností z podstromu ESLintu
 - [x] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
 - [ ] Plný sandbox vč. importů
 - [x] Mermaid vertikálně ne horizontálně a plný počet adresářů i když budou stovky
-- [ ] Rozšířit filtr minifikátů i mimo ESLint (strom souborů, počty Souborů, graf modulů, JSON index). Dnes se .min.* přeskakuje jen v ESLint vrstvě, jinde se počítá → report v jedné sekci bundle přeskočí a o pár řádků níž ho vypíše = protiřečí si. Sjednotit. Případně i obsahová detekce (dlouhý řádek) pro bundly bez .min. přípony (bundle.js).
+- [x] Rozšířit filtr minifikátů i mimo ESLint (strom souborů, počty Souborů, graf modulů, JSON index). Dnes se .min.* přeskakuje jen v ESLint vrstvě, jinde se počítá → report v jedné sekci bundle přeskočí a o pár řádků níž ho vypíše = protiřečí si. Sjednotit. Případně i obsahová detekce (dlouhý řádek) pro bundly bez .min. přípony (bundle.js).
+- [ ] Secrets vrstva: přiznat přeskočené soubory explicitně (minifikáty, velké soubory >1MiB, dlouhé řádky). Dnes secrets.ts tiše continue bez počítadla → SecretsResult nese jen fileCount (prohledané), ne skipnuté. Nesoulad se zásadou 'žádné tiché vynechání', kterou fáze 25/26 zavedly u ESLintu a grafu. Přidat skippedMinified (+ příp. další skip důvody) do SecretsResult a řádek do reportu.

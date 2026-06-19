@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { isMinifiedName } from "../minified.js";
 import type { FileEntry } from "../scan.js";
 import { buildModuleGraph, type ModuleGraphResult } from "./moduleGraph.js";
 
@@ -25,6 +26,7 @@ async function put(rel: string, content: string): Promise<FileEntry> {
     ext: path.extname(rel).toLowerCase(),
     size: Buffer.byteLength(content),
     depth: rel.split("/").length,
+    minified: isMinifiedName(rel.split("/").pop() ?? rel),
   };
 }
 
@@ -43,6 +45,26 @@ describe("buildModuleGraph", () => {
     expect(r.edges).toEqual([{ from: "src/a.ts", to: "src/b.ts" }]);
     expect(r.fileCount).toBe(2);
     expect(r.isolated).toEqual([]); // oba jsou v hraně
+  });
+
+  it("minifikát se nestane uzlem/hranou, počítá se zvlášť (minified, ne fileCount)", async () => {
+    const files = [
+      // reálný zdroják importuje knihovnu i bundle; hrana do bundlu se NEvykreslí
+      await put("src/a.ts", `import { x } from "./lib.js";\nimport "./vendor.min.js";\nexport const a = x;\n`),
+      await put("src/lib.ts", `export const x = 1;\n`),
+      await put("src/vendor.min.js", `var v=1;\n`), // malý → velikostní strop by ho minul
+      await put("src/app.min.js", `var a=1;\n`), // osamělý minifikát
+    ];
+    const r = asRan(await buildModuleGraph(proj, files));
+
+    expect(r.minified).toBe(2); // vendor.min.js + app.min.js, podle JMÉNA
+    expect(r.tooLarge).toBe(0); // nejde o velikost
+    expect(r.fileCount).toBe(2); // parsovaly se jen a.ts a lib.ts
+    // jediná hrana je do reálné knihovny; import do .min.js vypadl (není ve scanned)
+    expect(r.edges).toEqual([{ from: "src/a.ts", to: "src/lib.ts" }]);
+    // minifikáty nejsou ani uzel, ani 'isolated'
+    expect(r.isolated).toEqual([]);
+    expect(r.edges.some((e) => e.to.endsWith(".min.js") || e.from.endsWith(".min.js"))).toBe(false);
   });
 
   it("soubor bez hran je 'isolated', ne v grafu", async () => {
@@ -79,7 +101,7 @@ describe("buildModuleGraph", () => {
   it("nečitelný soubor (zmizel mezi scanem a čtením) se přeskočí, nespadne", async () => {
     const real = await put("src/b.ts", `export const b = 1;\n`);
     // FileEntry na soubor, který fyzicky neexistuje → readFile selže → unreadable++
-    const ghost: FileEntry = { path: "src/ghost.ts", type: "file", ext: ".ts", size: 10, depth: 2 };
+    const ghost: FileEntry = { path: "src/ghost.ts", type: "file", ext: ".ts", size: 10, depth: 2, minified: false };
     const r = asRan(await buildModuleGraph(proj, [ghost, real]));
     expect(r.unreadable).toBe(1);
     expect(r.fileCount).toBe(1);

@@ -10,7 +10,8 @@ import type { SecretsResult } from "../secrets.js";
  * od verze 6 i auditu závislostí (`audit`), od verze 7 i graf modulů
  * (`moduleGraph`) – celé diskriminované výsledky, ne jen pole nálezů, aby ze
  * strojového výstupu šlo poznat i "přeskočeno" vs "čistý projekt" (jinak by i
- * JSON tiše lhal).
+ * JSON tiše lhal). Od verze 8 nese každý `files[]` příznak `minified` (jméno
+ * `*.min.<ext>`) a `moduleGraph.minified` počítadlo z grafu vyřazených minifikátů.
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -32,8 +33,9 @@ export interface JsonIndex {
   moduleGraph: ModuleGraphResult;
 }
 
-/** Bump 6 → 7: index nese `moduleGraph` (graf modulů). Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 7;
+/** Bump 7 → 8: `FileEntry` nese příznak `minified` (a `moduleGraph.minified`
+ *  počítadlo vyřazených minifikátů). Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 8;
 
 export function buildJsonIndex(
   root: string,

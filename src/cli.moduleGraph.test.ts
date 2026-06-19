@@ -56,10 +56,41 @@ describe("run – e2e graf modulů", () => {
 
     // JSON nese graf 1:1 s vyřešenou hranou .js → .ts.
     const index = JSON.parse(json);
-    expect(index.version).toBe(7);
+    expect(index.version).toBe(8);
     expect(index.moduleGraph.kind).toBe("ran");
     expect(index.moduleGraph.edges).toEqual([{ from: "src/a.ts", to: "src/b.ts" }]);
     expect(index.moduleGraph.isolated).toEqual(["src/lonely.ts"]);
+  });
+
+  it("minifikát: konzistentní napříč počtem, seznamem, grafem i JSON (jádro fáze 26)", async () => {
+    await mkdir(path.join(proj, "src"), { recursive: true });
+    await writeFile(path.join(proj, "src", "a.ts"), `import { b } from "./b.js";\nexport const a = b;\n`, "utf8");
+    await writeFile(path.join(proj, "src", "b.ts"), `export const b = 1;\n`, "utf8");
+    await writeFile(path.join(proj, "src", "vendor.min.js"), `var v=1;\n`, "utf8");
+
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const { md, json } = await readOutputs(outDir);
+
+    // 1) Počet přizná minifikát (3 soubory, z toho 1 minifikát).
+    expect(md).toContain("Souborů: 3 (z toho 1 minifikátů)");
+    // 2) Seznam souborů ho označí (ne tiché vynechání – je vidět i s důvodem).
+    expect(md).toContain("`src/vendor.min.js` (9 B) — minifikát");
+    // 3) Souhrn i sekce grafu hlásí vyřazení.
+    expect(md).toContain("(1 minifikátů vyřazeno)");
+    expect(md).toContain("1 minifikátů (podle jména)");
+
+    // 4) JSON: příznak na souboru + počítadlo v grafu, minifikát NENÍ uzel/hrana.
+    const index = JSON.parse(json);
+    const vendor = index.files.find((f: { path: string }) => f.path === "src/vendor.min.js");
+    expect(vendor.minified).toBe(true);
+    expect(index.moduleGraph.minified).toBe(1);
+    const inGraph = (p: string) =>
+      index.moduleGraph.edges.some((e: { from: string; to: string }) => e.from === p || e.to === p) ||
+      index.moduleGraph.isolated.includes(p);
+    expect(inGraph("src/vendor.min.js")).toBe(false);
   });
 
   it("nečekané selhání builderu → vrstva 'skipped', report i tak vznikne (exit 0)", async () => {

@@ -127,6 +127,11 @@
       "id": 25,
       "title": "Filtr minifikátů z ESLint vrstvy",
       "status": "done"
+    },
+    {
+      "id": 26,
+      "title": "Sjednotit filtr minifikátů v reportu",
+      "status": "done"
     }
   ]
 }

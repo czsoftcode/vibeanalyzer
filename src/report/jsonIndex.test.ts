@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
+import type { FileEntry } from "../scan.js";
 import type { SecretsResult } from "../secrets.js";
 import { buildJsonIndex, INDEX_VERSION } from "./jsonIndex.js";
 
@@ -16,18 +17,31 @@ const noGraph: ModuleGraphResult = {
   unreadable: 0,
   unparsable: 0,
   tooLarge: 0,
+  minified: 0,
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 7 (index nese graf modulů)", () => {
-    expect(INDEX_VERSION).toBe(7);
+  it("verze indexu je 8 (FileEntry.minified + moduleGraph.minified)", () => {
+    expect(INDEX_VERSION).toBe(8);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph);
-    expect(idx.version).toBe(7);
+    expect(idx.version).toBe(8);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
+  });
+
+  it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {
+    const files: FileEntry[] = [
+      { path: "src/index.ts", type: "file", ext: ".ts", size: 20, depth: 2, minified: false },
+      { path: "src/app.min.js", type: "file", ext: ".js", size: 999, depth: 2, minified: true },
+    ];
+    const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
+    const idx = buildJsonIndex("/p", "t", files, tsc, noEslint, noSecrets, noAudit, noGraph);
+    expect(idx.files).toEqual(files); // pole projde 1:1
+    expect(idx.files.find((f) => f.path === "src/app.min.js")?.minified).toBe(true);
+    expect(idx.files.find((f) => f.path === "src/index.ts")?.minified).toBe(false);
   });
 
   it("nese eslint výsledek 1:1", () => {
@@ -74,6 +88,7 @@ describe("buildJsonIndex", () => {
       unreadable: 1,
       unparsable: 0,
       tooLarge: 0,
+      minified: 2,
     };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, graph);
     expect(idx.moduleGraph).toEqual(graph);

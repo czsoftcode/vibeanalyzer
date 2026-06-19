@@ -9,6 +9,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Minifikáty (`*.min.js`, `*.min.css` apod.) report nově řeší **konzistentně napříč
+  všemi sekcemi**, ne jen v ESLintu. Dřív jedna sekce bundle přeskočila a o pár řádků
+  níž ho strom i počty zase vypsaly – report si protiřečil. Nově: počet souborů uvádí
+  dovětek `(z toho M minifikátů)`, seznam souborů minifikát viditelně značí, graf
+  modulů je z grafu vyřadí (nekreslí hrany do/z bundlu) a počítá je zvlášť, a souhrn
+  i sekce grafu počet vyřazených hlásí. Rozhodnutí: minifikáty se **neskrývají, jen
+  označí** – strukturální mapa dál ukazuje, co na disku fyzicky je. Rozpoznání zůstává
+  v1 jen podle jména `*.min.<přípona>` (bundly bez té konvence jako `bundle.js` projdou
+  – report to přiznává). Pozn.: skener tajemství minifikáty zatím skipuje bez vlastního
+  počítadla (sjednocení i tam je v plánu). JSON index proto povýšil na verzi 8 (každý
+  soubor nese příznak `minified`, graf modulů počítadlo vyřazených).
 - Filtr minifikátů v ESLint vrstvě: minifikované soubory (`*.min.js`, `*.min.css`
   apod.) se už neposílají do ESLint analýzy. Dřív generovaný bundle zaplavil report
   falešnými nálezy (fatální „Parsing error" nebo desítky zásahů pravidel) o cizím,
@@ -16,8 +27,6 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   ESLint i v rychlém přehledu, takže „čistý" netají, že nějaké soubory linter vůbec
   neviděl. Omezení v1: rozpoznání je jen podle jména `*.min.<přípona>`, takže bundly
   bez té konvence (`bundle.js`) filtrem projdou a lintují se dál – report to přiznává.
-  Filtr zatím působí jen na ESLint vrstvu; strom souborů, počty a graf modulů
-  minifikáty dál započítávají.
 
 ### Added
 
