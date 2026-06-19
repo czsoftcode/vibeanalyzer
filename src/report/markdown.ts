@@ -2,6 +2,7 @@ import * as path from "node:path";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
 import type { FileEntry } from "../scan.js";
+import type { SecretsResult } from "../secrets.js";
 
 export interface MarkdownInput {
   root: string;
@@ -14,6 +15,8 @@ export interface MarkdownInput {
   tsc?: TscResult;
   /** Výsledek ESLint vrstvy; když chybí, sekce se vykreslí jako "přeskočeno". */
   eslint?: EslintResult;
+  /** Výsledek skeneru tajemství; když chybí, sekce se vykreslí jako "přeskočeno". */
+  secrets?: SecretsResult;
 }
 
 export interface MarkdownOptions {
@@ -155,6 +158,51 @@ function eslintSummaryLine(eslint: EslintResult | undefined): string {
 }
 
 /**
+ * Sekce "## Strojové nálezy (tajemství)". Stejné tři stavy jako tsc/ESLint –
+ * "nic nenalezeno" se nesmí splést s "skener neproběhl". Nálezy nesou jen
+ * MASKOVANÝ náznak (renderFinding tiskne `f.message`, který už je maskovaný ve
+ * skeneru) – report je commitovaný a nesmí tajemství unést dál.
+ */
+function secretsSection(secrets: SecretsResult | undefined): string[] {
+  const out: string[] = ["## Strojové nálezy (tajemství)", ""];
+
+  if (!secrets || secrets.kind === "skipped") {
+    const reason = secrets?.reason ?? "hledání tajemství se nespustilo";
+    out.push(`_Tajemství přeskočeno: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  out.push(`Prohledáno ${secrets.fileCount} souborů na známé tvary tajemství (klíče, tokeny).`);
+  out.push("");
+  out.push(
+    "> Pozor: hledají se jen známé tvary a jen u kořene projektu se nahlíží do " +
+      "jinak ignorovaných souborů (`.env`, `*.pem`). Tajemství zahrabané v " +
+      "`.gitignore`-prořezané podsložce nebo v neznámém tvaru se nemusí najít.",
+  );
+  out.push("");
+
+  if (secrets.findings.length === 0) {
+    out.push("_Žádná tajemství nenalezena._");
+    out.push("");
+    return out;
+  }
+
+  for (const f of secrets.findings) {
+    out.push(renderFinding(f));
+  }
+  out.push("");
+  return out;
+}
+
+/** Krátké shrnutí stavu skeneru tajemství do hlavičky reportu. */
+function secretsSummaryLine(secrets: SecretsResult | undefined): string {
+  if (!secrets || secrets.kind === "skipped") return "- Tajemství: přeskočeno";
+  if (secrets.findings.length === 0) return "- Tajemství: čistý (0 nálezů)";
+  return `- Tajemství: ${secrets.findings.length} nálezů`;
+}
+
+/**
  * Vloží cizí text jako blockquote (každý řádek `> `). Spolu s neutralizeFences
  * tím udržíme cizí `#` nadpisy i fence uvnitř citace – nerozbijí strukturu
  * našich sekcí ani Mermaid blok.
@@ -275,6 +323,7 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   }
   out.push(tscSummaryLine(input.tsc));
   out.push(eslintSummaryLine(input.eslint));
+  out.push(secretsSummaryLine(input.secrets));
   out.push("");
 
   out.push(...intentSection(input.intent));
@@ -282,6 +331,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(...tscSection(input.tsc));
 
   out.push(...eslintSection(input.eslint));
+
+  out.push(...secretsSection(input.secrets));
 
   out.push("## Struktura složek");
   out.push("");

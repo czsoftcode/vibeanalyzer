@@ -107,6 +107,11 @@
       "id": 21,
       "title": "Upgrade vitest na 4.1.9 (CVE-2026-47429)",
       "status": "done"
+    },
+    {
+      "id": 22,
+      "title": "Strojová bezpečnost: hledání tajemství",
+      "status": "done"
     }
   ]
 }

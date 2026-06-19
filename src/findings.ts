@@ -5,7 +5,7 @@
  */
 
 /** Který nástroj nález vyrobil. (AI vrstva rozšíří v dalších fázích.) */
-export type FindingSource = "tsc" | "eslint";
+export type FindingSource = "tsc" | "eslint" | "secret";
 
 /** Závažnost nálezu, sjednocená napříč nástroji. */
 export type Severity = "error" | "warning" | "info";

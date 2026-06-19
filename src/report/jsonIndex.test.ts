@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { EslintResult, TscResult } from "../findings.js";
+import type { SecretsResult } from "../secrets.js";
 import { buildJsonIndex, INDEX_VERSION } from "./jsonIndex.js";
 
 const noEslint: EslintResult = { kind: "skipped", reason: "žádné JS/TS soubory" };
+const noSecrets: SecretsResult = { kind: "ran", fileCount: 0, findings: [] };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 4 (tsc výsledek nese tsVersion)", () => {
-    expect(INDEX_VERSION).toBe(4);
+  it("verze indexu je 5 (index nese secrets)", () => {
+    expect(INDEX_VERSION).toBe(5);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint);
-    expect(idx.version).toBe(4);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets);
+    expect(idx.version).toBe(5);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
@@ -23,8 +25,19 @@ describe("buildJsonIndex", () => {
       findings: [{ source: "eslint", severity: "error", file: "a.js", line: 3, column: 5, rule: "eqeqeq", message: "use ===" }],
     };
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, eslint);
+    const idx = buildJsonIndex("/p", "t", [], tsc, eslint, noSecrets);
     expect(idx.eslint).toEqual(eslint);
+  });
+
+  it("nese secrets výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
+    const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
+    const secrets: SecretsResult = {
+      kind: "ran",
+      fileCount: 3,
+      findings: [{ source: "secret", severity: "error", file: ".env", line: 1, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" }],
+    };
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets);
+    expect(idx.secrets).toEqual(secrets);
   });
 
   it("ran s nálezy projde do JSON včetně fileCount, nodeModulesPresent a verzí", () => {
@@ -36,7 +49,7 @@ describe("buildJsonIndex", () => {
       projectTsVersion: "5.4.0",
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2322", message: "x" }],
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets);
     expect(idx.tsc).toEqual(tsc);
   });
 });

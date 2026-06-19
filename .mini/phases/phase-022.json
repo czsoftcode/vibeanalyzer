@@ -1,0 +1,39 @@
+{
+  "id": 22,
+  "title": "Strojová bezpečnost: hledání tajemství",
+  "goal": "Nový skener projde čtené soubory projektu (respektuje hotový .gitignore), konzervativním regexem najde pravděpodobná tajemství (API klíče, privátní klíče, tokeny) a vyrobí strojové nálezy s odkazem na soubor:řádek – do reportu jen místo a typ, nikdy samotnou hodnotu; přeskakuje binární/minifikované/obří soubory. Ověření: podvržený falešný klíč se v reportu objeví, čistý projekt nehlásí nic.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Vzory, kontrakt a detektor tajemství",
+      "status": "done",
+      "detail": "findings.ts: rozšířit FindingSource o \"secret\". Nový src/secrets.ts: katalog vzorů (PEM blok, AWS AKIA, GitHub ghp_, Google AIza, Slack xox[bap]-) s id/závažností/maskou + čistá funkce hledající zásahy po řádcích a v PEM bloku, vrací {rule, severity, line, masked}. Testy se zuby: každý vzor chytne ukázku, čistý text (base64/hash/uuid) nic, celá hodnota se ve výstupu nikdy neobjeví."
+    },
+    {
+      "title": "Skener nad soubory: skip balastu, cílený .env, ran/skipped",
+      "status": "done",
+      "detail": "scanSecrets(root, files) konzumuje FileEntry[] (reuse, ne re-walk), čte obsah, přeskakuje binárky (NUL bajt), velké (size > ~1 MiB) a minifikáty (.min.* / extrémně dlouhý řádek); navíc cílený dohled nad fixním seznamem (.env, .env.*, *.pem, id_rsa) u kořene i mimo .gitignore. Vrací union {kind:ran; findings; fileCount} | {kind:skipped; reason}. Nečitelný soubor přeskočit a zaznamenat, ne pád. Testy vč. nečitelného/binárního/obřího souboru."
+    },
+    {
+      "title": "Render tajemství v reportu (md + JSON) bez úniku hodnoty",
+      "status": "done",
+      "detail": "Rozšířit buildMarkdown + buildJsonIndex o sekci tajemství (typ + místo + maskovaný prefix), rozlišit ran vs skipped. Test: celá hodnota podvrženého klíče se v .md ANI v JSON NIKDY neobjeví (hlavní zub fáze)."
+    },
+    {
+      "title": "Napojení skeneru do CLI",
+      "status": "done",
+      "detail": "cli.ts zavolá scanSecrets (inline, bez izolovaného workeru) a výsledek předá do buildJsonIndex/buildMarkdown. Ověření: typecheck zelený, build projde."
+    },
+    {
+      "title": "End-to-end ověření + nezávislý self-review",
+      "status": "done",
+      "detail": "Fixtura s podvrženým falešným klíčem → report ho označí; čistý projekt (vč. běžných base64/hashů) → nehlásí nic. Projít unhappy path změněných vstupních bodů. Pak nezávislý sub-agent (čerstvý kontext) na self-review kontraktu mezi moduly a chybových cest."
+    }
+  ],
+  "startedAt": "2026-06-18T23:59:58.515Z",
+  "completedAt": "2026-06-19T00:54:08.094Z",
+  "autoCommit": {
+    "preSha": "4c20570d5dd27e1491896630c2146206da7c31df",
+    "subject": "Phase 22: Strojová bezpečnost: hledání tajemství"
+  }
+}

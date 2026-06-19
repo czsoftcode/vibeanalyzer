@@ -7,6 +7,17 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Added
+
+- Strojové hledání tajemství: report nově hlásí pravděpodobné klíče a tokeny v kódu
+  (privátní PEM klíče, AWS, GitHub, Google, Slack, Stripe) s odkazem na `soubor:řádek`.
+  Skener čte i jinak ignorované soubory typu `.env`/`*.pem`/`id_rsa` u kořene projektu,
+  přeskakuje binárky, velké soubory a minifikáty. Hledá záměrně jen známé tvary
+  (radši míň, ale důvěryhodných nálezů), takže neznámé klíče může minout – sekce
+  reportu na to upozorňuje. **Hodnota tajemství se do reportu nikdy nevypíše celá**,
+  jen maskovaný náznak (např. `AKIA…`), aby commitovaný `.md`/JSON tajemství neunesl dál.
+  JSON index proto povýšil na verzi 5 (nese pole `secrets`).
+
 ### Changed
 
 - Vývojový test runner `vitest` povýšen z řady 2 (2.1.9) na 4.1.9. Šlo o major

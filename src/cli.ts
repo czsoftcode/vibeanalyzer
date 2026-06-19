@@ -18,6 +18,7 @@ import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
 import { type FileEntry, ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
+import { scanSecrets, type SecretsResult } from "./secrets.js";
 import { fileTimestamp } from "./timestamp.js";
 import { readPackageVersion } from "./version.js";
 
@@ -139,6 +140,8 @@ export interface RunDeps {
   analyzeTs?: typeof analyzeTypeScript;
   /** Injektovatelný ESLint analyzátor (test si podstrčí svůj; jinak reálný). */
   analyzeES?: typeof analyzeESLint;
+  /** Injektovatelný skener tajemství (test si podstrčí svůj; jinak reálný). */
+  scanSecretsFn?: typeof scanSecrets;
 }
 
 export async function run(
@@ -318,7 +321,22 @@ export async function run(
     eslint = await analyzeESLintIsolated(targetPath, result.files);
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint);
+  // Skener tajemství běží INLINE (ne v izolovaném procesu jako tsc/ESLint):
+  // je to čistě read-only čtení souborů, nevykonává cizí kód ani nenačítá cizí
+  // konfiguraci, takže izolace by jen přidala složitost. Plně defenzivní (nečitelný
+  // soubor přeskočí, ne pád), ale catch tu necháváme pro NEČEKANÉ selhání, ať jeden
+  // problém neshodí celý report – stejný princip jako u tsc/ESLint výš.
+  const scanSecretsReal = deps.scanSecretsFn ?? scanSecrets;
+  let secrets: SecretsResult;
+  try {
+    secrets = await scanSecretsReal(targetPath, result.files);
+  } catch (err: unknown) {
+    const e = err as Error;
+    console.error(`Upozornění: hledání tajemství selhalo a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+    secrets = { kind: "skipped", reason: "skener tajemství během analýzy selhal (viz stderr)" };
+  }
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
@@ -327,6 +345,7 @@ export async function run(
     intent,
     tsc,
     eslint,
+    secrets,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);
