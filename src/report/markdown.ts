@@ -169,6 +169,16 @@ function eslintSection(eslint: EslintResult | undefined): string[] {
   out.push(`ESLint zkontroloval ${eslint.fileCount} souborů (pravidla vibeanalyzeru, ne config projektu).`);
   out.push("");
 
+  // Vynechání minifikátů NESMÍ být tiché – jinak prázdný/čistý lint vypadá jako
+  // „prošel celý projekt", ač jsme bundly přeskočili. Přiznáme i v1 omezení.
+  if (eslint.skippedMinified > 0) {
+    out.push(
+      `> Přeskočeno ${eslint.skippedMinified} minifikátů (\`*.min.*\`) – generovaný kód, nelintuje se. ` +
+        "Detekce je jen podle jména, takže bundly bez přípony `.min.` (např. `bundle.js`) filtr mine a lintují se dál.",
+    );
+    out.push("");
+  }
+
   if (eslint.findings.length === 0) {
     out.push("_Žádné nálezy._");
     out.push("");
@@ -185,8 +195,11 @@ function eslintSection(eslint: EslintResult | undefined): string[] {
 /** Krátké shrnutí stavu ESLint do hlavičky reportu (rychlý přehled). */
 function eslintSummaryLine(eslint: EslintResult | undefined): string {
   if (!eslint || eslint.kind === "skipped") return "- ESLint: přeskočeno";
-  if (eslint.findings.length === 0) return "- ESLint: čistý (0 nálezů)";
-  return `- ESLint: ${eslint.findings.length} nálezů`;
+  // Přeskočené minifikáty musí být vidět i v rychlém přehledu (ten lidi čtou
+  // první), jinak „čistý" zatají, že N souborů ESLint vůbec neviděl.
+  const skip = eslint.skippedMinified > 0 ? `, ${eslint.skippedMinified} minifikátů přeskočeno` : "";
+  if (eslint.findings.length === 0) return `- ESLint: čistý (0 nálezů)${skip}`;
+  return `- ESLint: ${eslint.findings.length} nálezů${skip}`;
 }
 
 /**

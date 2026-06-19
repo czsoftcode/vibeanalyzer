@@ -36,7 +36,7 @@ describe("TscResult diskriminace", () => {
 
 describe("EslintResult diskriminace", () => {
   it("ran a skipped jsou rozlišitelné podle kind", () => {
-    const ran: EslintResult = { kind: "ran", findings: [], fileCount: 2 };
+    const ran: EslintResult = { kind: "ran", findings: [], fileCount: 2, skippedMinified: 0 };
     const skipped: EslintResult = { kind: "skipped", reason: "žádné JS/TS soubory" };
     expect(ran.kind).toBe("ran");
     expect(skipped.kind).toBe("skipped");

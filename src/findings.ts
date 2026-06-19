@@ -71,6 +71,9 @@ export type EslintResult =
       findings: Finding[];
       /** počet souborů, které ESLint zkontroloval */
       fileCount: number;
+      /** počet souborů vynechaných z lintu jako minifikáty (`*.min.*`) – generovaný
+       *  kód, ne zdroj psaný uživatelem; vykazuje se v reportu, ať není vynechání tiché */
+      skippedMinified: number;
     };
 
 /**

@@ -44,6 +44,27 @@ describe("run – ESLint vrstva v reportu", () => {
     expect(json.eslint.kind).toBe("ran");
   }, 30_000); // reálný běh teď forkuje izolovaný proces (pod tsx transpile) → pomalejší
 
+  it("e2e: minifikát plný chyb se NElintuje, report uvede počet, exit 0", async () => {
+    // app.min.js je generovaný bundle plný porušení (== i prázdný catch).
+    // Bez filtru by zaplavil report falešnými nálezy o cizím kódu. Vedle něj
+    // čistý zdroj, ať ESLint vrstva reálně proběhne (kind ran).
+    await writeFile(path.join(proj, "app.min.js"), "if(1==1){try{}catch(e){}}\n");
+    await writeFile(path.join(proj, "ok.js"), "export const x = 1;\n");
+
+    const code = await run([proj, "--out", outDir], proj);
+    expect(code).toBe(0);
+
+    const { md, json } = await readReport();
+    expect(json.eslint.kind).toBe("ran");
+    if (json.eslint.kind !== "ran") return;
+    expect(json.eslint.skippedMinified).toBe(1);
+    // žádný nález nesmí mířit na minifikát (ani parse-error, ani eqeqeq)
+    expect(json.eslint.findings.some((f) => f.file === "app.min.js")).toBe(false);
+    // report přiznává přeskočení i v1 omezení
+    expect(md).toContain("Přeskočeno 1 minifikátů");
+    expect(md).toContain("bundle.js");
+  }, 30_000); // reálný forkovaný běh ESLintu pod tsx → pomalejší
+
   it("projekt bez JS/TS souborů → ESLint přeskočeno", async () => {
     await writeFile(path.join(proj, "README.md"), "# demo\n");
 

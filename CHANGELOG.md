@@ -7,6 +7,18 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Changed
+
+- Filtr minifikátů v ESLint vrstvě: minifikované soubory (`*.min.js`, `*.min.css`
+  apod.) se už neposílají do ESLint analýzy. Dřív generovaný bundle zaplavil report
+  falešnými nálezy (fatální „Parsing error" nebo desítky zásahů pravidel) o cizím,
+  nepsaném kódu. Report počet přeskočených minifikátů uvádí explicitně – v sekci
+  ESLint i v rychlém přehledu, takže „čistý" netají, že nějaké soubory linter vůbec
+  neviděl. Omezení v1: rozpoznání je jen podle jména `*.min.<přípona>`, takže bundly
+  bez té konvence (`bundle.js`) filtrem projdou a lintují se dál – report to přiznává.
+  Filtr zatím působí jen na ESLint vrstvu; strom souborů, počty a graf modulů
+  minifikáty dál započítávají.
+
 ### Added
 
 - Graf modulů: report nově kreslí Mermaid diagram importních závislostí mezi

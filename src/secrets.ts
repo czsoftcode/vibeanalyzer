@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { Finding, Severity } from "./findings.js";
+import { isMinifiedName } from "./minified.js";
 import type { FileEntry } from "./scan.js";
 
 /**
@@ -162,8 +163,10 @@ export type SecretsResult =
  *  je skoro jistě generovaná data/bundle – číst ho jen plýtvá a šumí. */
 const MAX_FILE_SIZE = 1024 * 1024;
 
-/** Řádek delší než tohle = nejspíš minifikát/bundle (signál/šum). Záloha k
- *  příponovému `.min.*` testu; plný filtr minifikátů je samostatná položka. */
+/** Řádek delší než tohle = nejspíš minifikát/bundle (signál/šum). Obsahová záloha
+ *  ke jménnému testu `isMinifiedName` (sdílený modul) – chytí i bundly bez `.min.`
+ *  přípony, které jménný filtr mine (`bundle.js`). Tady ji děláme, protože obsah
+ *  stejně čteme; ESLint vrstva obsah nečte, tak jen jméno. */
 const MAX_LINE_LENGTH = 5000;
 
 /**
@@ -177,11 +180,6 @@ function isTargetedSecretFile(name: string): boolean {
   if (name.endsWith(".pem")) return true;
   if (/^id_(rsa|dsa|ecdsa|ed25519)$/.test(name)) return true;
   return false;
-}
-
-/** Minifikát podle jména: `app.min.js`, `style.min.css` apod. */
-function isMinifiedName(name: string): boolean {
-  return /\.min\.[a-z0-9]+$/i.test(name);
 }
 
 /** Nejdelší řádek v textu (na rozpoznání minifikátu bez plného splitu detektoru). */

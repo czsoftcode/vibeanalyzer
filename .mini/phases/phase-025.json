@@ -1,0 +1,42 @@
+{
+  "id": 25,
+  "title": "Filtr minifikátů z ESLint vrstvy",
+  "goal": "Vytáhnout sdílený detektor minifikátů (.min.* podle jména) do vlastního modulu, použít ho v secrets.ts i v ESLint analyzátoru tak, aby se minifikované soubory do lintu vůbec neposílaly, a report explicitně uvedl počet přeskočených minifikátů (žádné tiché vynechání). Detekce jen podle jména je v1 omezení – bundly bez .min. přípony (bundle.js) projdou; přiznat v reportu.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Sdílený modul detektoru minifikátů",
+      "status": "done",
+      "detail": "src/minified.ts s isMinifiedName(name) (regex pro .min.<přípona>) + jednotkový test: pozitiva app.min.js/style.min.css, negativa app.js/min.js/admin.js. Neutrální umístění mimo analyze/."
+    },
+    {
+      "title": "Přepojit secrets.ts na sdílený detektor",
+      "status": "done",
+      "detail": "Odstranit privátní isMinifiedName ze secrets.ts, importovat sdílený. Chování beze změny – existující secrets testy musí dál procházet (kontrakt na reálném kódu, ne kopii)."
+    },
+    {
+      "title": "ESLint vrstva minifikáty nelintuje + počítadlo",
+      "status": "done",
+      "detail": "V analyzeESLint vyřadit minifikáty z targets, spočítat je, rozšířit EslintResult.ran o skippedMinified. Zub: 0 targetů po filtru, ale minifikáty byly → skipped s důvodem 'jen minifikáty', ne zavádějící 'žádné JS/TS'. Test: app.min.js se nelintuje, počítadlo=1."
+    },
+    {
+      "title": "Report uvede počet přeskočených minifikátů",
+      "status": "done",
+      "detail": "V eslintSection (markdown.ts) poznámka '> Přeskočeno N minifikátů (.min.*)' + přiznat v1 omezení (bundly bez .min. filtr mine). Žádné tiché vynechání. Test na text i na N=0 (poznámka se nevypíše)."
+    },
+    {
+      "title": "e2e cli test + nezávislý self-review",
+      "status": "done",
+      "detail": "Projekt s app.min.js plným chyb: ESLint ho nelintuje, report uvede počet (cli test přes existující injekci). Sahá na cross-module kontrakt a filtrační cestu → pustit nezávislého sub-agenta (čerstvý kontext) jako self-review dle CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-19T07:29:51.410Z",
+  "resolvedVerify": [
+    "Vzhled poznámky o přeskočených minifikátech v reálném reportu"
+  ],
+  "completedAt": "2026-06-19T07:45:08.570Z",
+  "autoCommit": {
+    "preSha": "90060006c44c97455d1592660e627146b8be3661",
+    "subject": "Phase 25: Filtr minifikátů z ESLint vrstvy"
+  }
+}

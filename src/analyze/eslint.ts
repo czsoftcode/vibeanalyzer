@@ -1,6 +1,7 @@
 import { ESLint } from "eslint";
 import * as path from "node:path";
 import type { EslintResult, Finding, Severity } from "../findings.js";
+import { isMinifiedName } from "../minified.js";
 import type { FileEntry } from "../scan.js";
 import { eslintConfig, LINTABLE_EXTENSIONS } from "./eslintConfig.js";
 
@@ -27,12 +28,24 @@ export async function analyzeESLint(
   files: readonly FileEntry[],
   deps: EslintAnalyzeDeps = {},
 ): Promise<EslintResult> {
-  const targets = files
-    .filter((f) => f.type === "file" && LINTABLE_EXTENSIONS.has(f.ext))
-    .map((f) => path.join(root, f.path));
+  // Minifikáty (`*.min.js` apod.) jsou generovaný kód, ne zdroj psaný uživatelem.
+  // Poslat je do lintu = buď fatální "Parsing error" jako falešný nález, nebo
+  // desítky zásahů korektnostních pravidel → report zaplavený šumem o cizím
+  // bundlu. Vyřadíme je PŘED lintem a počet vykážeme do reportu (ne tiše).
+  // V1 jen podle jména – bundly bez `.min.` konvence (`bundle.js`) projdou.
+  const lintable = files.filter((f) => f.type === "file" && LINTABLE_EXTENSIONS.has(f.ext));
+  const minified = lintable.filter((f) => isMinifiedName(baseName(f.path)));
+  const skippedMinified = minified.length;
+  const targets = lintable.filter((f) => !isMinifiedName(baseName(f.path))).map((f) => path.join(root, f.path));
 
   if (targets.length === 0) {
-    return { kind: "skipped", reason: "v projektu nejsou žádné JS/TS soubory k lintování" };
+    // Odliš "vůbec nic k lintování" od "byly jen minifikáty": jinak by report
+    // tvrdil, že projekt nemá JS/TS, ač je má (jen samé generované bundly).
+    const reason =
+      skippedMinified > 0
+        ? `v projektu jsou jen minifikované JS/TS soubory (${skippedMinified}) – nelintují se`
+        : "v projektu nejsou žádné JS/TS soubory k lintování";
+    return { kind: "skipped", reason };
   }
 
   deps.onStart?.(targets.length);
@@ -47,7 +60,7 @@ export async function analyzeESLint(
     }
   }
 
-  return { kind: "ran", findings, fileCount: results.length };
+  return { kind: "ran", findings, fileCount: results.length, skippedMinified };
 }
 
 function defaultEslint(root: string): ESLint {
@@ -76,6 +89,12 @@ function toFinding(root: string, absFile: string, m: ESLint.LintResult["messages
 /** ESLint: 2 = error, 1 = warning. (0 = off se v messages nevyskytne.) */
 function severityOf(s: 0 | 1 | 2): Severity {
   return s === 2 ? "error" : "warning";
+}
+
+/** Jméno souboru z relativní cesty. `FileEntry.path` má oddělovač vždy "/"
+ *  (kontrakt scanTree), takže split na "/" stačí napříč platformami. */
+function baseName(relPath: string): string {
+  return relPath.split("/").pop() ?? relPath;
 }
 
 /** Cesta relativní ke kořeni s oddělovačem "/" (jako zbytek reportu). */

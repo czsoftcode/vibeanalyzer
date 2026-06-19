@@ -34,6 +34,7 @@ describe("buildJsonIndex", () => {
     const eslint: EslintResult = {
       kind: "ran",
       fileCount: 2,
+      skippedMinified: 1,
       findings: [{ source: "eslint", severity: "error", file: "a.js", line: 3, column: 5, rule: "eqeqeq", message: "use ===" }],
     };
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };

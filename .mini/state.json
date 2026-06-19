@@ -122,6 +122,11 @@
       "id": 24,
       "title": "Graf modulů z importů (Mermaid)",
       "status": "done"
+    },
+    {
+      "id": 25,
+      "title": "Filtr minifikátů z ESLint vrstvy",
+      "status": "done"
     }
   ]
 }

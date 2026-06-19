@@ -92,6 +92,43 @@ describe("analyzeESLint", () => {
     expect(res.reason).toContain("JS/TS");
   });
 
+  it("minifikát (*.min.js) se NElintuje a počítá se do skippedMinified", async () => {
+    const root = await tmp();
+    // minifikát PLNÝ porušení (== i prázdný catch) – kdyby se lintoval, dostali
+    // bychom záplavu nálezů o cizím generovaném bundlu (šum). Filtr ho vyřadí.
+    await writeFile(path.join(root, "app.min.js"), "if(1==1){try{}catch(e){}}\n");
+    await writeFile(path.join(root, "ok.js"), "export const x = 1;\n");
+
+    const res = await analyzeESLint(root, [file("app.min.js", ".js"), file("ok.js", ".js")]);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.skippedMinified).toBe(1);
+    expect(res.fileCount).toBe(1); // jen ok.js
+    // ani jeden nález nesmí mířit na minifikát
+    expect(res.findings.some((f) => f.file === "app.min.js")).toBe(false);
+  });
+
+  it("0 nálezů na čistém projektu → skippedMinified je 0 (ne undefined)", async () => {
+    const root = await tmp();
+    await writeFile(path.join(root, "ok.js"), "export const x = 1;\n");
+    const res = await analyzeESLint(root, [file("ok.js", ".js")]);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.skippedMinified).toBe(0);
+  });
+
+  it("JEN minifikáty → skipped s důvodem o minifikátech (ne 'žádné JS/TS')", async () => {
+    const root = await tmp();
+    // soubory existují, ale nečtou se – analyzátor je vyřadí podle jména PŘED lintem
+    const res = await analyzeESLint(root, [file("a.min.js", ".js"), file("b.min.js", ".js")]);
+    expect(res.kind).toBe("skipped");
+    if (res.kind !== "skipped") return;
+    expect(res.reason).toContain("minifikované");
+    expect(res.reason).toContain("2");
+    // NESMÍ tvrdit, že projekt nemá JS/TS – má, jen samé bundly
+    expect(res.reason).not.toContain("nejsou žádné");
+  });
+
   it("BEZPEČNOST: projektový eslint.config.js se NESPUSTÍ", async () => {
     const root = await tmp();
     // kdyby ESLint načetl tenhle config, jeho vyhodnocení by HODILO → nedostali
