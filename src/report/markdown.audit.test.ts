@@ -50,4 +50,29 @@ describe("buildMarkdown – sekce auditu: tři rozlišitelné stavy", () => {
     expect(md).toContain("GHSA-35jh-r3h4-6jhm");
     expect(md).toContain("vysokých 1");
   });
+
+  it("info > 0 → rozpis ukáže info a součet kategorií sedí s total", () => {
+    const audit: AuditResult = {
+      kind: "ran",
+      counts: { critical: 1, high: 1, moderate: 1, low: 1, info: 1, total: 5 },
+      findings: [
+        { source: "audit", severity: "error", file: "package-lock.json", rule: "GHSA-xxxx", message: "neco" },
+      ],
+    };
+    const md = buildMarkdown({ ...base, audit });
+
+    // 1) info je v rozpisu vidět
+    expect(md).toContain("informativních 1");
+
+    // 2) zuby: z vykreslené věty vytáhni VŠECH PĚT čísel a ověř, že jejich
+    //    součet sedí s deklarovaným total (ne jen substring "info").
+    const m = md.match(
+      /našel (\d+) zranitelností \(kritických (\d+), vysokých (\d+), středních (\d+), nízkých (\d+), informativních (\d+)\)/,
+    );
+    expect(m).not.toBeNull();
+    const [, total, critical, high, moderate, low, info] = m!.map(Number);
+    expect(critical + high + moderate + low + info).toBe(total);
+    expect(total).toBe(5);
+    expect(info).toBe(1);
+  });
 });

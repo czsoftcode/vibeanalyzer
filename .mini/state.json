@@ -152,6 +152,11 @@
       "id": 30,
       "title": "Audit: jméno lockfilu a counts",
       "status": "done"
+    },
+    {
+      "id": 31,
+      "title": "Render auditu: zobrazit info",
+      "status": "done"
     }
   ]
 }

@@ -287,7 +287,7 @@ function auditSection(audit: AuditResult | undefined): string[] {
   const c = audit.counts;
   out.push(
     `npm audit našel ${c.total} zranitelností ` +
-      `(kritických ${c.critical}, vysokých ${c.high}, středních ${c.moderate}, nízkých ${c.low}).`,
+      `(kritických ${c.critical}, vysokých ${c.high}, středních ${c.moderate}, nízkých ${c.low}, informativních ${c.info}).`,
   );
   out.push("");
 

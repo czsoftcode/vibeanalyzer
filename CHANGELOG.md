@@ -125,6 +125,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   Počty po závažnosti se nově dopočítají přímo z nalezených zranitelností, takže
   součet vždy odpovídá celku.
 
+- Rozpis auditu už **zobrazuje i kategorii „informativní"**. Dřív věta „npm audit
+  našel N zranitelností" vypsala jen kritické/vysoké/střední/nízké, ale informativní
+  nálezy se sice do celku `N` počítaly, ve výpisu chyběly – při `info > 0` pak součet
+  zobrazených kategorií neseděl s celkem. Nově je `informativních` součástí rozpisu,
+  takže čísla vždy sednou.
+
 ## [0.2.0] - 2026-06-19
 
 ### Changed

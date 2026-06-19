@@ -1,0 +1,34 @@
+{
+  "id": 31,
+  "title": "Render auditu: zobrazit info",
+  "goal": "Doplnit do rozpisu npm auditu v src/report/markdown.ts kategorii info, aby zobrazený součet kategorií seděl s total i když info > 0, s testem nad nálezem s nenulovým info.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přidat info do věty rozpisu auditu",
+      "status": "done",
+      "detail": "V src/report/markdown.ts:289-290 doplnit kategorii informativních {c.info} tak, aby součet zobrazených kategorií (critical+high+moderate+low+info) odpovídal c.total."
+    },
+    {
+      "title": "Test: render s nenulovým info",
+      "status": "done",
+      "detail": "Do src/report/markdown.audit.test.ts přidat případ s info>0 (např. info:1, total:5); test ověří, že věta obsahuje informativních 1 a že součet všech pěti kategorií = total (ne jen substring info)."
+    },
+    {
+      "title": "Self-kontrola happy/unhappy path",
+      "status": "done",
+      "detail": "Projít sebekontrolu (info=0 → věta dál dává smysl; skipped/0 nálezů cesty nedotčeny), ověřit, že jiná konzumace counts (jsonIndex) nezávisí na starém znění věty."
+    },
+    {
+      "title": "Spustit testy + build",
+      "status": "done",
+      "detail": "npm test a tsc projdou; ručně ověřit vygenerovaný úryvek reportu na fixture s info>0."
+    }
+  ],
+  "startedAt": "2026-06-19T19:11:43.001Z",
+  "completedAt": "2026-06-19T19:18:21.937Z",
+  "autoCommit": {
+    "preSha": "8b96a20bd094615e0b8f7c889cd80c6c374a7496",
+    "subject": "Phase 31: Render auditu: zobrazit info"
+  }
+}
