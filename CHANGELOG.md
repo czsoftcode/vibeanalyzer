@@ -9,6 +9,18 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Graf modulů: report nově kreslí Mermaid diagram importních závislostí mezi
+  zdrojovými soubory projektu (šipka A → B = „A importuje B"). Spolehlivé a lokální,
+  bez AI – importy se vytahují parserem TypeScriptu (ne regexem), takže importy
+  schované v komentářích/řetězcích nedělají falešné hrany a víceřádkové importy se
+  trefí. Kreslí jen statické relativní importy (`import … from`, side-effect importy,
+  `export … from`); dynamický `import()`/`require()`, externí balíky a `tsconfig`
+  path-aliasy se nezobrazují (report to přiznává jako přibližnost). Klíčové: import
+  s příponou `.js` se správně napojí na zdroj `.ts`/`.tsx`. Soubory bez jediné vazby
+  se vypíšou jako „osamělé moduly", ne kreslí. Graf nad ~480 hran se ořízne (s
+  poznámkou), aby nenarazil na tvrdý 500hranový limit Mermaidu a vůbec se vykreslil –
+  úplné hrany zůstávají v JSON indexu. JSON index proto povýšil na verzi 7 (nese
+  pole `moduleGraph`).
 - Audit závislostí (volitelný, přepínač `--audit`): report nově hlásí zranitelné npm
   závislosti přes `npm audit` (balík, závažnost, CVE/GHSA, jestli existuje oprava).
   Je to síťová operace, proto se spustí jen na výslovné přání – bez `--audit` se

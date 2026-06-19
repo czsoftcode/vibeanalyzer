@@ -1,5 +1,6 @@
 import tsParser from "@typescript-eslint/parser";
 import type { Linter } from "eslint";
+import { JS_EXTENSIONS, TS_EXTENSIONS } from "./sourceExtensions.js";
 
 /**
  * Náš pevný ESLint config (flat). Záměrně NEnačítáme projektový `eslint.config.js`
@@ -24,12 +25,11 @@ const CORRECTNESS_RULES: Linter.RulesRecord = {
   "no-self-compare": "error", // `x === x`
 };
 
-// JEDINÝ zdroj pravdy pro přípony. Glob v configu i množina, kterou analyzátor
-// posílá do lintu (LINTABLE_EXTENSIONS), se odvozují odsud – nesmí se rozejít:
-// kdyby analyzátor poslal soubor, na který config nemá glob, ESLint vrátí fatal
-// "File ignored because no matching configuration" jako falešný "error" nález.
-const JS_EXTENSIONS = [".js", ".jsx", ".mjs", ".cjs"];
-const TS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts"];
+// JEDINÝ zdroj pravdy pro přípony žije v sourceExtensions.ts (sdílí ho i graf
+// importů). Glob v configu i množina, kterou analyzátor posílá do lintu
+// (LINTABLE_EXTENSIONS), se odvozují odsud – nesmí se rozejít: kdyby analyzátor
+// poslal soubor, na který config nemá glob, ESLint vrátí fatal "File ignored
+// because no matching configuration" jako falešný "error" nález.
 
 /** Přípony, které tahle konfigurace umí zpracovat. Importuje analyzátor pro filtr. */
 export const LINTABLE_EXTENSIONS: ReadonlySet<string> = new Set([...JS_EXTENSIONS, ...TS_EXTENSIONS]);

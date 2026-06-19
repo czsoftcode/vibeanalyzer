@@ -117,6 +117,11 @@
       "id": 23,
       "title": "Strojová bezpečnost: audit závislostí",
       "status": "done"
+    },
+    {
+      "id": 24,
+      "title": "Graf modulů z importů (Mermaid)",
+      "status": "done"
     }
   ]
 }

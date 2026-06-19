@@ -11,7 +11,7 @@
 - [ ] Fáze 6 – AI logika + non-goaly: krájení projektu na části, poslání kódu + záměru Claudovi, každý nález míří na konkrétní místo v kódu. Ověření: projekt porušující deklarovaný non-goal dostane nález, neporušující ne.
 - [ ] Fáze 7 (bonus) – HTML výstup: z .md vyrobí i HTML stránku bez inline stylů/scriptů (CSP). Ověření: vznikne otevíratelná .html vedle .md.
 - [x] Plné čtení .gitignore
-- [ ] Graf modulů (statický): z importů sestavit graf závislostí mezi soubory/moduly a vykreslit ho Mermaidem. Spolehlivé, bez AI. Ověření: u známého projektu sedí hrany importů. Spadá k analýze kódu (fáze 3).
+- [x] Graf modulů (statický): z importů sestavit graf závislostí mezi soubory/moduly a vykreslit ho Mermaidem. Spolehlivé, bez AI. Ověření: u známého projektu sedí hrany importů. Spadá k analýze kódu (fáze 3).
 - [ ] Tok logiky od vstupu po výstupy (AI): Claude přečte kód a nakreslí běh od vstupního bodu po výstupy. Každý uzel MUSÍ odkazovat na konkrétní místo v kódu (obrana proti halucinaci) a report uvede, že je to neúplná aproximace. Spadá k AI logické analýze (fáze 6).
 - [x] nechat vibeanalyzerem vytvorit project.md, pokud neexistuje od mini
 - [ ] komplet parser project.md pro AI

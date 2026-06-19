@@ -7,6 +7,7 @@ import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { auditDependencies, type AuditResult } from "./audit.js";
 import { analyzeESLint } from "./analyze/eslint.js";
 import { ANALYSIS_TIMEOUT_MS, availableMemoryBytes, computeMemoryLimitMb } from "./analyze/limits.js";
+import { buildModuleGraph, type ModuleGraphResult } from "./analyze/moduleGraph.js";
 import { type IsolatedOutcome, runIsolated } from "./analyze/runIsolated.js";
 import { analyzeTypeScript } from "./analyze/tsc.js";
 import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
@@ -145,6 +146,8 @@ export interface RunDeps {
   scanSecretsFn?: typeof scanSecrets;
   /** Injektovatelný audit závislostí (test si podstrčí svůj; jinak reálný npm audit). */
   auditFn?: typeof auditDependencies;
+  /** Injektovatelný builder grafu modulů (test si podstrčí svůj; jinak reálný). */
+  moduleGraphFn?: typeof buildModuleGraph;
 }
 
 export async function run(
@@ -365,7 +368,22 @@ export async function run(
     audit = { kind: "skipped", reason: "audit nevyžádán (spusť s --audit)" };
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit);
+  // Graf modulů běží INLINE jako skener tajemství: čistě read-only čtení +
+  // parsování (cizí kód se NEvykoná, non-goal č. 1), žádná síť ani cizí config,
+  // takže izolace by jen přidala složitost. Plně defenzivní (nečitelný/velký
+  // soubor přeskočí, ne pád), catch je pro NEČEKANÉ selhání – ať jeden problém
+  // neshodí celý report. Stejný princip jako u tsc/ESLint/secrets výš.
+  const moduleGraphReal = deps.moduleGraphFn ?? buildModuleGraph;
+  let moduleGraph: ModuleGraphResult;
+  try {
+    moduleGraph = await moduleGraphReal(targetPath, result.files);
+  } catch (err: unknown) {
+    const e = err as Error;
+    console.error(`Upozornění: graf modulů selhal a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+    moduleGraph = { kind: "skipped", reason: "graf modulů během sestavování selhal (viz stderr)" };
+  }
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit, moduleGraph);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
@@ -376,6 +394,7 @@ export async function run(
     eslint,
     secrets,
     audit,
+    moduleGraph,
   });
 
   const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);

@@ -1,0 +1,42 @@
+{
+  "id": 24,
+  "title": "Graf modulů z importů (Mermaid)",
+  "goal": "Z naskenovaných .ts/.js souborů vytáhnout statické relativní importy (import … from / export … from s ./ nebo ../), vyřešit je na soubory uvnitř projektu, sestavit orientovaný graf závislostí a vykreslit ho v reportu Mermaidem s limitem uzlů/hran (jako buildFolderDiagram) a poznámkou o oříznutí. V1: jen relativní hrany, externí balíky/bare importy a dynamický import()/require() se nekreslí; fragilita regex parsingu se v reportu přizná.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Extrakce importů přes TS parser",
+      "status": "done",
+      "detail": "Nový čistý modul (src/analyze/imports.ts): extractRelativeSpecifiers(text, ext) -> string[] přes ts.createSourceFile. Bere statické import…from, side-effect import \"…\", export…from; vynechá dynamický import()/require() i bare/balíkové specifiery. Test: importy v komentáři/řetězci nedají falešný nález, víceřádkový import projde."
+    },
+    {
+      "title": "Sdílená konstanta přípon + resolver na soubory",
+      "status": "done",
+      "detail": "Vytáhnout JS/TS_EXTENSIONS do lehkého modulu bez závislostí; eslintConfig.ts ho re-exportuje (LINTABLE_EXTENSIONS beze změny chování). resolveSpecifier(spec, fromRelPath, scannedSet) -> relPath|null se substitucí .js→.ts/.tsx, .jsx→.tsx, .mjs→.mts, .cjs→.cts, extensionless a index.*. Test: .js→.ts, adresářový import, neexistující cíl = null – nad reálnou sadou cest, ne mockem."
+    },
+    {
+      "title": "Sestavení grafu – inline defenzivní vrstva",
+      "status": "done",
+      "detail": "buildModuleGraph(root, files) -> ModuleGraphResult (kind:\"ran\" s edges, isolated, fileCount, počty nepřečtených/nezparsovaných). Čte přes readFile, per-soubor chyba přeskočí TEN soubor (ne pád vrstvy), strop velikosti jako secrets. Test na reálném fixture: hrany sedí a ./x.js se napojí na x.ts."
+    },
+    {
+      "title": "Vykreslení do reportu + JSON index",
+      "status": "done",
+      "detail": "markdown.ts nová sekce ## Graf modulů: graph LR, id uzlu přes cestu (ne jméno), escapovaný label, pojistný strop uzlů i hran s hláškou zobrazeno X z Y, textový výpis osamělých modulů. jsonIndex.ts: bump verze + pole moduleGraph. Summary řádek nahoře. Testy md i JSON (včetně ověření čísla verze)."
+    },
+    {
+      "title": "Napojení do cli.ts + e2e + nezávislý self-review",
+      "status": "done",
+      "detail": "Vrstva běží inline mezi scanem a buildem, injektovatelná přes RunDeps (vzor scanSecretsFn), výsledek do buildMarkdown i buildJsonIndex. Defenzivní catch (jen nečekané selhání → skipped se stackem na stderr). E2e: běh nad tímto repem vyrobí graf s hranami. Závěrem nezávislý sub-agent (čerstvý kontext) projede chybové cesty."
+    }
+  ],
+  "startedAt": "2026-06-19T02:20:12.669Z",
+  "resolvedVerify": [
+    "Vizuální čitelnost Mermaid grafu na GitHubu/VS Code"
+  ],
+  "completedAt": "2026-06-19T03:40:27.877Z",
+  "autoCommit": {
+    "preSha": "53f841efe69e76366811cad010711bcce234dbc8",
+    "subject": "Phase 24: Graf modulů z importů (Mermaid)"
+  }
+}

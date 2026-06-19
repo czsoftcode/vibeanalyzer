@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import type { ModuleEdge, ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
 import type { Intent } from "../intent.js";
@@ -20,18 +21,46 @@ export interface MarkdownInput {
   secrets?: SecretsResult;
   /** Výsledek auditu závislostí; když chybí, sekce se vykreslí jako "přeskočeno". */
   audit?: AuditResult;
+  /** Graf importních závislostí; když chybí, sekce se vykreslí jako "přeskočeno". */
+  moduleGraph?: ModuleGraphResult;
 }
 
 export interface MarkdownOptions {
-  /** maximální počet uzlů (složek včetně kořene) v diagramu; zbytek se ořízne */
+  /** maximální počet uzlů (složek včetně kořene) v diagramu struktury; zbytek se ořízne */
   maxDiagramNodes?: number;
+  /** pojistný strop uzlů grafu modulů (záchrana před nevykreslitelným Mermaidem) */
+  maxModuleNodes?: number;
+  /** pojistný strop hran grafu modulů */
+  maxModuleEdges?: number;
 }
 
 const DEFAULT_MAX_DIAGRAM_NODES = 1000;
+// Graf modulů má uzel = soubor (ne složku), takže jich je víc. Stropy slouží JAKO
+// ZÁCHRANA proti tvrdému limitu Mermaidu: jeho renderer (GitHub, VS Code, mermaid.js)
+// odmítne diagram nad 500 hran s chybou "Edge limit exceeded" a `maxEdges` NEjde
+// přebít zevnitř diagramu (je to "secure config", musí se volat mermaid.initialize).
+// Proto strop hran držíme POD 500 – jinak by se velký graf vůbec nevykreslil. Běžný
+// projekt se neořízne; při ořezu to report napíše ("zobrazeno X z Y").
+const MERMAID_EDGE_LIMIT = 500; // tvrdý default rendereru Mermaidu
+const DEFAULT_MAX_MODULE_EDGES = MERMAID_EDGE_LIMIT - 20; // 480, rezerva pod limitem
+const DEFAULT_MAX_MODULE_NODES = 1000; // s ≤480 hranami stejně nesváže dřív než hrany
 
 /** Nahradí znaky, které by rozbily Mermaid label v hranatých závorkách. */
 function escapeLabel(s: string): string {
   return s.replace(/"/g, "'").replace(/[[\]]/g, "");
+}
+
+/**
+ * Escape pro label uzlu grafu modulů. Label je CESTA SOUBORU cizího projektu –
+ * víc cizího vstupu než u stromu složek, takže přísnější než escapeLabel: navíc
+ * zahodí CR/LF (název souboru na Linuxu je smí mít → rozbil by `["..."]` blok)
+ * a backtick/středník (zlozvyky v Mermaid syntaxi). `"` → `'`, `[]` pryč.
+ */
+function escapeNodeLabel(s: string): string {
+  return s
+    .replace(/[\r\n]+/g, " ")
+    .replace(/"/g, "'")
+    .replace(/[[\]`;]/g, "");
 }
 
 /**
@@ -248,6 +277,12 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
   return `- Závislosti: ${audit.findings.length} nálezů`;
 }
 
+/** Krátké shrnutí stavu grafu modulů do hlavičky reportu. */
+function moduleGraphSummaryLine(mg: ModuleGraphResult | undefined): string {
+  if (!mg || mg.kind === "skipped") return "- Graf modulů: přeskočeno";
+  return `- Graf modulů: ${mg.edges.length} hran mezi ${mg.fileCount} soubory`;
+}
+
 /**
  * Vloží cizí text jako blockquote (každý řádek `> `). Spolu s neutralizeFences
  * tím udržíme cizí `#` nadpisy i fence uvnitř citace – nerozbijí strukturu
@@ -348,9 +383,158 @@ export function buildFolderDiagram(
   return { lines, total, shown: shownPaths.length, truncated };
 }
 
+export interface ModuleDiagram {
+  lines: string[];
+  totalNodes: number;
+  shownNodes: number;
+  totalEdges: number;
+  shownEdges: number;
+  truncated: boolean;
+}
+
+/**
+ * Postaví Mermaid `graph LR` z hran importů (A --> B = A importuje B). Id uzlu
+ * se přiřadí podle CESTY (ne jména souboru) – dva `index.ts` v různých složkách
+ * se nesmí slít. Label je relativní cesta (jednoznačná, byť delší).
+ *
+ * Ořez je POJISTKA, ne běžný stav: hrany bereme v setříděném pořadí a přidáme
+ * jen ty, které se vejdou do stropu uzlů i hran (hrana přidávající uzly nad
+ * `maxNodes` se přeskočí). `truncated` říká volajícímu, ať to napíše do reportu.
+ */
+export function buildModuleDiagram(
+  edges: readonly ModuleEdge[],
+  maxNodes: number,
+  maxEdges: number,
+): ModuleDiagram {
+  const sorted = [...edges].sort((a, b) =>
+    a.from === b.from ? a.to.localeCompare(b.to) : a.from.localeCompare(b.from),
+  );
+  const allNodes = new Set<string>();
+  for (const e of sorted) {
+    allNodes.add(e.from);
+    allNodes.add(e.to);
+  }
+  const totalNodes = allNodes.size;
+  const totalEdges = sorted.length;
+
+  const idOf = new Map<string, number>();
+  const shown: ModuleEdge[] = [];
+  for (const e of sorted) {
+    if (shown.length >= maxEdges) break;
+    const newNodes = (idOf.has(e.from) ? 0 : 1) + (idOf.has(e.to) ? 0 : 1);
+    if (idOf.size + newNodes > maxNodes) continue; // tahle hrana by přetekla limit uzlů
+    if (!idOf.has(e.from)) idOf.set(e.from, idOf.size);
+    if (!idOf.has(e.to)) idOf.set(e.to, idOf.size);
+    shown.push(e);
+  }
+
+  const lines: string[] = ["graph LR"];
+  for (const [p, id] of idOf) {
+    lines.push(`  n${id}["${escapeNodeLabel(p)}"]`);
+  }
+  for (const e of shown) {
+    lines.push(`  n${idOf.get(e.from)} --> n${idOf.get(e.to)}`);
+  }
+
+  return {
+    lines,
+    totalNodes,
+    shownNodes: idOf.size,
+    totalEdges,
+    shownEdges: shown.length,
+    truncated: shown.length < totalEdges || idOf.size < totalNodes,
+  };
+}
+
+/**
+ * Sekce "## Graf modulů". Tři stavy jako ostatní vrstvy: skipped / prázdný graf
+ * / graf s hranami. Osamělé soubory (bez jediné hrany) se do grafu NEkreslí, jen
+ * vypíšou textem. Přizná přibližnost: kreslí jen statické relativní importy,
+ * dynamický `import()`/`require()` ani externí balíky ne.
+ */
+function moduleGraphSection(
+  mg: ModuleGraphResult | undefined,
+  maxNodes: number,
+  maxEdges: number,
+): string[] {
+  const out: string[] = ["## Graf modulů", ""];
+
+  if (!mg || mg.kind === "skipped") {
+    const reason = mg?.reason ?? "graf modulů se nesestavil";
+    out.push(`_Graf modulů přeskočen: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  out.push(
+    `Graf ukazuje statické relativní importy mezi ${mg.fileCount} zdrojovými soubory ` +
+      "a vykreslí se jen v prohlížeči s podporou Mermaid (např. GitHub nebo VS Code).",
+  );
+  out.push("");
+  out.push(
+    "> Pozor: kreslí se jen statické `import … from`, side-effect importy a " +
+      "`export … from` s relativní cestou. Dynamický `import()`/`require()`, " +
+      "externí balíky a typové aliasy z `tsconfig` se nezobrazují – graf je " +
+      "přibližný a nemusí být úplný.",
+  );
+  out.push("");
+
+  // Honest report o přeskočených souborech (ať se prázdný/neúplný graf neplete
+  // s tichým falešným "vše čisté").
+  const skippedNotes: string[] = [];
+  if (mg.unreadable > 0) skippedNotes.push(`${mg.unreadable} nečitelných`);
+  if (mg.unparsable > 0) skippedNotes.push(`${mg.unparsable} nezparsovatelných`);
+  if (mg.tooLarge > 0) skippedNotes.push(`${mg.tooLarge} příliš velkých (bundle?)`);
+  if (skippedNotes.length > 0) {
+    out.push(`> Přeskočené soubory: ${skippedNotes.join(", ")}.`);
+    out.push("");
+  }
+
+  if (mg.edges.length === 0) {
+    // Odliš "vážně nic" od "vše se přeskočilo" (tichý falešný "čisto"): když se
+    // nezparsoval ani jeden zdrojový soubor, ale nějaké se přeskočily, řekni to.
+    const allSkipped = mg.fileCount === 0 && mg.unreadable + mg.unparsable + mg.tooLarge > 0;
+    if (allSkipped) {
+      out.push("_Žádný zdrojový soubor se nepodařilo přečíst/zparsovat – graf nelze sestavit (viz přeskočené výše)._");
+    } else {
+      out.push("_Žádné importní hrany mezi soubory projektu._");
+    }
+    out.push("");
+  } else {
+    const diagram = buildModuleDiagram(mg.edges, maxNodes, maxEdges);
+    if (diagram.truncated) {
+      out.push(
+        `> Graf byl oříznut: zobrazeno ${diagram.shownNodes} z ${diagram.totalNodes} uzlů ` +
+          `a ${diagram.shownEdges} z ${diagram.totalEdges} hran (limit ${maxNodes} uzlů / ${maxEdges} hran). ` +
+          "Strop hran je pod tvrdým limitem Mermaidu (500), jinak by se diagram vůbec nevykreslil. " +
+          "Úplné hrany jsou v JSON indexu.",
+      );
+      out.push("");
+    }
+    out.push("```mermaid");
+    out.push(...diagram.lines);
+    out.push("```");
+    out.push("");
+  }
+
+  // Osamělé moduly: nekreslí se (tečka bez čar je šum), jen výčet.
+  if (mg.isolated.length > 0) {
+    out.push(`**Osamělé moduly (bez importní vazby):** ${mg.isolated.length}`);
+    out.push("");
+    for (const p of mg.isolated) {
+      out.push(`- \`${sanitizeInline(p)}\``);
+    }
+    out.push("");
+  }
+
+  return out;
+}
+
 /** Sestaví lidský `.md` report ze stejného modelu, jaký jde do JSON. */
 export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {}): string {
   const maxNodes = options.maxDiagramNodes ?? DEFAULT_MAX_DIAGRAM_NODES;
+  const maxModuleNodes = options.maxModuleNodes ?? DEFAULT_MAX_MODULE_NODES;
+  const maxModuleEdges = options.maxModuleEdges ?? DEFAULT_MAX_MODULE_EDGES;
   const fileEntries = input.files.filter((f) => f.type === "file");
   const dirPaths = input.files.filter((f) => f.type === "dir").map((f) => f.path);
   const rootLabel = path.basename(input.root) || input.root;
@@ -371,6 +555,7 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(eslintSummaryLine(input.eslint));
   out.push(secretsSummaryLine(input.secrets));
   out.push(auditSummaryLine(input.audit));
+  out.push(moduleGraphSummaryLine(input.moduleGraph));
   out.push("");
 
   out.push(...intentSection(input.intent));
@@ -395,6 +580,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(...diagram.lines);
   out.push("```");
   out.push("");
+
+  out.push(...moduleGraphSection(input.moduleGraph, maxModuleNodes, maxModuleEdges));
 
   out.push("## Soubory");
   out.push("");
