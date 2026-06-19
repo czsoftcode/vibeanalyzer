@@ -239,4 +239,79 @@ describe("analyzeTypeScript", () => {
     expect(res.tsVersion).toBe(bundled);
     expect(res.projectTsVersion).toBeUndefined();
   });
+
+  it("ZUBY (fáze 28): import mimo kořen NEvtáhne obsah – jen TS2307, žádný cizí marker", async () => {
+    // zdrojový soubor UVNITŘ root importuje soubor MIMO root. Na STARÉM kódu
+    // (default host) by resolver ../secret.ts přečetl, zanalyzoval a jeho chyba
+    // (Cannot find name <MARKER>) by se s cizí cestou objevila v reportu.
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    // unikátní marker: pokud se secret.ts přečte, message nálezu ho bude obsahovat
+    await writeFile(path.join(outer, "secret.ts"), "export const leak = NONEXISTENT_SECRET_IDENTIFIER;\n");
+    await writeFile(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { strict: true, module: "esnext", moduleResolution: "bundler" }, files: ["a.ts"] }),
+    );
+    await writeFile(path.join(root, "a.ts"), 'import { leak } from "../secret";\nexport const y = leak;\n');
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // 1) obsah cizího souboru se NEVTÁHL (marker se nikde v hláškách neobjeví)
+    expect(res.findings.some((f) => f.message.includes("NONEXISTENT_SECRET_IDENTIFIER"))).toBe(false);
+    // 2) žádný nález nemíří na cizí soubor/cestu ven
+    expect(res.findings.some((f) => f.file?.includes("secret"))).toBe(false);
+    expect(res.findings.some((f) => f.file?.includes(".."))).toBe(false);
+    // 3) selhání je HLUČNÉ, ne tiché: resolver vrátí TS2307 (cannot find module)
+    expect(res.findings.some((f) => f.rule === "TS2307")).toBe(true);
+  }, 30_000);
+
+  it("ZUBY (fáze 28): /// <reference path> mimo kořen NEvtáhne obsah", async () => {
+    // triple-slash reference je druhý vektor (modulový resolver ho míjí) – musí
+    // ho zadržet gate na ČTENÍ souboru. Referencovaný soubor má unikátní marker.
+    const outer = await tmp();
+    const root = path.join(outer, "proj");
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(outer, "refsecret.ts"), "const REF_LEAK = ALSO_NONEXISTENT_REF_IDENTIFIER;\n");
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true }, files: ["a.ts"] }));
+    await writeFile(path.join(root, "a.ts"), '/// <reference path="../refsecret.ts" />\nexport const x = 1;\n');
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // obsah referencovaného souboru se nevtáhl: jeho chyba (marker) se neobjeví
+    expect(res.findings.some((f) => f.message.includes("ALSO_NONEXISTENT_REF_IDENTIFIER"))).toBe(false);
+    expect(res.findings.some((f) => f.file?.includes("refsecret"))).toBe(false);
+    expect(res.findings.some((f) => f.file?.includes(".."))).toBe(false);
+    // POZITIVNÍ signál zablokování (zuby proti tichému leaku, viz N1 self-review):
+    // gate vrátil "neexistuje" → TS6053 "File not found". Bez tohohle assertu by
+    // BEZCHYBNÝ cizí soubor mohl být tiše přečten a test by prošel zeleně.
+    expect(res.findings.some((f) => f.rule === "TS6053")).toBe(true);
+  }, 30_000);
+
+  it("zdravý projekt (relativní importy + lib Promise/Array) typuje BEZ falešných chyb", async () => {
+    // ověření, že gate nerozbil legitimní cesty: import uvnitř root se resolvuje
+    // a lib.es*.d.ts (Promise/Array – MIMO root, v přibaleném TS) se načte.
+    const root = await tmp();
+    await writeFile(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { strict: true, module: "esnext", moduleResolution: "bundler" }, files: ["a.ts", "b.ts"] }),
+    );
+    await writeFile(path.join(root, "b.ts"), "export const nums: number[] = [1, 2, 3];\n");
+    await writeFile(
+      path.join(root, "a.ts"),
+      'import { nums } from "./b";\nexport async function f(): Promise<number> {\n  return nums.length;\n}\n',
+    );
+
+    const res = await analyzeTypeScript(root);
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    // žádné falešné "cannot find module" (relativní import uvnitř root prošel)
+    expect(res.findings.some((f) => f.rule === "TS2307")).toBe(false);
+    // žádné chybějící lib typy (kdyby gate zablokoval lib: TS2318/TS2583/TS2468 …)
+    expect(res.findings.some((f) => /Cannot find (global type|name) 'Promise'|'Array'/.test(f.message))).toBe(false);
+    // čistý kód → 0 nálezů (kdyby cokoli z výše selhalo, sem by to spadlo)
+    expect(res.findings).toHaveLength(0);
+  }, 30_000);
 });

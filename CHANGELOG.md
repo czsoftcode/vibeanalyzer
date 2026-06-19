@@ -9,6 +9,18 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Typová analýza (`tsc`) je teď **zavřená do kořene analyzovaného projektu**. Dřív
+  mohl `import "../../něco"` nebo `/// <reference path="../../něco" />` ukrytý ve
+  zdrojáku přimět TypeScript přečíst soubor **mimo** analyzovanou složku a vtáhnout
+  jeho obsah do reportu (únik důvěrnosti / oťukávání souborového systému – ne spuštění
+  cizího kódu, jen čtení). Nově dostává `tsc` vlastní „contained" hostitele, který
+  čtení souborů propustí jen pod kořenem projektu (s rozpletením symlinků) a pod
+  přibalenými typovými knihovnami; cokoli mimo se tváří jako neexistující a skončí
+  hláškou „nenalezený modul", ne přečtením. Vědomý kompromis (bezpečnost > pohodlí):
+  nad monorepem, kde závislosti leží o úroveň výš než analyzovaná složka, se report
+  může zaplavit hláškami „nenalezený modul" – v této verzi analyzujeme striktně jen
+  zadanou složku.
+
 - Skener tajemství už **netiše nepřeskakuje balast**. Soubory, které z prohledávání
   vyřadí (minifikáty podle jména, velké > 1 MiB, binárky s NUL bajtem, soubory s
   extrémně dlouhým řádkem), report nově **počítá a explicitně uvádí** – řádek

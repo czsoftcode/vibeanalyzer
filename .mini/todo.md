@@ -20,7 +20,8 @@
 - [x] Filtr na minifikované .min.js - signál/šum v reportu
 - [x] Prověřit 5 transitivních zranitelností z podstromu ESLintu
 - [x] povysit typescript na v6.0.3 a s tim souvisejici dusledky, ale nejdrive prozkoumat dopady
-- [ ] Plný sandbox vč. importů
+- [x] Plný sandbox vč. importů
 - [x] Mermaid vertikálně ne horizontálně a plný počet adresářů i když budou stovky
 - [x] Rozšířit filtr minifikátů i mimo ESLint (strom souborů, počty Souborů, graf modulů, JSON index). Dnes se .min.* přeskakuje jen v ESLint vrstvě, jinde se počítá → report v jedné sekci bundle přeskočí a o pár řádků níž ho vypíše = protiřečí si. Sjednotit. Případně i obsahová detekce (dlouhý řádek) pro bundly bez .min. přípony (bundle.js).
 - [x] Secrets vrstva: přiznat přeskočené soubory explicitně (minifikáty, velké soubory >1MiB, dlouhé řádky). Dnes secrets.ts tiše continue bez počítadla → SecretsResult nese jen fileCount (prohledané), ne skipnuté. Nesoulad se zásadou 'žádné tiché vynechání', kterou fáze 25/26 zavedly u ESLintu a grafu. Přidat skippedMinified (+ příp. další skip důvody) do SecretsResult a řádek do reportu.
+- [ ] Monorepo: rozlišit 'nenalezený modul mimo kořen' od skutečného TS2307. Contained CompilerHost (fáze 28) fail-closed blokuje čtení mimo kořen → nad monorepem s hoisted node_modules (závislosti o úroveň výš) se report zaplaví falešnými TS2307 a uživatel netuší, že je to artefakt analyzátoru, ne chyba jeho kódu. Možnosti: označit takové nálezy zvlášť, nebo to zmínit v reportu (jako už hlásíme chybějící node_modules).

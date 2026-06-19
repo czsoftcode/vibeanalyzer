@@ -137,6 +137,11 @@
       "id": 27,
       "title": "Secrets: přiznat přeskočené soubory",
       "status": "done"
+    },
+    {
+      "id": 28,
+      "title": "Sandbox importů: CompilerHost tsc",
+      "status": "done"
     }
   ]
 }

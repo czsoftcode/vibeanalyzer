@@ -1,0 +1,39 @@
+{
+  "id": 28,
+  "title": "Sandbox importů: CompilerHost tsc",
+  "goal": "Dát tsc vlastní CompilerHost, který omezí čtení souborů a modul resolver na kořen projektu (plus přibalené lib/@types), takže import/reference mimo kořen už nevtáhne cizí obsah do reportu. Ověření: fixtura s importem mimo kořen nesmí dostat obsah toho souboru do reportu a zdravý TS projekt musí dál typovat bez falešných 'cannot find module'.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Contained CompilerHost (kořen + lib allowlist)",
+      "status": "done",
+      "detail": "Nová funkce v tsc.ts obalí ts.createCompilerHost(options); getSourceFile/fileExists/readFile/directoryExists/realpath propustí jen cesty pod kořenem (isUnderRootRealSync) NEBO pod přibaleným TS lib adresářem (path.dirname(ts.getDefaultLibFilePath(options))); mimo = tváří se jako neexistující. Gate na čtení souboru je chokepoint pro import i /// <reference path>."
+    },
+    {
+      "title": "Zapojit host do createProgram + opravit komentář",
+      "status": "done",
+      "detail": "ts.createProgram(insideFiles, options, host); přepsat komentář ZBYTKOVÉ RIZIKO na tsc.ts:110-114 na popis zavřené díry."
+    },
+    {
+      "title": "Test: import mimo kořen nevtáhne obsah",
+      "status": "done",
+      "detail": "Fixtura se zdrojákem import \"../../secret\" + varianta /// <reference path=\"../../secret.d.ts\" />. Assert: marker obsah ani cesta secret souboru se neobjeví ve findings; resolver vrátí TS2307 (cannot find module) = OK."
+    },
+    {
+      "title": "Test: zdravý TS projekt typuje bez falešných chyb",
+      "status": "done",
+      "detail": "Fixtura s relativními importy uvnitř kořene + závislost na lib (Promise/Array). Assert: žádné falešné cannot find module ani chybějící lib; reálné nálezy se proti default hostu nezmění."
+    },
+    {
+      "title": "Nezávislý self-review + e2e",
+      "status": "done",
+      "detail": "Čerstvý sub-agent na cross-module a chybové cesty. Reálnou mutací ověřit zuby (vypnout gate = test 3 padne). Plný běh nástroje na reálné fixtuře."
+    }
+  ],
+  "startedAt": "2026-06-19T16:21:50.064Z",
+  "completedAt": "2026-06-19T17:52:38.293Z",
+  "autoCommit": {
+    "preSha": "b9f438efcec50adea6848bece9dec5e809599497",
+    "subject": "Phase 28: Sandbox importů: CompilerHost tsc"
+  }
+}

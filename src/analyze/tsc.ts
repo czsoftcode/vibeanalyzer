@@ -107,12 +107,16 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
 
   deps.onStart?.(insideFiles.length, version);
 
-  // ZBYTKOVÉ RIZIKO (mimo V1 rozsah, viz fáze 17): createProgram běží s DEFAULTNÍM
-  // hostem, takže `import` / `/// <reference path="../..">` UVNITŘ zdrojáků může
-  // resolverem sáhnout mimo root. Vědomě NEřešíme – chtělo by vlastní CompilerHost
-  // a hrozí rozbití načítání lib/@types, které legitimně leží mimo root. SEC-1
-  // zadržuje tsconfig vektory (files/include výše + extends přes containedParseHost).
-  const program = ts.createProgram(insideFiles, options);
+  // ZADRŽENO (fáze 28): createProgram dostává contained CompilerHost, který čtení
+  // souborů omezí na root (+ přibalený lib). `import` i `/// <reference path>`
+  // UVNITŘ zdrojáků už resolverem nesáhnou mimo root – cizí obsah se do reportu
+  // nevtáhne (out-of-root cesta padne na TS2307, ne na přečtení). Spolu se SEC-1
+  // (files/include filtr výše + extends přes containedParseHost) je tím tsconfig
+  // i zdrojákový vektor pokrytý. Trade-off (fail-closed za důvěrnost): cokoli MIMO
+  // root teď padne na "cannot find module" – nejen project-references/typeRoots, ale
+  // i HOISTED závislosti (monorepo, kde `node_modules` leží o úroveň výš). Nad takovým
+  // repem se report zaplaví falešnými TS2307; ve V1 vědomě analyzujeme jen tuto složku.
+  const program = ts.createProgram(insideFiles, options, containedCompilerHost(ts, root, options));
   // POZOR: getPreEmitDiagnostics NEvrací chyby konfigurace (cmd.errors). Kdybychom
   // je nepřidali, "extends na neexistující soubor" nebo neznámá volba by zmizely
   // a report by lhal "0 nálezů" nad rozbitým configem (tichý falešný úspěch).
@@ -188,6 +192,50 @@ function containedParseHost(ts: typeof TS, root: string): TS.ParseConfigHost {
     readDirectory: ts.sys.readDirectory.bind(ts.sys),
     fileExists: (p) => isUnderRootRealSync(root, p, caseSensitive) && ts.sys.fileExists(p),
     readFile: (p) => (isUnderRootRealSync(root, p, caseSensitive) ? ts.sys.readFile(p) : undefined),
+  };
+}
+
+/**
+ * CompilerHost obalující default host, který ČTENÍ souboru a test existence omezí
+ * na kořen projektu (symlink-rozplet) NEBO přibalený TS lib adresář. Zadrží
+ * zbytkový vektor SEC-1: `import "../../x"` i `/// <reference path="../../x" />`
+ * UVNITŘ zdrojáků by jinak default hostem resolverem sáhly MIMO root a vtáhly cizí
+ * obsah do reportu (únik důvěrnosti + probing FS).
+ *
+ * Gate sedí na ČTENÍ souboru (getSourceFile/readFile/fileExists/directoryExists) –
+ * společný chokepoint pro VŠECHNY resolvery (modulový i `reference`). Proto NEladíme
+ * resolveModuleNames: ten by `/// <reference path>` minul. readDirectory/getDirectories
+ * NEhlídáme (stejně jako containedParseHost): smí enumerovat JMÉNA mimo root (slabý
+ * existence-oracle), ale OBSAH se bez čtení nevtáhne.
+ *
+ * Lib adresář (lib.es*.d.ts) MUSÍ projít: leží v PŘIBALENÉM typescriptu MIMO root;
+ * bez něj resolver nenajde Array/Promise/… a report se zaplaví falešnými chybami.
+ * Lib se testuje literálně (isUnderRoot bez realpathu): je to NÁŠ instalační adresář,
+ * útočník do něj nepíše → žádná symlink hra, a realpath by navíc rozbil lib pod
+ * symlinkovaným node_modules (pnpm). realpath hostu NEpřepisujeme: případnou
+ * symlink-ven canonicalizuje na cestu mimo root, kterou pak stejně zadrží gate čtení.
+ *
+ * FAIL-CLOSED: mimo povolené se soubor tváří jako NEEXISTUJÍCÍ → resolver to ohlásí
+ * jako TS2307 "cannot find module" (hláška, NE obsah cizího souboru).
+ */
+function containedCompilerHost(ts: typeof TS, root: string, options: TS.CompilerOptions): TS.CompilerHost {
+  const base = ts.createCompilerHost(options);
+  const caseSensitive = ts.sys.useCaseSensitiveFileNames;
+  const libDir = path.dirname(ts.getDefaultLibFilePath(options));
+  const allowed = (p: string): boolean =>
+    isUnderRoot(libDir, p, caseSensitive) || isUnderRootRealSync(root, p, caseSensitive);
+
+  const getSourceFile: TS.CompilerHost["getSourceFile"] = (fileName, langOrOpts, onError, shouldCreate) =>
+    allowed(fileName) ? base.getSourceFile(fileName, langOrOpts, onError, shouldCreate) : undefined;
+
+  return {
+    ...base,
+    getSourceFile,
+    fileExists: (fileName) => allowed(fileName) && base.fileExists(fileName),
+    readFile: (fileName) => (allowed(fileName) ? base.readFile(fileName) : undefined),
+    directoryExists: base.directoryExists
+      ? (dirName) => allowed(dirName) && base.directoryExists!(dirName)
+      : undefined,
   };
 }
 
