@@ -192,6 +192,11 @@
       "id": 38,
       "title": "Kontraktní chyba nemaskovaná jako I/O",
       "status": "done"
+    },
+    {
+      "id": 39,
+      "title": "ReportPathCollisionError do vlastního modulu",
+      "status": "done"
     }
   ]
 }

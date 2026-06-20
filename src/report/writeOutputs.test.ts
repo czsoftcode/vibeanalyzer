@@ -2,7 +2,8 @@ import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ReportPathCollisionError, writeReportFiles } from "./writeOutputs.js";
+import { ReportPathCollisionError } from "./errors.js";
+import { writeReportFiles } from "./writeOutputs.js";
 
 // node:fs/promises mockujeme jako passthrough (kopie reálného modulu) – jen aby
 // šel writeFile přepsat spy-em; ostatní funkce volají reálnou implementaci.

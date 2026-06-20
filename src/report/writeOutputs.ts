@@ -1,17 +1,8 @@
 import { rename, unlink, writeFile } from "node:fs/promises";
-
-/**
- * Porušení kontraktu volajícího: výstupní cesty (nebo jejich `.tmp`) by si
- * kolidovaly. Vlastní třída, aby šlo v testu i u volajícího odlišit tuhle
- * PROGRAMÁTORSKOU chybu od I/O chyb (ENOENT/ENOSPC…). NEmaskujeme ji jako I/O –
- * propaguje se se stackem, ať budoucí volající vidí, že chybu udělal on, ne disk.
- */
-export class ReportPathCollisionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ReportPathCollisionError";
-  }
-}
+// ReportPathCollisionError žije v samostatném (nemockovaném) modulu, ať `instanceof`
+// u volajícího nezávisí na tom, že mock tohoto modulu třídu re-exportuje. Záměrně
+// ji odtud DÁL nere-exportujeme – konzumenti ji berou přímo z ./errors.js.
+import { ReportPathCollisionError } from "./errors.js";
 
 /**
  * Hlídá invariant cest PŘED jakýmkoli zápisem. Funkce skládá temp soubory jako

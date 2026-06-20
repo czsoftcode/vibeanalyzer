@@ -1,0 +1,39 @@
+{
+  "id": 39,
+  "title": "ReportPathCollisionError do vlastního modulu",
+  "goal": "Přesunout ReportPathCollisionError do nemockovaného src/report/errors.ts; cli.ts a writeOutputs.ts ji importují odtud, takže instanceof přežije i mock writeOutputs bez re-exportu třídy – ověřeno tím, že mock v cli.writefail.test.ts re-export už nepotřebuje a celá suite zůstane zelená.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Vytvořit src/report/errors.ts s ReportPathCollisionError",
+      "status": "done",
+      "detail": "Třídu přesunout z writeOutputs.ts do nového nemockovaného modulu errors.ts. Beze změny chování: extends Error, vlastní name."
+    },
+    {
+      "title": "writeOutputs.ts importuje třídu z errors.ts",
+      "status": "done",
+      "detail": "writeOutputs.ts už ReportPathCollisionError nedefinuje ani NEre-exportuje – importuje ji z ./errors.js a dál ji hází. (Bez re-exportu schválně, jinak by ji mock writeOutputs pořád potřeboval.)"
+    },
+    {
+      "title": "cli.ts + dva testy importují z errors.ts",
+      "status": "done",
+      "detail": "cli.ts (instanceof v catch), writeOutputs.test.ts a cli.collision.test.ts berou ReportPathCollisionError z report/errors.js místo z writeOutputs.js. Mock writeOutputs v collision testu hází instanci z nemockovaného errors.ts."
+    },
+    {
+      "title": "Zub: writefail mock zahodí re-export třídy",
+      "status": "done",
+      "detail": "V cli.writefail.test.ts mock writeOutputs zjednodušit zpět na prostý factory bez re-exportu ReportPathCollisionError. Důkaz odpojení: testy zůstanou zelené i bez něj."
+    },
+    {
+      "title": "Doběh: tsc + celá suite zelené",
+      "status": "done",
+      "detail": "tsc --noEmit čistý, celá test suite zelená."
+    }
+  ],
+  "startedAt": "2026-06-20T12:32:03.004Z",
+  "completedAt": "2026-06-20T12:41:20.765Z",
+  "autoCommit": {
+    "preSha": "037a744f83497b49b4e32fc68c192880f7a7b2e2",
+    "subject": "Phase 39: ReportPathCollisionError do vlastního modulu"
+  }
+}

@@ -4,21 +4,19 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mockujeme seam writeReportFiles tak, aby vyhodil REÁLNOU ReportPathCollisionError.
-// Třídu re-exportujeme z reálného modulu (importActual) → cli.ts (importuje z TÉHOŽ
-// mockovaného modulu) i tenhle test sdílí JEDNU referenci třídy. Bez toho by
-// instanceof v cli.ts porovnával proti jiné třídě a zuby by byly falešné.
-vi.mock("./report/writeOutputs.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./report/writeOutputs.js")>();
+// Třídu bereme z nemockovaného errors.js (ne z mockovaného writeOutputs) – cli.ts ji
+// importuje z TÉHOŽ errors.js, takže instanceof porovnává proti stejné referenci.
+vi.mock("./report/writeOutputs.js", async () => {
+  const { ReportPathCollisionError } = await import("./report/errors.js");
   return {
-    ReportPathCollisionError: actual.ReportPathCollisionError,
     writeReportFiles: vi.fn(async () => {
-      throw new actual.ReportPathCollisionError("kolize výstupních cest (test)");
+      throw new ReportPathCollisionError("kolize výstupních cest (test)");
     }),
   };
 });
 
 import { run } from "./cli.js";
-import { ReportPathCollisionError } from "./report/writeOutputs.js";
+import { ReportPathCollisionError } from "./report/errors.js";
 
 // Necílí izolaci strojové vrstvy → in-process (bez forku, rychlé).
 process.env.VIBE_ANALYSIS_INPROCESS = "1";
