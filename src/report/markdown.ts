@@ -386,15 +386,29 @@ function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string, 
 const AI_LOGIC_APPROX_NOTE =
   "Pozor: posouzení celku vůči záměru je neúplná APROXIMACE (slabší obrana proti halucinaci než u řádkových nálezů). Každý nález si ověř v kódu.";
 
+/** Poznámka (jednou, sdílená všemi režimy), které ZDROJOVÉ soubory AI nevidělo kvůli
+ *  per-file stropu. Jen když seznam není prázdný – jinak se nic nevypisuje. */
+function aiOversizedNote(oversized: string[] | undefined): string[] {
+  if (!oversized || oversized.length === 0) return [];
+  const out: string[] = [
+    `> Pozor: tyto zdrojové soubory AI NEvidělo (jsou nad per-file stropem, nezahrnuly se do dotazu):`,
+  ];
+  for (const p of oversized) out.push(`> - \`${sanitizeInline(p)}\``);
+  out.push("");
+  return out;
+}
+
 /**
  * Sekce "## AI analýza". Tři NEZÁVISLÉ pod-bloky (non-goaly, kód, logika) – každý běží
  * na vlastní přepínač a má vlastní stav/cenu. Logika má navíc přiznání aproximace.
- * Strojová vrstva běží beze změny.
+ * Pod hlavičkou je JEDNOU (sdílená pro všechny režimy) poznámka o souborech, které AI
+ * nevidělo kvůli per-file stropu. Strojová vrstva běží beze změny.
  */
 function aiSection(ai: AiReport | undefined): string[] {
   return [
     "## AI analýza",
     "",
+    ...aiOversizedNote(ai?.oversizedFiles),
     ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno."),
     ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny."),
     ...aiModeBlock("Logika vs záměr (--ai-logic)", ai?.logic, "Žádný rozpor funkčnosti se záměrem nenalezen.", AI_LOGIC_APPROX_NOTE),

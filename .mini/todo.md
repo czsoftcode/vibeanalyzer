@@ -17,3 +17,4 @@
 - [ ] classifyAiError nezná overloaded_error (HTTP 529, server přetížen) – při reálném běhu fáze 44 probublal jako 'nečekaná chyba' se stackem místo čisté degradace 'API přetížené, zkus později'. Týká se SDÍLENÉ AI vrstvy (ping i analýza, oba režimy). Pozor: chyba přišla přes streaming (prefix 'Error:'), ověřit, zda je to instance Anthropic.InternalServerError/APIError nebo generický Error (podle toho instanceof vs kontrola err.type/status===529). Degradace teď funguje (exit 0, report vznikne), jde o čistotu klasifikace. Doplnit i test.
 - [ ] odvození záměru z kódu
 - [ ] skip pri velkych projektech i na goal a code nebo zvetsit okno na vice tokenu
+- [ ] model GLM-5.2 od Z.ai

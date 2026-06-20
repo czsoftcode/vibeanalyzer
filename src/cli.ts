@@ -558,7 +558,10 @@ async function runAiLayer(
           runAiLogicAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
         )
       : pre;
-    return { nonGoal, code, logic };
+    // `oversizedFiles` přidáme jen tady (payload se reálně stavěl): report tak přizná
+    // zdrojové soubory, které AI nevidělo kvůli per-file stropu. Ostatní větve níže
+    // payload nestaví → pole vynechají (žádná poznámka v reportu).
+    return { nonGoal, code, logic, oversizedFiles: payload.oversizedFiles };
   }
 
   if (parsed.aiCheck) {

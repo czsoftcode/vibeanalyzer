@@ -33,8 +33,17 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 15 (`ai` je souhrn tří režimů: nonGoal + code + logic)", () => {
-    expect(INDEX_VERSION).toBe(15);
+  it("verze indexu je 16 (`ai` nese i oversizedFiles)", () => {
+    expect(INDEX_VERSION).toBe(16);
+  });
+
+  it("nese ai.oversizedFiles 1:1 (přiznání souborů vynechaných z AI)", () => {
+    const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
+    const withOversized = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, {
+      ...noAiReport,
+      oversizedFiles: ["src/huge.ts"],
+    });
+    expect(withOversized.ai.oversizedFiles).toEqual(["src/huge.ts"]);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {

@@ -17,14 +17,26 @@ export interface AiPayload {
   text: string;
   includedFiles: PayloadFile[];
   truncated: boolean;
+  /** Cesty ZDROJOVÝCH souborů (správná přípona, ne minifikát), které by jinak byly AI
+   *  kandidáti, ale překročily per-file strop (`AI_PAYLOAD_PER_FILE_MAX_BYTES`) → AI je
+   *  nevidělo. Přiznává se v reportu (ne tiché vynechání). NEzahrnuje minifikáty ani
+   *  ne-zdrojové soubory – ty nejsou AI kandidáti, byl by to šum. */
+  oversizedFiles: string[];
 }
 
 /**
  * Strop celkové délky payloadu ve znacích. Jeden dotaz (žádné krájení na desítky
- * částí – to je pozdější fáze). ~200k znaků je hrubě ~50k tokenů; na malých
- * projektech se vejde, u velkých se uřízne a přizná. Konstanta = kontrakt, ne konfig.
+ * částí – to je pozdější fáze). POZOR: strop je ve ZNACÍCH, ne v tokenech – poměr
+ * ~3,3 znaku/token je jen hrubá heuristika, u hustého kódu jich může být víc.
+ * ~800k znaků je tedy zhruba ~240k tokenů (klidně i 250–280k) – stále hluboko pod
+ * 1M kontextem modelu. Na běžných projektech se vejde, u velkých se uřízne a přizná.
+ *
+ * VĚDOMÝ MEZIKROK, ne řešení: větší strop = větší TICHÝ náklad. Odhad ceny PŘED
+ * během zatím neexistuje (Fáze 5c / todo 7), takže cenu uvidíš až po doběhu (řádově
+ * sonnet ~$0,7 / opus ~$1,2 za jeden režim na projektu těsně pod stropem). Skutečné
+ * řešení velkých projektů je krájení na části (backlog). Konstanta = kontrakt, ne konfig.
  */
-export const AI_PAYLOAD_CHAR_BUDGET = 200_000;
+export const AI_PAYLOAD_CHAR_BUDGET = 800_000;
 
 /** Strop pro JEDEN soubor v bajtech – jeden obří generovaný soubor by jinak sám
  *  vyžral celý rozpočet. Vybírá se podle `FileEntry.size` (z scanu), bez čtení. */
@@ -55,15 +67,15 @@ export async function collectAiPayload(
   files: readonly FileEntry[],
   readFile: (relPath: string) => Promise<string>,
 ): Promise<AiPayload> {
-  const selected = files
-    .filter(
-      (f) =>
-        f.type === "file" &&
-        !f.minified &&
-        SOURCE_EXTENSIONS.includes(f.ext) &&
-        f.size <= AI_PAYLOAD_PER_FILE_MAX_BYTES,
-    )
+  // Nejdřív AI kandidáti (zdrojová přípona, ne minifikát, soubor) – z nich pak per-file
+  // strop vytřídí ty obří. Ty se NEzahodí potichu: vypíšou se do `oversizedFiles` a report
+  // je přizná. Minifikáty/ne-zdrojové sem schválně nepatří (nejsou kandidáti = nejsou nález).
+  const candidates = files
+    .filter((f) => f.type === "file" && !f.minified && SOURCE_EXTENSIONS.includes(f.ext))
     .sort((a, b) => a.path.localeCompare(b.path));
+
+  const selected = candidates.filter((f) => f.size <= AI_PAYLOAD_PER_FILE_MAX_BYTES);
+  const oversizedFiles = candidates.filter((f) => f.size > AI_PAYLOAD_PER_FILE_MAX_BYTES).map((f) => f.path);
 
   const includedFiles: PayloadFile[] = [];
   let text = "";
@@ -80,5 +92,5 @@ export async function collectAiPayload(
     includedFiles.push({ path: f.path, lineCount: countLines(content) });
   }
 
-  return { text, includedFiles, truncated };
+  return { text, includedFiles, truncated, oversizedFiles };
 }

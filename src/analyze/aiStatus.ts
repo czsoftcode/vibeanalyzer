@@ -37,11 +37,16 @@ export type AiStatus =
  *   - `logic`   – analýza funkčnosti kódu jako celku vůči záměru (`--ai-logic`).
  * Bez běhu daného přepínače je příslušné pole ve stavu `ready`/`skipped`
  * (NE falešné „analyzováno").
+ *
+ * `oversizedFiles` je payload-metadata (cesty zdrojových souborů vynechaných z AI kvůli
+ * per-file stropu) – vědomě jede tudy, protože `AiReport` je jediný kanál AI dat do
+ * reportu; nepovinné, plní se jen když se reálně stavěl payload (běžel analytický režim).
  */
 export interface AiReport {
   nonGoal: AiStatus;
   code: AiStatus;
   logic: AiStatus;
+  oversizedFiles?: string[];
 }
 
 /** Jméno env proměnné s klíčem k Anthropic API. Sdílený literál (kontrakt). */

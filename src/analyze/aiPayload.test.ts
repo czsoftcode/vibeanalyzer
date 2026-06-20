@@ -26,12 +26,33 @@ describe("collectAiPayload – výběr a ohraničení payloadu", () => {
     expect(out.truncated).toBe(false);
   });
 
-  it("přeskočí soubory nad per-file stropem (FileEntry.size, bez čtení)", async () => {
+  it("přeskočí soubory nad per-file stropem (FileEntry.size, bez čtení) a PŘIZNÁ je v oversizedFiles", async () => {
     const files: FileEntry[] = [file("big.ts", ".ts", 10_000_000), file("ok.ts", ".ts", 50)];
     const read = vi.fn(async () => "x\n");
     const out = await collectAiPayload(files, read);
     expect(out.includedFiles.map((f) => f.path)).toEqual(["ok.ts"]);
     expect(read).not.toHaveBeenCalledWith("big.ts");
+    expect(out.oversizedFiles).toEqual(["big.ts"]); // ne tiché vynechání
+  });
+
+  it("oversizedFiles obsahuje JEN zdrojové kandidáty nad stropem (ne minifikáty/ne-zdroj)", async () => {
+    const files: FileEntry[] = [
+      file("big.ts", ".ts", 10_000_000), // zdroj nad stropem → patří tam
+      file("huge.min.js", ".js", 10_000_000, true), // minifikát nad stropem → NE (není kandidát)
+      file("data.json", ".json", 10_000_000), // ne-zdroj nad stropem → NE
+      file("ok.ts", ".ts", 50), // zdroj v limitu → NE (vejde se)
+    ];
+    const out = await collectAiPayload(files, async () => "x\n");
+    expect(out.oversizedFiles).toEqual(["big.ts"]);
+  });
+
+  it("bez velkých souborů je oversizedFiles prázdné", async () => {
+    const out = await collectAiPayload([file("a.ts", ".ts", 50)], async () => "x\n");
+    expect(out.oversizedFiles).toEqual([]);
+  });
+
+  it("strop má dohodnutou hodnotu 800_000 znaků (regrese: relativní truncation test špatnou hodnotu nechytí)", () => {
+    expect(AI_PAYLOAD_CHAR_BUDGET).toBe(800_000);
   });
 
   it("zachytí počet řádků každého souboru (pro pozdější kontrolu místa)", async () => {

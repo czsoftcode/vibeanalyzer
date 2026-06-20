@@ -9,6 +9,9 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Report nově **přiznává zdrojové soubory, které AI nevidělo**, protože překročily strop
+  na jeden soubor (100 kB) – vypíšou se jednou v sekci „AI analýza" v `.md` i v poli
+  `ai.oversizedFiles` v JSON. Žádné tiché vynechání: víš, co se do dotazu nedostalo.
 - Nový přepínač **`--ai-logic`** spustí reálnou **AI analýzu funkčnosti kódu jako celku
   vůči záměru** z `project.md` (sekce „What I'm building") – hledá, kde kód neplní, co
   slibuje (chybějící funkčnost, rozpor se záměrem). Na rozdíl od ostatních AI režimů
@@ -34,8 +37,13 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   projektu proběhne jen jednou. `--ai-model` platí pro oba.
 - Report (`.md` i JSON) nově ukazuje **všechny AI režimy odděleně** – non-goaly, kód
   i logika mají vlastní sekci, vlastní spotřebu tokenů i cenu. Strojový JSON index má
-  **verzi 15**: pole `ai` je souhrn tří nezávislých výsledků (`nonGoal`, `code`, `logic`).
+  **verzi 16**: pole `ai` je souhrn tří nezávislých výsledků (`nonGoal`, `code`, `logic`)
+  a navíc nese `oversizedFiles` (soubory vynechané z AI kvůli per-file stropu).
   Změna tvaru pro konzumenty JSON.
+- **Strop vstupu pro AI zvětšen z ~200 tisíc na ~800 tisíc znaků** (~240k tokenů), aby se
+  do jednoho dotazu vešly i větší projekty, které se dřív usekávaly. Pozor: větší strop
+  znamená i vyšší cenu jednoho běhu (a odhad ceny před během zatím chybí); u opravdu
+  velkých projektů se výstup pořád může uříznout (řešením je budoucí dělení na části).
 
 ### Fixed
 

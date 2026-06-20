@@ -2,5 +2,43 @@
   "id": 46,
   "title": "Větší vstupní strop AI (800k znaků)",
   "goal": "Zvětšit AI_PAYLOAD_CHAR_BUDGET v src/analyze/aiPayload.ts z 200_000 na 800_000 znaků (~240k tokenů), aby se do AI vrstvy vešly i větší projekty (nad ~83k tokenů, které se dnes usekávají). Aktualizovat doprovodný komentář/odhad tokenů a testy stropu (truncation hranice). Sdílené všemi třemi AI režimy. POZOR: odhad nákladů před během stále chybí (Fáze 5c/todo 7) a skutečné řešení velkých projektů je krájení na části (backlog) – tato fáze je vědomý mezikrok, ne náhrada za ně; v reportu/komentáři to přiznat.",
-  "status": "proposed"
+  "status": "done",
+  "steps": [
+    {
+      "title": "Zvětšit celkový strop na 800k + komentář",
+      "status": "done",
+      "detail": "AI_PAYLOAD_CHAR_BUDGET 200_000→800_000 v aiPayload.ts; přepsat komentář (znaky≠tokeny, ~240k hrubý odhad, <<1M; přiznat chybějící odhad ceny před během + krájení backlog). Test s zuby na literální hodnotu (===800_000) – truncation test škáluje relativně, špatnou hodnotu nechytí."
+    },
+    {
+      "title": "Sbírat vynechané velké soubory v payloadu",
+      "status": "done",
+      "detail": "AiPayload dostane oversizedFiles:string[]; collectAiPayload ho naplní cestami souborů, co by byly AI kandidáti (zdrojová přípona, ne minifikát), ale size>AI_PAYLOAD_PER_FILE_MAX_BYTES. Test v aiPayload.test.ts (velký zdrojový soubor→v oversizedFiles; minifikát/ne-zdroj NEtam)."
+    },
+    {
+      "title": "Protáhnout oversizedFiles do AiReport + zapojit v cli",
+      "status": "done",
+      "detail": "AiReport dostane nepovinné oversizedFiles?:string[] (aiStatus.ts); runAiLayer (cli.ts) ho v analytické větvi naplní z payloadu, ostatní větve (bez klíče/--ai-check/default) vynechají. Vědomý míchanec (payload-metadata v AiReport) zdůvodnit komentářem."
+    },
+    {
+      "title": "Render poznámky o vynechaných souborech v markdownu",
+      "status": "done",
+      "detail": "V aiSection (markdown.ts) JEDNOU pod ## AI analýza vypsat seznam vynechaných souborů, jen když neprázdný (jinak nic). Test v markdown.ai.test.ts (seznam se vypíše; prázdný→žádná poznámka)."
+    },
+    {
+      "title": "Bump JSON verze 15 → 16 + průtok pole",
+      "status": "done",
+      "detail": "INDEX_VERSION 15→16 + komentář (změna tvaru ai); ověřit, že ai.oversizedFiles protéká do JSON. Test verze 16 + tvar v jsonIndex.test.ts."
+    },
+    {
+      "title": "Doběh fáze",
+      "status": "done",
+      "detail": "tsc + celá suite zelená; reálný běh na tomto velkém projektu (větší strop se projeví); umělý velký soubor nad per-file stropem→jeho cesta v .md i JSON; nezávislý sub-agent projde kontrakty (payload↔AiReport↔report, JSON verze, render, neúnik dat)."
+    }
+  ],
+  "startedAt": "2026-06-20T19:28:55.774Z",
+  "completedAt": "2026-06-20T19:47:17.239Z",
+  "autoCommit": {
+    "preSha": "78f59141d5df27fbb7ef5df7b478c5e110090b17",
+    "subject": "Phase 46: Větší vstupní strop AI (800k znaků)"
+  }
 }

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "createdAt": "2026-06-15T19:13:16.562Z",
-  "currentPhaseId": 46,
+  "currentPhaseId": null,
   "phases": [
     {
       "id": 1,
@@ -231,7 +231,7 @@
     {
       "id": 46,
       "title": "Větší vstupní strop AI (800k znaků)",
-      "status": "proposed"
+      "status": "done"
     }
   ]
 }

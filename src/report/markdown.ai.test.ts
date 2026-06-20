@@ -125,6 +125,24 @@ describe("buildMarkdown – AI sekce: tři nezávislé režimy (non-goal + code 
     expect(md).toContain("- AI (non-goaly): ověřeno");
   });
 
+  it("oversizedFiles → poznámka pod ## AI analýza vypíše vynechané soubory (jednou)", () => {
+    const skip = detectAiStatus({});
+    const md = buildMarkdown({ ...base, ai: { ...report(skip, skip), oversizedFiles: ["src/huge.ts", "lib/big.ts"] } });
+    expect(md).toContain("AI NEvidělo");
+    expect(md).toContain("`src/huge.ts`");
+    expect(md).toContain("`lib/big.ts`");
+    // poznámka jen JEDNOU (sdílená), ne v každém ze tří mode-bloků
+    expect(md.match(/AI NEvidělo/g)).toHaveLength(1);
+  });
+
+  it("prázdné/chybějící oversizedFiles → žádná poznámka", () => {
+    const skip = detectAiStatus({});
+    const mdEmpty = buildMarkdown({ ...base, ai: { ...report(skip, skip), oversizedFiles: [] } });
+    expect(mdEmpty).not.toContain("AI NEvidělo");
+    const mdUndef = buildMarkdown({ ...base, ai: report(skip, skip) });
+    expect(mdUndef).not.toContain("AI NEvidělo");
+  });
+
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {
     const ready = detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" });
     const md = buildMarkdown({ ...base, ai: report(ready, ready) });
