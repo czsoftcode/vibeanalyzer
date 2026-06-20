@@ -52,7 +52,7 @@ Jádro 1-2 (DT_UNKNOWN -> dořešit a ZAINDEXOVAT skutečný soubor/složku) je 
 
 Smysl 1-2 nebyl jen 'nezahodit tiše', ale taky 'skutečný soubor/složku, kterou readdir neoznačil typem, normálně zaindexovat' (větve st.isDirectory()/st.isFile() na řádcích 91-94). Tahle 'recovery' větev nemá JEDINÝ test. Fifo test pokrývá pouze opačný výsledek (zvláštní typ -> skippedUnreadable). DT_UNKNOWN se těžko vynutí (FS bez d_type), a scanTree nemá injekční hook na typ Direntu, takže ta nejdůležitější část fixu 1-2 zůstává zcela neověřená -> mohla by tiše regresovat (např. že by se i regulérní soubor omylem dostal do skippedUnreadable).
 
-## 2-7 · nit · open
+## 2-7 · nit · resolved
 **Where:** src/report/writeOutputs.ts:31-32
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -125,7 +125,7 @@ run() chybové větve (neplatný cíl, mkdir, zápis) nemají žádný test
 
 run() byla v této fázi exportována kvůli testovatelnosti (fix 2-9) a dostala happy-path integrační test (výstupní adresář se nezaindexuje). Ale VŠECHNY její chybové cesty zůstaly bez automatického testu: kind=='error' → exit 2 (ř.47-51), neplatný cíl → exit 1 (56-60), mkdir selže → exit 1 (62-68) a hlavně NOVÝ překlad chyby z writeReportFiles → hláška + exit 1 (89-98). writeReportFiles je sice unit-testovaná izolovaně (2-1/2-2), ale to, že cli ji obalí, vrátí exit 1 a vypíše hlášku, netestuje nikdo – stejnou logikou, kterou byl odůvodněn finding 2-9 (smazání jednoho řádku projde zeleně), tu chybí síť i pro chybové exity. Regrese (špatný exit kód, spolknutá chyba, zapomenuté return) zůstane zelená. Cíl fáze 1-3 ('po selhání MD zápisu exit + úklid') je na CLI úrovni ověřen jen ručním E2E, které zmizí při dalším refaktoru.
 
-## 2-16 · should-know · open
+## 2-16 · should-know · resolved
 **Where:** src/report/writeOutputs.ts:26-34
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial

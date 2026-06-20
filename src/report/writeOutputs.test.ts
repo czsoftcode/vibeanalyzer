@@ -22,12 +22,20 @@ async function exists(p: string): Promise<boolean> {
 
 describe("writeReportFiles", () => {
   let dir: string;
+  let jsonPath: string;
+  let mdPath: string;
+  let jsonTmp: string;
+  let mdTmp: string;
   // reálné implementace pro simulaci uvnitř mocku (mimo passthrough modul)
   let real: typeof import("node:fs/promises");
 
   beforeEach(async () => {
     real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     dir = await real.mkdtemp(path.join(tmpdir(), "vibe-write-"));
+    jsonPath = path.join(dir, "out.json");
+    mdPath = path.join(dir, "out.md");
+    jsonTmp = `${jsonPath}.tmp`;
+    mdTmp = `${mdPath}.tmp`;
   });
 
   afterEach(async () => {
@@ -35,46 +43,24 @@ describe("writeReportFiles", () => {
     await real.rm(dir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("zapíše oba soubory s obsahem", async () => {
-    const jsonPath = path.join(dir, "out.json");
-    const mdPath = path.join(dir, "out.md");
+  it("zapíše oba soubory s obsahem a nenechá .tmp", async () => {
     await writeReportFiles(jsonPath, "{}\n", mdPath, "# md\n");
 
     expect(await real.readFile(jsonPath, "utf8")).toBe("{}\n");
     expect(await real.readFile(mdPath, "utf8")).toBe("# md\n");
+    // dočasné soubory musí být přejmenované pryč
+    expect(await exists(jsonTmp)).toBe(false);
+    expect(await exists(mdTmp)).toBe(false);
   });
 
-  it("selhání MD zápisu PO vytvoření souboru (ENOSPC) → žádný osiřelý JSON ani MD", async () => {
-    const jsonPath = path.join(dir, "out.json");
-    const mdPath = path.join(dir, "out.md");
+  it("2-7: selhání PRVNÍHO (JSON) zápisu nezničí cíle z minulého běhu", async () => {
+    // simuluj report z předchozího běhu, který na cestách už leží
+    await real.writeFile(jsonPath, "STARÝ JSON\n", "utf8");
+    await real.writeFile(mdPath, "STARÝ MD\n", "utf8");
 
-    // simuluj realistický spouštěč: open uspěje (soubor vznikne), write selže
-    let call = 0;
-    vi.spyOn(fsp, "writeFile").mockImplementation(async (p) => {
-      call++;
-      await real.writeFile(p as string, "", "utf8"); // soubor vznikne na disku
-      if (call === 2) {
-        const e = new Error("ENOSPC: no space left on device") as NodeJS.ErrnoException;
-        e.code = "ENOSPC";
-        throw e;
-      }
-    });
-
-    await expect(writeReportFiles(jsonPath, "{}\n", mdPath, "# md\n")).rejects.toMatchObject({
-      code: "ENOSPC",
-    });
-
-    // oba soubory open-em vznikly, ale catch je musí uklidit – žádný osiřelý výstup
-    expect(await exists(jsonPath)).toBe(false);
-    expect(await exists(mdPath)).toBe(false);
-  });
-
-  it("selhání PRVNÍHO (JSON) zápisu po vytvoření → JSON uklizen, MD nevznikl", async () => {
-    const jsonPath = path.join(dir, "out.json");
-    const mdPath = path.join(dir, "out.md");
-
+    // první zápis (do jsonTmp) vytvoří temp, pak selže – ke druhému se nedostaneme
     vi.spyOn(fsp, "writeFile").mockImplementationOnce(async (p) => {
-      await real.writeFile(p as string, "", "utf8"); // JSON vznikne
+      await real.writeFile(p as string, "", "utf8");
       const e = new Error("EFBIG: file too large") as NodeJS.ErrnoException;
       e.code = "EFBIG";
       throw e;
@@ -84,19 +70,76 @@ describe("writeReportFiles", () => {
       code: "EFBIG",
     });
 
-    expect(await exists(jsonPath)).toBe(false);
-    expect(await exists(mdPath)).toBe(false);
+    // cílové soubory zůstaly nedotčené – starý report přežil
+    expect(await real.readFile(jsonPath, "utf8")).toBe("STARÝ JSON\n");
+    expect(await real.readFile(mdPath, "utf8")).toBe("STARÝ MD\n");
+    // žádný osiřelý .tmp
+    expect(await exists(jsonTmp)).toBe(false);
+    expect(await exists(mdTmp)).toBe(false);
   });
 
-  it("EISDIR (selhání už při open) také nezanechá nic", async () => {
-    const jsonPath = path.join(dir, "out.json");
-    const mdPath = path.join(dir, "out.md");
-    await real.mkdir(mdPath, { recursive: true }); // MD cesta je adresář → EISDIR při open
+  it("2-16: úspěšný JSON + pád MD nepřepíše cíl a nenechá half-pár", async () => {
+    await real.writeFile(jsonPath, "STARÝ JSON\n", "utf8");
+    await real.writeFile(mdPath, "STARÝ MD\n", "utf8");
+
+    // JSON temp se zapíše celý, MD temp selže (ENOSPC) – žádný rename neproběhne
+    let call = 0;
+    vi.spyOn(fsp, "writeFile").mockImplementation(async (p, data) => {
+      call++;
+      if (call === 1) {
+        await real.writeFile(p as string, data as string, "utf8");
+        return;
+      }
+      await real.writeFile(p as string, "", "utf8");
+      const e = new Error("ENOSPC: no space left on device") as NodeJS.ErrnoException;
+      e.code = "ENOSPC";
+      throw e;
+    });
+
+    await expect(writeReportFiles(jsonPath, "NOVÝ\n", mdPath, "# md\n")).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
+
+    // cíle zůstaly na starém obsahu – žádný nový half-pár (JSON nový + MD starý)
+    expect(await real.readFile(jsonPath, "utf8")).toBe("STARÝ JSON\n");
+    expect(await real.readFile(mdPath, "utf8")).toBe("STARÝ MD\n");
+    expect(await exists(jsonTmp)).toBe(false);
+    expect(await exists(mdTmp)).toBe(false);
+  });
+
+  it("selhání zápisu bez existujícího cíle nezanechá žádný výstup ani .tmp", async () => {
+    // žádné předchozí soubory na cestách
+    vi.spyOn(fsp, "writeFile").mockImplementation(async (p) => {
+      await real.writeFile(p as string, "", "utf8"); // temp vznikne
+      const e = new Error("EIO: i/o error") as NodeJS.ErrnoException;
+      e.code = "EIO";
+      throw e;
+    });
 
     await expect(writeReportFiles(jsonPath, "{}\n", mdPath, "# md\n")).rejects.toMatchObject({
-      code: "EISDIR",
+      code: "EIO",
     });
 
     expect(await exists(jsonPath)).toBe(false);
+    expect(await exists(mdPath)).toBe(false);
+    expect(await exists(jsonTmp)).toBe(false);
+    expect(await exists(mdTmp)).toBe(false);
+  });
+
+  it("selhání DRUHÉHO renamu (EISDIR na MD): zbytkové okno – JSON přejmenován, žádný .tmp", async () => {
+    // mdPath je adresář → rename(mdTmp → mdPath) selže EISDIR; JSON rename ale projde
+    await real.writeFile(jsonPath, "STARÝ JSON\n", "utf8");
+    await real.mkdir(mdPath, { recursive: true });
+
+    await expect(writeReportFiles(jsonPath, "NOVÝ JSON\n", mdPath, "# md\n")).rejects.toMatchObject({
+      code: "EISDIR",
+    });
+
+    // VĚDOMÁ zbytková neúplná atomicita: první rename uspěl, takže JSON je už nový;
+    // rollback nejde (starý obsah přepsán). Tohle okno dokumentuje docstring.
+    expect(await real.readFile(jsonPath, "utf8")).toBe("NOVÝ JSON\n");
+    // úklid nesmí nechat .tmp (jsonTmp už přejmenován pryč, mdTmp se uklidil)
+    expect(await exists(jsonTmp)).toBe(false);
+    expect(await exists(mdTmp)).toBe(false);
   });
 });

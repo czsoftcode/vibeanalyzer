@@ -12,6 +12,10 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 - `--out=` s **prázdnou hodnotou** (např. `vibeanalyzer . --out=`) nově vrátí
   chybu „Volba --out vyžaduje cestu k adresáři." místo aby report tiše zapsal do
   aktuálního adresáře. Chování je teď shodné s `--out` bez hodnoty.
+- Zápis reportu už **nepřepíše ani nesmaže report z minulého běhu**, když zápis
+  selže (plný disk, kvóta, I/O chyba). Soubory se nově zapisují přes dočasné
+  `.tmp` a teprve po úspěchu obou se přejmenují na cílová jména; při chybě se
+  uklidí jen dočasné soubory a původní report zůstane nedotčený.
 
 ## [0.3.0] - 2026-06-20
 

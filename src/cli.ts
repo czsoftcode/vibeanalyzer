@@ -420,9 +420,11 @@ export async function run(
     await writeReportFiles(jsonPath, JSON.stringify(index, null, 2) + "\n", mdPath, md + "\n");
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
-    // writeReportFiles uklidí best-effort jen částečně zapsané SOUBORY. Adresáře,
-    // které jsme kvůli zápisu vytvořili (createdDir = nejvyšší z nich, včetně
-    // mezičlánků u zanořeného --out), smažeme tady. Když createdDir je undefined,
+    // writeReportFiles zapisuje přes dočasné soubory (temp+rename), takže po
+    // selhání uklidí best-effort jen své vlastní .tmp soubory – cílové reporty
+    // nechá nedotčené. Adresáře, které jsme kvůli zápisu vytvořili (createdDir =
+    // nejvyšší z nich, včetně mezičlánků u zanořeného --out), smažeme tady. Když
+    // createdDir je undefined,
     // outDir existoval už před námi (klidně prázdný uživatelův) → NEMAŽEME nic,
     // ať neodstraníme cizí adresář ani staré reporty (nálezy 3-10/3-14/3-15).
     if (createdDir !== undefined) {

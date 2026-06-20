@@ -1,21 +1,32 @@
-import { unlink, writeFile } from "node:fs/promises";
+import { rename, unlink, writeFile } from "node:fs/promises";
 
 /**
- * Zapíše párový výstup (JSON + MD). Soubory jsou pár – buď oba, nebo žádný;
- * při jakékoli chybě se oba cílové soubory bezpodmínečně best-effort smažou.
+ * Zapíše párový výstup (JSON + MD) tak, aby selhání NEzničilo cílové soubory.
  *
- * Proč bezpodmínečně obě cesty (a ne jen "co se stihlo úspěšně zapsat"):
- * `writeFile` otevírá soubor s O_CREAT|O_TRUNC, takže soubor na disku VZNIKNE
- * už při open – ještě před samotným `write`. Když write selže až potom (plný
- * disk ENOSPC, kvóta EDQUOT, EFBIG, I/O chyba EIO – právě ty realistické důvody
- * selhání), soubor existuje, i když promise rejectne. Sledovat "úspěšně zapsané"
- * cesty by tenhle osiřelý/částečný soubor minulo. Proto úklid cílí obě cesty
- * nepodmíněně; neexistující soubor dá ENOENT, který spolkneme.
+ * Postup: obojí se nejdřív zapíše do dočasných souborů `<cíl>.tmp` ve stejném
+ * adresáři (tedy na stejném filesystému jako cíl – nutné, aby `rename` byl jen
+ * přejmenování, ne kopie přes hranici FS). Teprve když oba zápisy uspějí, se
+ * tempy přejmenují na cílová jména. `rename` cíl přepíše atomicky (per soubor).
  *
- * Atomicita přes dva renamy není dosažitelná (druhý rename může selhat stejně),
- * proto best-effort úklid; i ten může selhat (právě odebraná práva na adresář) –
- * pak osiřelý soubor zůstane. Chybu zápisu funkce propaguje dál (volající ji
- * přeloží na hlášku a exit kód). Vrací `void`.
+ * Proč temp+rename místo přímého zápisu do cíle:
+ * `writeFile` otevírá s O_CREAT|O_TRUNC – cílový soubor by VZNIKL/se zkrátil už
+ * při open, ještě před zápisem obsahu. Kdyby write selhal až potom (plný disk
+ * ENOSPC, kvóta EDQUOT, EFBIG, I/O EIO), zůstal by na disku osiřelý/zkrácený
+ * cíl, a navíc bychom přepsali platný report z minulého běhu, i když tenhle běh
+ * neuspěl. Se zápisem do tempu se cíl nedotkne, dokud nejsou OBA tempy hotové.
+ *
+ * Úklid při chybě cílí JEN naše tempy (`unlink` best-effort, ENOENT spolkneme) –
+ * nikdy ne cílové soubory. Tím selhání jednoho ze zápisů nesmaže ani nepřepíše
+ * existující cíl (řeší nálezy 2-7 a 2-16). Chybu funkce propaguje dál (volající
+ * ji přeloží na hlášku a exit kód). Vrací `void`.
+ *
+ * Zbytková NEúplná atomicita (vědomě přijatá): dva renamy nejsou jeden atomický
+ * krok. Když první rename (JSON) uspěje a druhý (MD) selže, zůstane nový JSON +
+ * starý/žádný MD – rollback nejde, starý obsah JSON je už přepsaný. Realistické
+ * pády (ENOSPC/EDQUOT/EFBIG/EIO) ale nastávají ve fázi zápisu tempu PŘED prvním
+ * renamem; rename je jen úprava metadat. Okno je tedy řádově menší než u přímého
+ * zápisu. Druhá vědomá mez: tvrdý kill (SIGKILL) mezi zápisem a renamem zanechá
+ * `.tmp` soubor – žádný sweep neděláme (lepší leftover než poškozený cíl).
  */
 export async function writeReportFiles(
   jsonPath: string,
@@ -23,13 +34,18 @@ export async function writeReportFiles(
   mdPath: string,
   mdContent: string,
 ): Promise<void> {
+  const jsonTmp = `${jsonPath}.tmp`;
+  const mdTmp = `${mdPath}.tmp`;
   try {
-    await writeFile(jsonPath, jsonContent, "utf8");
-    await writeFile(mdPath, mdContent, "utf8");
+    await writeFile(jsonTmp, jsonContent, "utf8");
+    await writeFile(mdTmp, mdContent, "utf8");
+    await rename(jsonTmp, jsonPath);
+    await rename(mdTmp, mdPath);
   } catch (err) {
-    // oba soubory mohly vzniknout už při open – smaž obě cesty bezpodmínečně
-    await unlink(jsonPath).catch(() => {});
-    await unlink(mdPath).catch(() => {});
+    // uklidíme JEN naše tempy; cílové soubory necháme nedotčené.
+    // (po úspěšném renamu už temp neexistuje → unlink dá ENOENT, spolkneme)
+    await unlink(jsonTmp).catch(() => {});
+    await unlink(mdTmp).catch(() => {});
     throw err;
   }
 }

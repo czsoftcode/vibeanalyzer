@@ -177,6 +177,11 @@
       "id": 35,
       "title": "Odmítnout prázdné --out=",
       "status": "done"
+    },
+    {
+      "id": 36,
+      "title": "Atomický zápis reportu přes rename",
+      "status": "done"
     }
   ]
 }

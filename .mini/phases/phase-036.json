@@ -1,0 +1,43 @@
+{
+  "id": 36,
+  "title": "Atomický zápis reportu přes rename",
+  "goal": "writeReportFiles zapíše JSON i MD do dočasných souborů a teprve po úspěchu obou je přejmenuje na cílová jména; při chybě uklízí jen tempy, takže selhání jednoho zápisu nezničí cílové soubory z minulého běhu (řeší 2-16 i 2-7), pokryto testy se zuby.",
+  "status": "done",
+  "fromFinding": "2-7",
+  "steps": [
+    {
+      "title": "Přepsat writeReportFiles na temp+rename",
+      "status": "done",
+      "detail": "Zapsat JSON i MD do dočasných souborů (jsonPath+.tmp, mdPath+.tmp) ve stejném adresáři; po úspěchu obou rename na cílová jména (per-soubor atomické, přepíše cíl). Při chybě best-effort unlink jen tempů, cílové soubory nedotčené. Přepsat docstring: přiznat zbytkovou neúplnou atomicitu dvou renamů a možný leftover .tmp při tvrdém killu; zkontrolovat komentář volajícího cli.ts:423."
+    },
+    {
+      "title": "Test se zuby (2-7): cíl z minulého běhu přežije selhání",
+      "status": "done",
+      "detail": "Předvytvořit mdPath i jsonPath s obsahem 'starý běh', nechat selhat zápis JSON tempu (EFBIG) → ověřit, že mdPath i jsonPath mají pořád starý obsah (nesmazané) a žádný .tmp nezůstal. Musí padnout na staré implementaci."
+    },
+    {
+      "title": "Test se zuby (2-16): pád MD nezničí cíl, žádný half-pár",
+      "status": "done",
+      "detail": "JSON temp uspěje, MD temp selže (ENOSPC) → ověřit, že na cílovém jsonPath není nový half-pár (zůstává starý obsah / neexistuje), mdPath nedotčen a žádný .tmp nezůstal."
+    },
+    {
+      "title": "Sladit existující testy s novou sémantikou",
+      "status": "done",
+      "detail": "Projít 4 stávající testy ve writeOutputs.test.ts – upravit očekávání (oba zapsané; selhání nezanechá osiřelý výstup ani .tmp; spy na writeFile míří na temp cesty)."
+    },
+    {
+      "title": "Doběh: tsc + celá test suite zelené",
+      "status": "done",
+      "detail": "npm run typecheck a npm test projdou."
+    }
+  ],
+  "startedAt": "2026-06-20T11:24:17.833Z",
+  "completedAt": "2026-06-20T11:36:11.944Z",
+  "autoCommit": {
+    "preSha": "bc20d2bd93800a707fc87c899fe1e4173ed14cc9",
+    "subject": "Phase 36: Atomický zápis reportu přes rename"
+  },
+  "resolvedFindings": [
+    "2-16"
+  ]
+}
