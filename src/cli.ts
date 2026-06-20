@@ -19,6 +19,7 @@ import { renderProjectMd, writeIntentFile } from "./intentWriter.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
 import { ReportPathCollisionError } from "./report/errors.js";
+import { resolveOutputPaths } from "./report/outputPaths.js";
 import { writeReportFiles } from "./report/writeOutputs.js";
 import { type FileEntry, ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 import { scanSecrets, type SecretsResult } from "./secrets.js";
@@ -398,8 +399,13 @@ export async function run(
     moduleGraph,
   });
 
-  const jsonPath = path.join(outDir, `vibeanalyzer-${stamp}.json`);
-  const mdPath = path.join(outDir, `vibeanalyzer-${stamp}.md`);
+  // Volná dvojice výstupních cest. Dva běhy ve stejné ms dají stejný stamp a
+  // rename by druhý report tiše přepsal přes první (nález 1-5); resolveOutputPaths
+  // v takovém případě přidá sufix -1, -2, … Voláme PŘED mkdir: když ještě nic
+  // neexistuje, vrátí holý stamp (n=0); když outDir s reportem už existuje, kontrola
+  // sedí. Případný throw (krajně nepravděpodobné > maxAttempts kolizí) probublá se
+  // stackem dřív, než cokoli vytvoříme – žádný leftover, žádný tichý exit 0.
+  const { jsonPath, mdPath } = await resolveOutputPaths(outDir, stamp);
 
   // outDir vytvoříme až TEĎ, těsně před zápisem. Dřívější selhání (neprojitelný
   // nebo nečitelný cíl) tak po sobě nenechají osiřelý prázdný výstupní adresář

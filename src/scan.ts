@@ -198,6 +198,10 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
       // pak je isDirectory()/isFile() false a typ se musí dořešit přes lstat
       // (lstat, ne stat, ať se ani tady nesleduje symlink).
       let kind: "dir" | "file";
+      // Velikost už známá z lstatu (jen u DT_UNKNOWN souborů). lstat na regulérní
+      // nesymlink soubor vrací stejné st.size jako stat → druhý stat níž je zbytečný
+      // syscall. Když zůstane undefined (běžná cesta s d_type), velikost dořeší stat.
+      let knownSize: number | undefined;
       if (ent.isDirectory()) {
         kind = "dir";
       } else if (ent.isFile()) {
@@ -215,6 +219,7 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
           kind = "dir";
         } else if (st.isFile()) {
           kind = "file";
+          knownSize = st.size;
         } else {
           // fifo, socket, blokové/znakové zařízení – do indexu nepatří,
           // ale nesmí zmizet beze stopy (jinak tiché zahození).
@@ -244,13 +249,18 @@ export async function scanTree(root: string, options: ScanOptions = {}): Promise
           ignoredByGitignore++;
           continue;
         }
-        let size = 0;
-        try {
-          const st = await stat(abs);
-          size = st.size;
-        } catch {
-          skippedUnreadable.push(rel);
-          continue;
+        let size: number;
+        if (knownSize !== undefined) {
+          // velikost už máme z lstatu (DT_UNKNOWN cesta) → žádný druhý stat
+          size = knownSize;
+        } else {
+          try {
+            const st = await stat(abs);
+            size = st.size;
+          } catch {
+            skippedUnreadable.push(rel);
+            continue;
+          }
         }
         files.push({
           path: rel,

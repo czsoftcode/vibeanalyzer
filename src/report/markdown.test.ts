@@ -208,4 +208,16 @@ describe("buildFolderDiagram", () => {
     expect(text).toContain('n0["proj"]');
     expect(text).not.toContain("-->");
   });
+
+  it("backtick, středník a CR/LF v názvu složky se z labelu zahodí (Mermaid injection)", () => {
+    // Linux povoluje v názvu složky `, ; i newline. Dřív je escapeLabel u stromu
+    // struktury propouštěl (escapoval jen "/[]"), takže by rozbily ["..."] blok /
+    // umožnily injekci. Teď platí stejná přísná pravidla jako pro uzly grafu modulů.
+    const d = buildFolderDiagram(["we`ir;d\nname"], "proj", 1000);
+    const labelLine = d.lines.find((l) => l.includes("ir") && l.includes("n1"));
+    expect(labelLine).toBeDefined();
+    expect(labelLine).not.toContain("`");
+    expect(labelLine).not.toContain(";");
+    expect(labelLine).not.toContain("\n");
+  });
 });

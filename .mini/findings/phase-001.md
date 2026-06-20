@@ -28,7 +28,7 @@ Při selhání zápisu MD zůstane na disku osiřelý JSON (částečný výstup
 
 writeFile(jsonPath) a writeFile(mdPath) běží sekvenčně v jednom try. Když JSON projde a MD selže (plný disk, ENOSPC, odebraná práva mezi tím), JSON už leží na disku; funkce vrátí exit 1, ale osiřelý vibeanalyzer-<stamp>.json zůstane bez párového .md. Žádný cleanup/rollback. Uživatel vidí 'Chyba', ale v adresáři má polovičatý výstup, který může omylem považovat za platný. Mírná závažnost (vzácný stav), ale je to tiché zanechání nekonzistence. Zvážit: zapsat oba do temp a atomicky přejmenovat, nebo při chybě smazat již zapsaný JSON.
 
-## 1-4 · nit · open
+## 1-4 · nit · resolved
 **Where:** src/report/markdown.ts:19-21
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
@@ -36,7 +36,7 @@ escapeLabel ošetřuje jen uvozovky a hranaté závorky, ne další Mermaid-citl
 
 escapeLabel nahradí jen " a odstraní [ ]. Reálný název složky ale může obsahovat další znaky, které Mermaid v ['...'] labelu interpretuje: '#' (začátek HTML entity jako #9829;), zpětný apostrof, a na Linuxu i znak nového řádku (filename smí obsahovat cokoli kromě '/' a NUL). Reprodukováno, že '(' '|' '{}' projdou neescapované (v quoted labelu zřejmě OK), ale '#'/newline můžou rozbít nebo zkomolit diagram. Nízká závažnost (vzácné názvy), ale escaping je neúplný a selže nehlučně = nevalidní mermaid blok v reportu. Pokrytí testem 0 (markdown.test.ts neřeší žádný speciální znak).
 
-## 1-5 · nit · open
+## 1-5 · nit · resolved
 **Where:** src/timestamp.ts:6-8, src/cli.ts:66
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial

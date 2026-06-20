@@ -45,18 +45,20 @@ const MERMAID_EDGE_LIMIT = 500; // tvrdý default rendereru Mermaidu
 const DEFAULT_MAX_MODULE_EDGES = MERMAID_EDGE_LIMIT - 20; // 480, rezerva pod limitem
 const DEFAULT_MAX_MODULE_NODES = 1000; // s ≤480 hranami stejně nesváže dřív než hrany
 
-/** Nahradí znaky, které by rozbily Mermaid label v hranatých závorkách. */
-function escapeLabel(s: string): string {
-  return s.replace(/"/g, "'").replace(/[[\]]/g, "");
-}
-
 /**
- * Escape pro label uzlu grafu modulů. Label je CESTA SOUBORU cizího projektu –
- * víc cizího vstupu než u stromu složek, takže přísnější než escapeLabel: navíc
- * zahodí CR/LF (název souboru na Linuxu je smí mít → rozbil by `["..."]` blok)
- * a backtick/středník (zlozvyky v Mermaid syntaxi). `"` → `'`, `[]` pryč.
+ * Nahradí znaky, které by rozbily Mermaid label v hranatých závorkách.
+ * Label může být jméno složky/souboru z cizího projektu; na Linuxu smí obsahovat
+ * i CR/LF (rozbily by `["..."]` blok) a backtick/středník (zlozvyky v Mermaid
+ * syntaxi). CR/LF → mezera, `"` → `'`, `[]`/backtick/středník pryč. Jedna funkce
+ * pro strom struktury i pro uzly grafu modulů – stejná Mermaid pravidla platí pro
+ * obě (dřív byl pro strom volnější escape, který nechával středník/backtick projít).
+ *
+ * Mazání `;` má i druhý, MÉNĚ zřejmý účel: Mermaid HTML entity mají tvar `#kód;`
+ * a vyhodnotí se jen s koncovým `;`. Bez středníku zůstane `#…` neaktivní text,
+ * takže `#` v labelu necháváme (běžné v názvech, např. `C#`) – ale POZOR: kdo by
+ * sem `;` vrátil, otevře tím cestu k vyhodnocení entit z cizího jména souboru.
  */
-function escapeNodeLabel(s: string): string {
+function escapeLabel(s: string): string {
   return s
     .replace(/[\r\n]+/g, " ")
     .replace(/"/g, "'")
@@ -486,7 +488,7 @@ export function buildModuleDiagram(
 
   const lines: string[] = ["graph LR"];
   for (const [p, id] of idOf) {
-    lines.push(`  n${id}["${escapeNodeLabel(p)}"]`);
+    lines.push(`  n${id}["${escapeLabel(p)}"]`);
   }
   for (const e of shown) {
     lines.push(`  n${idOf.get(e.from)} --> n${idOf.get(e.to)}`);

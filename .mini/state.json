@@ -197,6 +197,11 @@
       "id": 39,
       "title": "ReportPathCollisionError do vlastního modulu",
       "status": "done"
+    },
+    {
+      "id": 40,
+      "title": "Dokončit tři adversarial nity",
+      "status": "done"
     }
   ]
 }

@@ -16,6 +16,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   selže (plný disk, kvóta, I/O chyba). Soubory se nově zapisují přes dočasné
   `.tmp` a teprve po úspěchu obou se přejmenují na cílová jména; při chybě se
   uklidí jen dočasné soubory a původní report zůstane nedotčený.
+- Dva běhy ve **stejné milisekundě** už **tiše nepřepíšou** report toho prvního.
+  Když soubor s daným časovým razítkem už existuje, přidá se k názvu pořadové
+  číslo (`vibeanalyzer-<razítko>-1.md` atd.), takže oba reporty zůstanou.
+- Mermaid diagramy (strom struktury i graf modulů) nově **čistí jména souborů a
+  složek jednotně a přísněji** – zpětník, backtick i konec řádku ve jméně už
+  nerozbijí diagram ani neumožní podstrčit Mermaid syntaxi.
 
 ## [0.3.0] - 2026-06-20
 

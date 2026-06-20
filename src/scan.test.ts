@@ -54,6 +54,17 @@ function symlinkStat(): import("node:fs").Stats {
   } as unknown as import("node:fs").Stats;
 }
 
+// stat regulérního souboru se zadanou velikostí – pro DT_UNKNOWN soubor, kde
+// lstat určí typ I velikost (a druhý stat už nemá padnout).
+function fileStat(size: number): import("node:fs").Stats {
+  return {
+    isSymbolicLink: () => false,
+    isDirectory: () => false,
+    isFile: () => true,
+    size,
+  } as unknown as import("node:fs").Stats;
+}
+
 describe("scanTree", () => {
   let root: string;
   // reálné implementace pro použití uvnitř mocků (mimo passthrough modul)
@@ -179,6 +190,27 @@ describe("scanTree", () => {
     expect(f?.ext).toBe(".ts");
     expect(f?.size ?? 0).toBeGreaterThan(0);
     expect(skippedUnreadable).not.toContain("mystery.ts");
+  });
+
+  it("DT_UNKNOWN soubor: velikost z lstatu, druhý stat se NEvolá (nález 2-11)", async () => {
+    const mroot = await mkdtemp(path.join(tmpdir(), "vibe-unksize-"));
+    vi.spyOn(fsp, "readdir").mockResolvedValue([unknownDirent("mystery.ts")] as never);
+    // lstat dá typ i velikost; stat ať klidně vrátí JINOU velikost – kdyby se size
+    // bralo ze statu (regrese), test by to odhalil. A hlavně: stat nesmí padnout.
+    vi.spyOn(fsp, "lstat").mockImplementation(async (p) => {
+      if (String(p).endsWith("mystery.ts")) return fileStat(4242);
+      return real.lstat(p as Parameters<typeof real.lstat>[0]);
+    });
+    const statSpy = vi.spyOn(fsp, "stat").mockResolvedValue(fileStat(999) as never);
+
+    const { files, skippedUnreadable } = await scanTree(mroot);
+    await rm(mroot, { recursive: true, force: true }).catch(() => {});
+
+    const f = files.find((e) => e.path === "mystery.ts");
+    expect(f?.size).toBe(4242); // z lstatu, ne ze statu (999)
+    expect(skippedUnreadable).not.toContain("mystery.ts");
+    // žádné volání stat se nesmí týkat našeho souboru (jediný zdroj velikosti = lstat)
+    expect(statSpy.mock.calls.some(([p]) => String(p).endsWith("mystery.ts"))).toBe(false);
   });
 
   it("DT_UNKNOWN: adresář se dořeší přes lstat a REKURZIVNĚ projde (jádro 1-2 na FS bez d_type)", async () => {

@@ -1,0 +1,44 @@
+{
+  "id": 40,
+  "title": "Dokončit tři adversarial nity",
+  "goal": "Sjednotit escapeLabel na přísnost escapeNodeLabel, ošetřit kolizi časového razítka tak, aby nepřepsala dřívější výstup, a u DT_UNKNOWN souborů reuse velikosti z lstat místo druhého stat.",
+  "status": "done",
+  "fromFinding": "2-11",
+  "steps": [
+    {
+      "title": "Zpřísnit escapeLabel jako escapeNodeLabel (1-4)",
+      "status": "done",
+      "detail": "V src/report/markdown.ts srovnat escapeLabel na stejné čištění jako escapeNodeLabel (navíc CR/LF, backtick, středník), aktualizovat zavádějící komentář o přísnosti. Test: label se backtickem, středníkem a newline se očistí."
+    },
+    {
+      "title": "Reuse velikosti z lstat u DT_UNKNOWN (2-11)",
+      "status": "done",
+      "detail": "V src/scan.ts ve fallbacku bez d_type, kde lstat určí soubor, propašovat st.size dál a nevolat druhý stat. Odpadne i nekonzistentní druhá chybová cesta. Test (fake fs): entry bez d_type dostane size z lstatu, stat se podruhé nevolá."
+    },
+    {
+      "title": "Kolize razítka nepřepíše dřívější výstup (1-5)",
+      "status": "done",
+      "detail": "V src/cli.ts před writeReportFiles vyřešit volnou cestu: když vibeanalyzer-<stamp>.json/.md existuje, přidat číselný sufix až na volnou dvojici místo tichého přepisu přes rename. Helper s jednotkovým testem na kolizi. TOCTOU okno zmínit v reportu."
+    },
+    {
+      "title": "Doběh: tsc + celá suite zelené",
+      "status": "done",
+      "detail": "npx tsc --noEmit a npm test projdou; tři nové/upravené testy mají zuby (dočasné rozbití fixu shodí příslušný test)."
+    },
+    {
+      "title": "Nezávislý adversarial self-review trojice",
+      "status": "done",
+      "detail": "Čerstvý sub-agent prověří unhappy path tří fixů, zvlášť cestu zápisu z bodu 3 (vedlejší efekty/leftover při selhání, dosažitelnost sufix-větve)."
+    }
+  ],
+  "startedAt": "2026-06-20T12:46:31.072Z",
+  "completedAt": "2026-06-20T13:03:14.964Z",
+  "autoCommit": {
+    "preSha": "66f5dd1e41006a0a93ab4f1dcfb32b9839359ec5",
+    "subject": "Phase 40: Dokončit tři adversarial nity"
+  },
+  "resolvedFindings": [
+    "1-4",
+    "1-5"
+  ]
+}

@@ -84,7 +84,7 @@ Větev DT_UNKNOWN→lstat zjistí symlink→continue nemá test
 
 Na FS bez d_type vrátí readdr DT_UNKNOWN i pro symlink (ent.isSymbolicLink()===false). Spadne do else, lstat(abs), a JEDINÁ ochrana proti sledování symlinku v této větvi je 'if (st.isSymbolicLink()) continue' na řádku 101. Tahle větev nemá žádný test: test 'DT_UNKNOWN soubor' (scan.test.ts:144) testuje reálný soubor, test 'zvláštní typ' (160) vrací specialStat() který NENÍ symlink. Symlink-přes-DT_UNKNOWN scénář není pokrytý vůbec. Když refaktor tu jednu řádku omylem zahodí, testy projdou a nástroj začne sledovat symlinky (zacyklení / únik mimo strom) na d_type-less FS. Bezpečnostně relevantní guard bez sítě.
 
-## 2-11 · nit · open
+## 2-11 · nit · resolved
 **Where:** src/scan.ts:96,123
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
