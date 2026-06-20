@@ -76,6 +76,37 @@ export interface RawAiFinding {
 }
 
 /**
+ * Sloupne markdown code fence kolem JSONu (` ```json … ``` ` nebo ` ``` … ``` `). Modely,
+ * které nectí `output_config` (Z.ai/glm), na explicitní „vrať JSON" v promptu reálně
+ * odpovídají zabalené do ohrazení – pak by `JSON.parse` padl na backticku. Jen sloupne
+ * VNĚJŠÍ ohrazení, obsah nemění. Bez ohrazení vrátí vstup beze změny (jen trim).
+ */
+function stripJsonCodeFence(raw: string): string {
+  const t = raw.trim();
+  if (!t.startsWith("```")) return t;
+  return t.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "").trim();
+}
+
+/**
+ * Rozbalí surovou JSON odpověď modelu na pole nálezů. Přijme OBA tvary: kanonický obal
+ * `{ findings: [...] }` (vynucený `output_config` schématem u Anthropic) i HOLÉ pole
+ * `[...]` – to vrací modely, které schéma NEctí (Z.ai/glm reálně posílá holé pole, často
+ * i v markdown code fence – ten předtím sloupneme). BEZPEČNÁ tolerance: jen sjednocuje
+ * OBAL, NEvymýšlí ani nemapuje pole položek – striktní validaci (a tím obranu proti
+ * halucinaci) dělá až volající nad vrácenými položkami. `label` zpřesní chybovou hlášku
+ * podle režimu (např. "(code) "). Při neparsovatelném JSONu nebo úplně cizím tvaru HODÍ
+ * (nečekaný stav, NEmaskovat jako prázdný seznam).
+ */
+export function unwrapFindings(rawText: string, label = ""): unknown[] {
+  const data = JSON.parse(stripJsonCodeFence(rawText)) as unknown;
+  if (Array.isArray(data)) return data;
+  if (typeof data === "object" && data !== null && Array.isArray((data as { findings?: unknown }).findings)) {
+    return (data as { findings: unknown[] }).findings;
+  }
+  throw new Error(`AI odpověď ${label}nemá očekávaný tvar { findings: [...] } ani holé [...]`);
+}
+
+/**
  * Naparsuje strukturovaný JSON výstup na `RawAiFinding[]`. Schéma sice tvar
  * garantuje, ale věříme jen tomu, co OPRAVDU přišlo – při špatném tvaru HODÍME
  * (nečekaný stav, NEmaskovat jako prázdný seznam). Volající (runAiAnalysis) ho
@@ -269,8 +300,18 @@ export const SYSTEM_PROMPT_CODE = [
   "  `// ==== cesta ====` nad kódem, a `line` jako 1-based číslo řádku v TOM souboru.",
   "- `kind` je krátký druh problému česky (např. „logická chyba\", „neošetřená chyba\",",
   "  „riskantní vzorec\").",
+  "- `severity` je závažnost, POVINNĚ přesně jedna z: \"error\" (skoro jistá chyba),",
+  "  \"warning\" (riziko k ověření), \"info\" (drobnost). Žádnou jinou hodnotu nepoužívej.",
   "- Nevymýšlej si soubory ani řádky, které v poslaném kódu nejsou.",
   "- `message` piš česky, stručně: co je špatně a proč je to riziko.",
+  "",
+  "Odpověz VÝHRADNĚ JSON objektem PŘESNĚ tohoto tvaru (klíč `findings` je povinný obal,",
+  "ne holé pole; každá položka má přesně tato pole, nic navíc):",
+  '{ "findings": [ { "file": "<cesta>", "line": <číslo>, "kind": "<druh>",',
+  '    "severity": "error|warning|info", "message": "<popis>" } ] }',
+  "Když nic závažného nevidíš, vrať `{ \"findings\": [] }`. (Tvar dodrž i bez ohledu na to,",
+  "co o formátu říká API – řídí se TÍMTO popisem.) Vrať ČISTÝ JSON – žádný markdown,",
+  "žádné ``` ohrazení (code fence), žádný text před ani za JSONem.",
 ].join("\n");
 
 /** Sestaví uživatelský prompt pro analýzu kódu: (případně přiznané uříznutí) + slepený
@@ -302,11 +343,9 @@ export interface RawCodeFinding {
  * nechá probublat, na hranici CLI degraduje se stackem.
  */
 export function parseCodeFindings(rawText: string): RawCodeFinding[] {
-  const data = JSON.parse(rawText) as unknown;
-  if (typeof data !== "object" || data === null || !Array.isArray((data as { findings?: unknown }).findings)) {
-    throw new Error("AI odpověď (code) nemá očekávaný tvar { findings: [...] }");
-  }
-  const arr = (data as { findings: unknown[] }).findings;
+  // Přijme obal `{ findings: [...] }` i holé `[...]` – glm (Z.ai) nectí output_config
+  // schéma a posílá holé pole. severity dál ověřujeme STRIKTNĚ níže (žádné defaultování).
+  const arr = unwrapFindings(rawText, "(code) ");
   return arr.map((item, i) => {
     if (typeof item !== "object" || item === null) {
       throw new Error(`AI code nález #${i} není objekt`);

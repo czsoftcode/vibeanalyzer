@@ -13,6 +13,8 @@ import {
   parseCodeFindings,
   parseFindings,
   parseLogicFindings,
+  SYSTEM_PROMPT_CODE,
+  unwrapFindings,
   runAiAnalysis,
   runAiCodeAnalysis,
   runAiLogicAnalysis,
@@ -260,6 +262,57 @@ describe("parseCodeFindings", () => {
   it("chybějící kind HODÍ", () => {
     const raw = JSON.stringify({ findings: [{ file: "a.ts", line: 1, severity: "warning", message: "m" }] });
     expect(() => parseCodeFindings(raw)).toThrow();
+  });
+
+  it("HOLÉ pole [...] (glm bez obalu) → stejný výsledek jako obal { findings: [...] }", () => {
+    // Zub: kdyby parser přestal rozbalovat holé pole, glm by zase spadl do skipped.
+    const item = { file: "a.ts", line: 2, kind: "neošetřená chyba", severity: "error", message: "dělení nulou" };
+    const bare = parseCodeFindings(JSON.stringify([item]));
+    const wrapped = parseCodeFindings(JSON.stringify({ findings: [item] }));
+    expect(bare).toEqual(wrapped);
+    expect(bare).toEqual([item]);
+  });
+
+  it("chybějící severity HODÍ (NEdoplňuje default – žádná fabrikace)", () => {
+    const raw = JSON.stringify([{ file: "a.ts", line: 1, kind: "x", message: "m" }]);
+    expect(() => parseCodeFindings(raw)).toThrow();
+  });
+
+  it("neplatná severity HODÍ (jen error|warning|info)", () => {
+    const raw = JSON.stringify([{ file: "a.ts", line: 1, kind: "x", severity: "critical", message: "m" }]);
+    expect(() => parseCodeFindings(raw)).toThrow();
+  });
+});
+
+describe("unwrapFindings – sjednocení obalu (obal i holé pole)", () => {
+  it("obal { findings: [...] } → vrátí pole", () => {
+    expect(unwrapFindings(JSON.stringify({ findings: [1, 2] }))).toEqual([1, 2]);
+  });
+  it("holé pole [...] → vrátí ho beze změny", () => {
+    expect(unwrapFindings(JSON.stringify([1, 2]))).toEqual([1, 2]);
+  });
+  it("cizí tvar (objekt bez findings) HODÍ", () => {
+    expect(() => unwrapFindings(JSON.stringify({ items: [] }), "(code) ")).toThrow(/code/);
+  });
+  it("neparsovatelný JSON HODÍ", () => {
+    expect(() => unwrapFindings("{nevalidní")).toThrow();
+  });
+  it("sloupne markdown code fence ```json (reálný glm tvar) → rozparsuje obsah", () => {
+    // Zub: glm vrací JSON v ```json ohrazení; bez sloupnutí by JSON.parse padl na backticku.
+    const fenced = '```json\n{ "findings": [ { "x": 1 } ] }\n```';
+    expect(unwrapFindings(fenced, "(code) ")).toEqual([{ x: 1 }]);
+  });
+  it("sloupne i holé ``` ohrazení kolem holého pole", () => {
+    expect(unwrapFindings("```\n[1, 2]\n```")).toEqual([1, 2]);
+  });
+});
+
+describe("SYSTEM_PROMPT_CODE – explicitní kontrakt tvaru (pro modely bez vynuceného schématu)", () => {
+  it("uvádí obal findings, severity enum i pole položky", () => {
+    // Zub: kdyby z promptu vypadl explicitní tvar/severity, glm by zase vracel špatný tvar.
+    expect(SYSTEM_PROMPT_CODE).toContain('"findings"');
+    expect(SYSTEM_PROMPT_CODE).toContain("error|warning|info");
+    expect(SYSTEM_PROMPT_CODE).toContain("severity");
   });
 });
 

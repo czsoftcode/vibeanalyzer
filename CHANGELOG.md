@@ -12,9 +12,11 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 - Nová volba modelu **`--ai-model glm`** (GLM-5.2 od Z.ai) jako třetí možnost vedle
   `opus`/`sonnet` – výrazně levnější (vstup $1,4 / výstup $4,4 za milion tokenů oproti
   opus $5 / $25), běží přes Anthropic-kompatibilní endpoint Z.ai s vlastním klíčem
-  **`ZAI_API_KEY`**. **Známé omezení:** Z.ai zatím **nevynucuje JSON schéma odpovědi**,
-  takže reálná analýza s `glm` dnes vždy skončí přeskočením (a přitom se za dotaz platí) –
-  plné zprovoznění (tolerantní parsování) je v plánu. Do té doby `glm` na ostro nepoužívej.
+  **`ZAI_API_KEY`**. Funguje u **`--ai-code`** (vrací reálné nálezy). Z.ai nevynucuje
+  JSON schéma odpovědi jako Anthropic, proto si nástroj umí poradit s tvarem, který glm
+  vrací (obal, holé pole i JSON v markdown ohrazení). **Zatím jen `--ai-code`:** u
+  `--ai-non-goal` a `--ai-logic` může glm skončit přeskočením – plná podpora těch dvou
+  režimů je v plánu (u `opus`/`sonnet` fungují všechny tři normálně).
 - Report nově **přiznává zdrojové soubory, které AI nevidělo**, protože překročily strop
   na jeden soubor (100 kB) – vypíšou se jednou v sekci „AI analýza" v `.md` i v poli
   `ai.oversizedFiles` v JSON. Žádné tiché vynechání: víš, co se do dotazu nedostalo.

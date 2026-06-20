@@ -1,0 +1,32 @@
+{
+  "id": 48,
+  "title": "Zprovoznit glm pro --ai-code",
+  "goal": "--ai-code --ai-model=glm na malém projektu vrátí reálné nálezy (ne skipped) tím, že do system promptu přidáme explicitní kontrakt tvaru JSON výstupu + příklad (sdílené, neutrální pro opus/sonnet, které dál vynucují schéma přes output_config.format). Mechanismus se zvolí až po zachycení reálné glm odpovědi pod reálným promptem+schématem (první krok). Bezpečná cesta (tvrdší prompt) má přednost; tolerantní parser jen jako eskalace, pokud prompt nestačí (riziko halucinací – nálezy musí dál mířit na ověřitelné místo). Režimy --ai-non-goal a --ai-logic zůstávají vědomě mimo rozsah (follow-up), aby fáze byla malá a neplatila 3× za živé ověření.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Tvrdší SYSTEM_PROMPT_CODE: explicitní tvar + severity",
+      "status": "done",
+      "detail": "Do SYSTEM_PROMPT_CODE přidat explicitní kontrakt: vrať JSON { findings: [ { file, line, kind, severity: error|warning|info, message } ] } + význam severity + krátký NEUTRÁLNÍ příklad (ne aby šel zkopírovat jako reálný nález). Sdílené, aditivní pro opus/sonnet (ti dál vynucují schéma přes output_config.format → žádná regrese). Ověření: prompt obsahuje obal i severity enum; existující parse/code unit testy projdou beze změny."
+    },
+    {
+      "title": "parseCodeFindings přijme holé pole i obal",
+      "status": "done",
+      "detail": "Unwrap obalu vytáhnout do sdíleného helperu (přijme {findings:[...]} i holé [...]), zapojit JEN do parseCodeFindings (ne do non-goal/logic parserů – ty jsou follow-up). severity zůstává STRIKTNÍ. Testy se zuby: (a) holé [...] i {findings:[...]} → stejný výsledek; (b) položka bez severity → parser hodí (ne tiché doplnění); (c) neplatná severity → hodí. Když dočasně rozbiju unwrap, test (a) padne."
+    },
+    {
+      "title": "Živá akceptační brána glm + self-review",
+      "status": "done",
+      "detail": "--ai-code --ai-model=glm na malém projektu → ≥1 reálný nález (ne skipped), každý s platnou severity a ověřeným místem (file v poslaném setu, line ≤ počet řádků). Pokud glm i tak vynechá severity → NEdefaultovat, zesílit prompt. Před reportem nezávislý adversarial sub-agent (čerstvý kontext) na kontrakt výstup modelu → naše typy (parser/prompt)."
+    }
+  ],
+  "startedAt": "2026-06-20T21:35:39.272Z",
+  "resolvedVerify": [
+    "opus --ai-code se nezměnil novým promptem (živě ověřen jen sonnet)"
+  ],
+  "completedAt": "2026-06-20T21:59:13.773Z",
+  "autoCommit": {
+    "preSha": "0bf79412651120ed8ed86d87e45f13cf1f7e28d0",
+    "subject": "Phase 48: Zprovoznit glm pro --ai-code"
+  }
+}

@@ -237,6 +237,11 @@
       "id": 47,
       "title": "Třetí AI model: GLM-5.2",
       "status": "done"
+    },
+    {
+      "id": 48,
+      "title": "Zprovoznit glm pro --ai-code",
+      "status": "done"
     }
   ]
 }
