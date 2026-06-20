@@ -167,6 +167,11 @@
       "id": 33,
       "title": "Typová kontrola i pro testy",
       "status": "done"
+    },
+    {
+      "id": 34,
+      "title": "Triáž a úklid otevřených nálezů",
+      "status": "done"
     }
   ]
 }

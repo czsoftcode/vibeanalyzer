@@ -116,10 +116,11 @@ DT_UNKNOWN → adresář (lstat→isDirectory→rekurze) nemá žádný test
 
 Fix 1-2 dořeší typeless Dirent (DT_UNKNOWN) přes lstat. Tři testy pokrývají větve →soubor, →zvláštní typ, →symlink, ale NE větev →adresář (st.isDirectory() → kind=dir → push + await walk). Přitom na FS bez d_type (overlayfs v Dockeru, NFS, FUSE – přesně to prostředí, kvůli kterému 1-2 vzniklo) přijde KAŽDÝ adresář jako DT_UNKNOWN a projde právě touhle nepokrytou cestou. Rekurze přes lstat-resolved adresář je tam hlavní průchozí větev, a má nula pokrytí → regrese (špatný kind, vynechaná rekurze) by tiše zahodila celé podstromy = právě ten silent data-loss, který 1-2 měl zabít. Past při psaní testu: stávající globální readdir spy vrací stejný entry pro každou cestu, takže naivní 'udělej z toho adresář' zacyklí walk donekonečna – mock musí být path-aware (pro podadresář vrátit prázdný seznam).
 
-## 2-15 · should-know · open
+## 2-15 · should-know · resolved
 **Where:** src/cli.test.ts; src/cli.ts:47-98
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial
+**Reason:** run() chybové větve nově otestovány se zuby: neplatný cíl → exit 1 (cli.test.ts:69-73), mkdir selže (ENOTDIR) → exit 1 (cli.test.ts:75-85), writeReportFiles selže → exit 1 (cli.writefail.test.ts:43-53), scan/guard (cli.scanfail.test.ts:58-75). Smazání řádku větve test shodí.
 run() chybové větve (neplatný cíl, mkdir, zápis) nemají žádný test
 
 run() byla v této fázi exportována kvůli testovatelnosti (fix 2-9) a dostala happy-path integrační test (výstupní adresář se nezaindexuje). Ale VŠECHNY její chybové cesty zůstaly bez automatického testu: kind=='error' → exit 2 (ř.47-51), neplatný cíl → exit 1 (56-60), mkdir selže → exit 1 (62-68) a hlavně NOVÝ překlad chyby z writeReportFiles → hláška + exit 1 (89-98). writeReportFiles je sice unit-testovaná izolovaně (2-1/2-2), ale to, že cli ji obalí, vrátí exit 1 a vypíše hlášku, netestuje nikdo – stejnou logikou, kterou byl odůvodněn finding 2-9 (smazání jednoho řádku projde zeleně), tu chybí síť i pro chybové exity. Regrese (špatný exit kód, spolknutá chyba, zapomenuté return) zůstane zelená. Cíl fáze 1-3 ('po selhání MD zápisu exit + úklid') je na CLI úrovni ověřen jen ručním E2E, které zmizí při dalším refaktoru.

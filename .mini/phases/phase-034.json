@@ -1,0 +1,44 @@
+{
+  "id": 34,
+  "title": "Triáž a úklid otevřených nálezů",
+  "goal": "Projít všech 22 otevřených review nálezů proti aktuálnímu kódu, u prokazatelně vyřešených je uzavřít přes 'mini findings resolve' s odůvodněním odkazujícím na konkrétní kód/test, a zbylé nechat otevřené s krátkou poznámkou, proč stále platí. Ověření: 'mini findings list' po fázi ukáže jen nálezy, které reálně platí; každý uzavřený má --reason ukazující na místo v kódu/testu, které ho řeší.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Re-mapovat 22 nálezů na aktuální kód",
+      "status": "done",
+      "detail": "Pro každý nález dohledat aktuální místo (soubor:symbol) nebo konstatovat, že kód zmizel/se přesunul. Výstup: přehledová tabulka nález → aktuální lokace → předběžný verdikt. Zatím neuzavírat."
+    },
+    {
+      "title": "Triáž nálezů 1-x a 2-x mimo testy (6 ks)",
+      "status": "done",
+      "detail": "1-4 (markdown.ts), 1-5 (timestamp.ts), 1-6 (args.ts), 2-7 + 2-16 (writeOutputs.ts), 2-11 (scan.ts). Posoudit dle chování; prokazatelně vyřešené uzavřít přes 'mini findings resolve --reason' s odkazem na kód/test."
+    },
+    {
+      "title": "Triáž nálezů o testech a pokrytí (5 ks)",
+      "status": "done",
+      "detail": "2-15, 3-5, 3-6, 3-12, 3-13. Ověřit, že test existuje a má zuby (pokrývá popsanou selhávající větev). Uzavřít jen ty s reálným pokrytím; test bez zubů → nález zůstává otevřený."
+    },
+    {
+      "title": "Triáž chybových cest cli.ts (10 ks)",
+      "status": "done",
+      "detail": "3-1, 3-2, 3-3, 3-4, 3-7, 3-9, 3-10, 3-11, 3-14, 3-15. Posoudit proti přepsanému cli.ts/cliMain.ts (isEntrypoint, run(), cleanup outDir, maskování chyb). Uzavřít jen prokazatelně vyřešené."
+    },
+    {
+      "title": "Triáž cross-module kontraktu 3-8 (1 ks)",
+      "status": "done",
+      "detail": "Magický řetězec '.' scan.ts ↔ cli.ts. Uzavřít jen pokud je kontrakt jištěn sdílenou konstantou + testem reálného kódu (ne mockem); jinak nechat otevřený s poznámkou."
+    },
+    {
+      "title": "Finální kontrola a soupis",
+      "status": "done",
+      "detail": "'mini findings list' ukazuje jen reálně platné nálezy; každý uzavřený má --reason na konkrétní místo. Sanity: 'npm test' + typecheck projdou (kód se neměnil). V reportu vypsat uzavřené (s důvodem) i zbylé otevřené (proč platí)."
+    }
+  ],
+  "startedAt": "2026-06-20T09:39:38.907Z",
+  "completedAt": "2026-06-20T09:58:58.987Z",
+  "autoCommit": {
+    "preSha": "b080c24f98098ca8c8b79466f85e9ff7c3d28c16",
+    "subject": "Phase 34: Triáž a úklid otevřených nálezů"
+  }
+}
