@@ -182,6 +182,11 @@
       "id": 36,
       "title": "Atomický zápis reportu přes rename",
       "status": "done"
+    },
+    {
+      "id": 37,
+      "title": "Invariant kolidujících cest ve writeReportFiles",
+      "status": "done"
     }
   ]
 }

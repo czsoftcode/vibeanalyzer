@@ -2,7 +2,7 @@ import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { writeReportFiles } from "./writeOutputs.js";
+import { ReportPathCollisionError, writeReportFiles } from "./writeOutputs.js";
 
 // node:fs/promises mockujeme jako passthrough (kopie reálného modulu) – jen aby
 // šel writeFile přepsat spy-em; ostatní funkce volají reálnou implementaci.
@@ -141,5 +141,76 @@ describe("writeReportFiles", () => {
     // úklid nesmí nechat .tmp (jsonTmp už přejmenován pryč, mdTmp se uklidil)
     expect(await exists(jsonTmp)).toBe(false);
     expect(await exists(mdTmp)).toBe(false);
+  });
+});
+
+describe("writeReportFiles – invariant kolize cest", () => {
+  let dir: string;
+  let real: typeof import("node:fs/promises");
+
+  beforeEach(async () => {
+    real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    dir = await real.mkdtemp(path.join(tmpdir(), "vibe-collide-"));
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await real.rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  // Snímek obsahu adresáře: jméno → obsah. Zuby ověřují, že po kolizi se NIC
+  // nezměnilo (žádný cíl přepsán, žádný .tmp/leftover přibyl).
+  async function snapshot(): Promise<Record<string, string>> {
+    const names = await real.readdir(dir);
+    const out: Record<string, string> = {};
+    for (const name of names) {
+      out[name] = await real.readFile(path.join(dir, name), "utf8");
+    }
+    return out;
+  }
+
+  it("A: jsonPath === mdPath → ReportPathCollisionError, cíl nedotčen, žádný leftover", async () => {
+    // Pozn.: bez guardu by tahle cesta spadla až na druhém rename (ENOENT), takže
+    // test na pouhé „vyhodí chybu" by prošel i bez guardu. Proto pinujeme KONKRÉTNÍ
+    // třídu chyby (ne ENOENT) a snímek adresáře (žádný cíl přepsán).
+    const p = path.join(dir, "same.json");
+    await real.writeFile(p, "PŮVODNÍ\n", "utf8");
+    const before = await snapshot();
+
+    await expect(writeReportFiles(p, "NOVÝ JSON\n", p, "# md\n")).rejects.toBeInstanceOf(ReportPathCollisionError);
+
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("B: jsonPath === mdPath + '.tmp' → ReportPathCollisionError, cíle nedotčeny", async () => {
+    // mdPath = X, jsonPath = X.tmp → jsonPath se kryje s mdTmp (mdPath+'.tmp').
+    // Bez guardu by se sem reálně zapsalo a obsah zaměnil (cesta by ani nemusela
+    // vyhodit) – snímek adresáře to odhalí.
+    const mdPath = path.join(dir, "out.md");
+    const jsonPath = `${mdPath}.tmp`;
+    await real.writeFile(mdPath, "MD PŮVODNÍ\n", "utf8");
+    await real.writeFile(jsonPath, "JSON PŮVODNÍ\n", "utf8");
+    const before = await snapshot();
+
+    await expect(writeReportFiles(jsonPath, "NOVÝ JSON\n", mdPath, "# md nový\n")).rejects.toBeInstanceOf(
+      ReportPathCollisionError,
+    );
+
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("C: mdPath === jsonPath + '.tmp' → ReportPathCollisionError, cíle nedotčeny", async () => {
+    // zrcadlově: jsonPath = X, mdPath = X.tmp → mdPath se kryje s jsonTmp.
+    const jsonPath = path.join(dir, "out.json");
+    const mdPath = `${jsonPath}.tmp`;
+    await real.writeFile(jsonPath, "JSON PŮVODNÍ\n", "utf8");
+    await real.writeFile(mdPath, "MD PŮVODNÍ\n", "utf8");
+    const before = await snapshot();
+
+    await expect(writeReportFiles(jsonPath, "NOVÝ JSON\n", mdPath, "# md nový\n")).rejects.toBeInstanceOf(
+      ReportPathCollisionError,
+    );
+
+    expect(await snapshot()).toEqual(before);
   });
 });

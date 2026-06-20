@@ -1,0 +1,34 @@
+{
+  "id": 37,
+  "title": "Invariant kolidujících cest ve writeReportFiles",
+  "goal": "writeReportFiles na začátku vyhodí chybu, když by výstupní cesty kolidovaly (jsonPath === mdPath, nebo se cíl shoduje s .tmp druhého), aby budoucí volající nezaměnil/nepřepsal obsah; pokryto testem se zuby.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Guard kolize cest na začátku writeReportFiles",
+      "status": "done",
+      "detail": "Hned na vstupu funkce (před prvním writeFile) ověřit, že 4 odvozené řetězce — jsonPath, mdPath, jsonPath+\".tmp\", mdPath+\".tmp\" — jsou po dvou různé (holé řetězce, bez path.resolve). Při kolizi throw před jakýmkoli zápisem."
+    },
+    {
+      "title": "Vlastní kontraktní chyba se stackem",
+      "status": "done",
+      "detail": "Kolize vyhodí jasnou, rozpoznatelnou Error s popisem porušeného kontraktu (která cesta s kterou koliduje), propaguje se se stackem. Nemaskovat jako I/O. Zpráva/typ musí jít v testu odlišit od ENOENT."
+    },
+    {
+      "title": "Testy se zuby pro 3 kolizní vztahy",
+      "status": "done",
+      "detail": "Tři případy zvlášť — jsonPath===mdPath, jsonPath===mdPath+'.tmp', mdPath===jsonPath+'.tmp'. Každý ověří: (a) padne tou konkrétní kontraktní chybou (ne ENOENT), (b) předem připravený cíl se známým obsahem zůstane nezměněný a nezůstane žádný .tmp. U jsonPath===mdPath nutné, jinak by test prošel i bez guardu."
+    },
+    {
+      "title": "Doběh: happy path + tsc + celá suite zelené",
+      "status": "done",
+      "detail": "Ověřit, že existující testy writeOutputs (různé cesty) dál procházejí, tsc čistý, celá test suite zelená."
+    }
+  ],
+  "startedAt": "2026-06-20T11:43:13.371Z",
+  "completedAt": "2026-06-20T11:56:29.273Z",
+  "autoCommit": {
+    "preSha": "c365b54482371b5c886e221d1bf94825549b8b8b",
+    "subject": "Phase 37: Invariant kolidujících cest ve writeReportFiles"
+  }
+}

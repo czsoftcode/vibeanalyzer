@@ -1,6 +1,52 @@
 import { rename, unlink, writeFile } from "node:fs/promises";
 
 /**
+ * Porušení kontraktu volajícího: výstupní cesty (nebo jejich `.tmp`) by si
+ * kolidovaly. Vlastní třída, aby šlo v testu i u volajícího odlišit tuhle
+ * PROGRAMÁTORSKOU chybu od I/O chyb (ENOENT/ENOSPC…). NEmaskujeme ji jako I/O –
+ * propaguje se se stackem, ať budoucí volající vidí, že chybu udělal on, ne disk.
+ */
+export class ReportPathCollisionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportPathCollisionError";
+  }
+}
+
+/**
+ * Hlídá invariant cest PŘED jakýmkoli zápisem. Funkce skládá temp soubory jako
+ * `<cíl>.tmp`; kdyby si kterékoli dvě ze čtyř cest (`jsonPath`, `mdPath` a jejich
+ * dvě `.tmp`) byly shodné, tempy/cíle by se navzájem přepsaly a místo ochrany by
+ * se data poškodila. Stačí ověřit, že jsou ty čtyři řetězce po dvou různé –
+ * pokryje všechny tři kolizní vztahy (cíl==cíl, cíl==temp druhého, zrcadlově).
+ *
+ * Porovnání je HOLÝMI řetězci, vědomě bez `path.resolve`: chytá přesně tu pastu
+ * (sdílený základ názvu), nepředstírá úplnost (symlinky / case-insensitive FS by
+ * normalizace stejně neošetřila – jen by dala falešný pocit bezpečí).
+ */
+function assertNoPathCollision(jsonPath: string, jsonTmp: string, mdPath: string, mdTmp: string): void {
+  const labelled: ReadonlyArray<readonly [string, string]> = [
+    ["jsonPath", jsonPath],
+    ["mdPath", mdPath],
+    ["jsonPath+'.tmp'", jsonTmp],
+    ["mdPath+'.tmp'", mdTmp],
+  ];
+  for (const [aLabel, aPath] of labelled) {
+    for (const [bLabel, bPath] of labelled) {
+      // 4 prvky → O(n²) napůl zbytečně (každý pár dvakrát), ale je to triviální;
+      // přeskočíme jen diagonálu (porovnání položky se sebou). Labely jsou unikátní.
+      if (aLabel === bLabel) continue;
+      if (aPath === bPath) {
+        throw new ReportPathCollisionError(
+          `Kolize výstupních cest: ${aLabel} a ${bLabel} ukazují na stejnou cestu "${aPath}". ` +
+            `jsonPath a mdPath (ani jejich .tmp protějšky) se nesmí shodovat – jinak by se dočasné soubory přepsaly a obsah zaměnil.`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * Zapíše párový výstup (JSON + MD) tak, aby selhání NEzničilo cílové soubory.
  *
  * Postup: obojí se nejdřív zapíše do dočasných souborů `<cíl>.tmp` ve stejném
@@ -36,6 +82,9 @@ export async function writeReportFiles(
 ): Promise<void> {
   const jsonTmp = `${jsonPath}.tmp`;
   const mdTmp = `${mdPath}.tmp`;
+  // Invariant cest: hlídáme PŘED jakýmkoli zápisem, ať kolize neskončí poškozením
+  // dat ani leftoverem. Throw (ReportPathCollisionError) se propaguje se stackem.
+  assertNoPathCollision(jsonPath, jsonTmp, mdPath, mdTmp);
   try {
     await writeFile(jsonTmp, jsonContent, "utf8");
     await writeFile(mdTmp, mdContent, "utf8");
