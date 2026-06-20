@@ -10,22 +10,22 @@ describe("parseArgs", () => {
 
   it("bez argumentu bere aktuální složku a výchozí výstup (null), audit/dev vypnuté", () => {
     const r = parseArgs([], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: false });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: false, aiCheck: false });
   });
 
   it("vezme cestu jako pozicní argument, výstup zůstává výchozí", () => {
     const r = parseArgs(["./sub"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null, audit: false, dev: false });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null, audit: false, dev: false, aiCheck: false });
   });
 
   it("--out přepíše výstupní adresář", () => {
     const r = parseArgs(["./sub", "--out", "/tmp/out"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out", audit: false, dev: false });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false });
   });
 
   it("--out= varianta funguje taky", () => {
     const r = parseArgs(["--out=/tmp/out", "x"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false });
   });
 
   it("--out= s prázdnou hodnotou je chyba (ne tichý zápis do CWD)", () => {
@@ -35,17 +35,34 @@ describe("parseArgs", () => {
 
   it("--audit zapne audit, dev zůstává vypnuté", () => {
     const r = parseArgs(["--audit"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false, aiCheck: false });
   });
 
   it("--audit --dev zapne obojí", () => {
     const r = parseArgs(["--audit", "--dev", "./p"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./p"), outDir: null, audit: true, dev: true });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./p"), outDir: null, audit: true, dev: true, aiCheck: false });
   });
 
   it("samotné --dev (bez --audit) se zaznamená, ale audit zůstává vypnutý", () => {
     const r = parseArgs(["--dev"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: true });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: true, aiCheck: false });
+  });
+
+  it("--ai-check zapne ověření AI (opt-in), ostatní zůstává výchozí", () => {
+    const r = parseArgs(["--ai-check", "./p"], cwd);
+    expect(r).toEqual({
+      kind: "run",
+      targetPath: path.resolve(cwd, "./p"),
+      outDir: null,
+      audit: false,
+      dev: false,
+      aiCheck: true,
+    });
+  });
+
+  it("bez --ai-check zůstává aiCheck false (default běh neutrácí za API)", () => {
+    const r = parseArgs([], cwd);
+    expect(r.kind === "run" && r.aiCheck).toBe(false);
   });
 
   it("--help a --version mají přednost", () => {

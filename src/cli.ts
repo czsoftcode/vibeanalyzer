@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { detectAiStatus } from "./analyze/aiStatus.js";
+import { AI_MISSING_KEY_REASON, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { auditDependencies, type AuditResult } from "./audit.js";
 import { analyzeESLint } from "./analyze/eslint.js";
@@ -37,12 +38,23 @@ Argumenty:
 
 Volby:
   -o, --out <dir>  Kam uložit výstupy (výchozí: ~/.vibeanalyzer/<jméno projektu>).
+  --ai-check       Pošle testovací dotaz na Anthropic API (vyžaduje ANTHROPIC_API_KEY).
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
 
 Výstup:
   vibeanalyzer-<timestamp>.json  strojový strukturální index
   vibeanalyzer-<timestamp>.md    lidský report se seznamem souborů a Mermaid diagramem`;
+
+// Hláška, když uživatel zadá --ai-check, ale klíč chybí. Schválně na stderr (ne do
+// reportu): říká, JAK klíč nastavit. Primární cesta je env proměnná (SDK ji čte
+// sám) nebo `node --env-file`. Vestavěnou .env podporu (dotenv) NEPŘIDÁVÁME –
+// nástroj je sám skener tajemství a klíč v .env analyzovaného projektu by si našel.
+const AI_KEY_HINT = `Pozn.: --ai-check vyžaduje proměnnou prostředí ANTHROPIC_API_KEY, která teď chybí.
+Nastav ji a spusť nástroj znovu, např.:
+  ANTHROPIC_API_KEY=sk-ant-... vibeanalyzer --ai-check
+nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --ai-check
+(Vestavěnou .env podporu schválně nepřidáváme – nástroj je sám skener tajemství.)`;
 
 // Cesta k child skriptu pro izolovaný běh. Odvozená od PŘÍPONY tohoto modulu:
 // v provozu běžíme z dist (cli.js → analyzeChild.js), v dev/testu ze src přes tsx
@@ -151,6 +163,10 @@ export interface RunDeps {
   auditFn?: typeof auditDependencies;
   /** Injektovatelný builder grafu modulů (test si podstrčí svůj; jinak reálný). */
   moduleGraphFn?: typeof buildModuleGraph;
+  /** Injektovatelný AI ping (test si podstrčí fake; jinak reálný přes import SDK). */
+  aiPingFn?: typeof realAiPing;
+  /** Injektovatelná klasifikace chyby pingu (test si podstrčí; jinak reálná). */
+  aiClassifyFn?: typeof classifyAiError;
 }
 
 export async function run(
@@ -386,10 +402,36 @@ export async function run(
     moduleGraph = { kind: "skipped", reason: "graf modulů během sestavování selhal (viz stderr)" };
   }
 
-  // AI vrstva: zatím jen brána klíče. Čistá detekce nad process.env – nepadá,
-  // proto bez try/catch (falešný catch by jen maskoval programovou chybu). Bez
-  // klíče se AI vrstva v reportu označí jako přeskočená, strojová vrstva běží dál.
-  const ai = detectAiStatus(process.env);
+  // AI vrstva. Bez --ai-check jen brána klíče (synchronní, offline, nepadá – proto
+  // bez try/catch). S --ai-check pošleme reálný testovací dotaz; ping/classify
+  // injektujeme (testy bez sítě), default běh tak ani nenahraje @anthropic-ai/sdk –
+  // načte se až tady přes dynamický import() jen když uživatel ověření vyžádal.
+  let ai: AiStatus;
+  if (parsed.aiCheck) {
+    let ping = deps.aiPingFn;
+    let classify = deps.aiClassifyFn;
+    if (!ping || !classify) {
+      const mod = await import("./analyze/aiPing.js");
+      ping ??= mod.realAiPing;
+      classify ??= mod.classifyAiError;
+    }
+    try {
+      ai = await verifyAiAccess(process.env, ping, classify);
+    } catch (err: unknown) {
+      // Sem spadne jen NEČEKANÁ chyba (classify ji nezná – programová chyba, neznámý
+      // API stav). Nemaskujeme ji tiše jako čistý „skipped": vypíšeme stack a AI
+      // degradujeme na přeskočeno (jako ostatní vrstvy), ať se report stejně vyrobí
+      // (success criterion „report bez pádu"); exit zůstává 0.
+      const e = err as Error;
+      console.error(`Upozornění: ověření AI (--ai-check) selhalo nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      ai = { kind: "skipped", reason: "ověření AI selhalo nečekaně (viz stderr)" };
+    }
+    if (ai.kind === "skipped" && ai.reason === AI_MISSING_KEY_REASON) {
+      console.error(AI_KEY_HINT);
+    }
+  } else {
+    ai = detectAiStatus(process.env);
+  }
 
   const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit, moduleGraph, ai);
   const md = buildMarkdown({

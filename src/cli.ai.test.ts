@@ -67,4 +67,45 @@ describe("run – e2e AI vrstva (brána klíče v reálném výstupu)", () => {
     expect(md).not.toContain("super-secret");
     expect(JSON.stringify(index)).not.toContain("super-secret");
   });
+
+  it("--ai-check + klíč + ping resolve (fake) → JSON ai=verified, .md hlásí 'ověřeno'", async () => {
+    vi.stubEnv(AI_KEY_ENV, "sk-ant-super-secret");
+    await writeFile(path.join(proj, "a.ts"), "export const x = 1;\n", "utf8");
+
+    const ping = vi.fn(async () => {}); // fake: žádná síť, jen resolve
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-check"], proj, {
+      aiPingFn: ping,
+      aiClassifyFn: () => null,
+    });
+    expect(code).toBe(0);
+    expect(ping).toHaveBeenCalledOnce();
+
+    const { md, index } = await readJson(outDir);
+    expect(index.ai).toEqual({ kind: "verified" });
+    expect(md).toContain("AI ověřeno (testovací dotaz na API proběhl");
+    expect(JSON.stringify(index)).not.toContain("super-secret");
+  });
+
+  it("--ai-check bez klíče → ai=skipped, ping se nezavolá, na stderr hláška jak klíč nastavit, exit 0", async () => {
+    vi.stubEnv(AI_KEY_ENV, ""); // bez klíče
+    await writeFile(path.join(proj, "a.ts"), "export const x = 1;\n", "utf8");
+
+    const ping = vi.fn(async () => {});
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-check"], proj, {
+      aiPingFn: ping,
+      aiClassifyFn: () => null,
+    });
+    expect(code).toBe(0); // selhání AI nesmí shodit exit kód – strojový report se vyrobí
+    expect(ping).not.toHaveBeenCalled(); // bez klíče se vůbec nevolá síť
+
+    const { index } = await readJson(outDir);
+    expect(index.ai).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
+
+    // Hláška „jak nastavit klíč" jde na stderr (ne do reportu) a zmiňuje env i --env-file.
+    const errs = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
+    expect(errs).toContain("ANTHROPIC_API_KEY");
+    expect(errs).toContain("--env-file");
+  });
 });

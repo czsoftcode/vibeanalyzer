@@ -26,6 +26,7 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@typescript-eslint/parser": "^8.61.1",
     "eslint": "^9.39.4",
     "ignore": "^7.0.5",

@@ -338,10 +338,10 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
 }
 
 /**
- * Sekce "## AI analýza (logika a non-goaly)". Zatím jen brána klíče – reálný
- * dotaz na API ještě neproběhl. Dva stavy, schválně rozlišitelné:
- *   - skipped → "_AI přeskočeno: <důvod>_" (např. chybí ANTHROPIC_API_KEY)
- *   - ready   → klíč nalezen, ale dotaz ZATÍM neproběhl (ne falešné "hotovo").
+ * Sekce "## AI analýza (logika a non-goaly)". Tři schválně rozlišitelné stavy:
+ *   - skipped  → "_AI přeskočeno: <důvod>_" (chybí klíč, síť/timeout, odmítnutý klíč)
+ *   - verified → reálný testovací dotaz na API proběhl (jen s --ai-check)
+ *   - ready    → klíč nalezen, ale dotaz ZATÍM neproběhl (ne falešné "hotovo")
  * Strojová vrstva běží beze změny – tahle sekce je jen oznámení stavu.
  */
 function aiSection(ai: AiStatus | undefined): string[] {
@@ -354,6 +354,12 @@ function aiSection(ai: AiStatus | undefined): string[] {
     return out;
   }
 
+  if (ai.kind === "verified") {
+    out.push("_AI ověřeno (testovací dotaz na API proběhl úspěšně)._");
+    out.push("");
+    return out;
+  }
+
   out.push("_AI připraveno (klíč nalezen, dotaz zatím neproběhl)._");
   out.push("");
   return out;
@@ -362,6 +368,7 @@ function aiSection(ai: AiStatus | undefined): string[] {
 /** Krátké shrnutí stavu AI vrstvy do hlavičky reportu. */
 function aiSummaryLine(ai: AiStatus | undefined): string {
   if (!ai || ai.kind === "skipped") return "- AI (logika a non-goaly): přeskočeno";
+  if (ai.kind === "verified") return "- AI (logika a non-goaly): ověřeno";
   return "- AI (logika a non-goaly): připraveno";
 }
 

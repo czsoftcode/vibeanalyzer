@@ -32,6 +32,14 @@ describe("buildMarkdown – sekce AI vrstvy: dva rozlišitelné stavy", () => {
     expect(md).not.toContain("AI přeskočeno");
   });
 
+  it("verified → 'AI ověřeno' a souhrn 'ověřeno' (ne 'připraveno', ne 'přeskočeno')", () => {
+    const md = buildMarkdown({ ...base, ai: { kind: "verified" } });
+    expect(md).toContain("AI ověřeno (testovací dotaz na API proběhl");
+    expect(md).toContain("- AI (logika a non-goaly): ověřeno");
+    expect(md).not.toContain("AI připraveno");
+    expect(md).not.toContain("AI přeskočeno");
+  });
+
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {
     const md = buildMarkdown({ ...base, ai: detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" }) });
     expect(md).not.toContain("super-secret");

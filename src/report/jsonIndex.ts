@@ -17,8 +17,9 @@ import type { SecretsResult } from "../secrets.js";
  * tajemství (minifikáty / velké / binárky / dlouhé řádky) – aby ani JSON tiše
  * nevynechával balast. Od verze 10 nese `tsc` (ran) příznak `hoistedNodeModules`
  * (kořen bez `node_modules`, ale leží výš – monorepo; fail-closed analýza může dát
- * falešné TS2307). Od verze 11 nese stav AI vrstvy (`ai`) – zatím jen brána klíče
- * (`ready`/`skipped`), aby šlo z JSONu poznat "AI přeskočeno" vs "připraveno".
+ * falešné TS2307). Od verze 11 nese stav AI vrstvy (`ai`). Od verze 12 má `ai` i
+ * variantu `verified` (reálný testovací dotaz na API proběhl, jen s `--ai-check`)
+ * vedle `ready` (klíč je, dotaz neproběhl) a `skipped` (chybí klíč / síť / odmítnutí).
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -38,13 +39,14 @@ export interface JsonIndex {
   audit: AuditResult;
   /** graf importních závislostí mezi zdrojovými soubory */
   moduleGraph: ModuleGraphResult;
-  /** stav AI vrstvy (brána klíče): ready = klíč nalezen, skipped = důvod přeskočení */
+  /** stav AI vrstvy: ready = klíč nalezen (dotaz neproběhl), verified = dotaz na
+   *  API proběhl (--ai-check), skipped = důvod přeskočení (chybí klíč / síť / 401) */
   ai: AiStatus;
 }
 
-/** Bump 10 → 11: index nese `ai` (stav AI vrstvy) – nové povinné pole mění tvar
- *  JSON. Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 11;
+/** Bump 11 → 12: `ai` má novou variantu `verified` (reálné ověření přes --ai-check).
+ *  Rozšíření tvaru unie = kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 12;
 
 export function buildJsonIndex(
   root: string,

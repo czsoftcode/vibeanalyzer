@@ -7,7 +7,7 @@ import { projectKey } from "./projectPaths.js";
 export type ParsedArgs =
   | { kind: "help" }
   | { kind: "version" }
-  | { kind: "run"; targetPath: string; outDir: string | null; audit: boolean; dev: boolean }
+  | { kind: "run"; targetPath: string; outDir: string | null; audit: boolean; dev: boolean; aiCheck: boolean }
   | { kind: "error"; message: string };
 
 /**
@@ -30,12 +30,15 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * `--audit` zapne (opt-in) audit závislostí přes `npm audit` (síťová operace).
  * `--dev` k auditu přidá i vývojové závislosti; SAMOTNÉ `--dev` (bez `--audit`)
  * je neúčinné – parser ho jen zaznamená, varování řeší CLI (args bez side efektů).
+ * `--ai-check` zapne (opt-in) reálný testovací dotaz na API; bez něj se AI vrstva
+ * jen podívá po klíči (offline). Vyhodnocení (síť, klíč) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let target: string | undefined;
   let out: string | undefined;
   let audit = false;
   let dev = false;
+  let aiCheck = false;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
@@ -70,6 +73,10 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       dev = true;
       continue;
     }
+    if (a === "--ai-check") {
+      aiCheck = true;
+      continue;
+    }
     if (a.startsWith("-")) {
       return { kind: "error", message: `Neznámá volba: ${a}` };
     }
@@ -82,7 +89,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir, audit, dev };
+  return { kind: "run", targetPath, outDir, audit, dev, aiCheck };
 }
 
 /** Výsledek validace cílové cesty. */

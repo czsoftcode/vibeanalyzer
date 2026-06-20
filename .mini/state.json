@@ -207,6 +207,11 @@
       "id": 41,
       "title": "Kostra AI vrstvy: detekce klíče a přeskočení",
       "status": "done"
+    },
+    {
+      "id": 42,
+      "title": "AI vrstva: reálný dotaz na Anthropic",
+      "status": "done"
     }
   ]
 }

@@ -28,8 +28,8 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 11 (nese stav AI vrstvy `ai`)", () => {
-    expect(INDEX_VERSION).toBe(11);
+  it("verze indexu je 12 (`ai` má variantu `verified`)", () => {
+    expect(INDEX_VERSION).toBe(12);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
@@ -45,6 +45,8 @@ describe("buildJsonIndex", () => {
     expect(skipped.ai).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
     const ready = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "ready" });
     expect(ready.ai).toEqual({ kind: "ready" });
+    const verified = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "verified" });
+    expect(verified.ai).toEqual({ kind: "verified" });
   });
 
   it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {

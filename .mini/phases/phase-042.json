@@ -1,0 +1,44 @@
+{
+  "id": 42,
+  "title": "AI vrstva: reálný dotaz na Anthropic",
+  "goal": "Přidat @anthropic-ai/sdk; s klíčem poslat minimální testovací dotaz na levný model a při úspěchu označit AI stav jako 'ověřeno', při síťové chybě/timeoutu čistě přeskočit s konkrétním důvodem; hláška o chybějícím klíči řekne, jak ho nastavit (env, žádný dotenv); detekci klíče nechat čistou a synchronní, reálný dotaz v samostatné async funkci; úzký catch jen na síť/timeout (programová chyba nesmí spadnout pod 'přeskočeno'); testy s mockem SDK pro úspěch, síťovou chybu i timeout.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přidat @anthropic-ai/sdk + modul reálného pingu",
+      "status": "done",
+      "detail": "npm install @anthropic-ai/sdk; nový tenký modul (src/analyze/aiPing.ts) sestaví klienta a pošle minimální dotaz na konstantu claude-haiku-4-5 s maxRetries:0 a krátkým timeoutem (~10000 ms). Tenký schválně – síťová část se neunit-testuje, slouží jako default injekce do verify funkce."
+    },
+    {
+      "title": "Rozšířit AiStatus o verified + async verifyAiAccess (DI) + unit testy",
+      "status": "done",
+      "detail": "Do aiStatus.ts přidat variantu verified. Async funkce dostane env a injektovaný ping; chybí klíč → skipped, jinak ping: úspěch → verified, APIConnectionError/timeout/AuthenticationError(401) → skipped s důvodem, nečekaná chyba (TypeError, špatný tvar) probublá se stackem. Testy s fakem: úspěch, síť, timeout, 401, rethrow nečekané, chybějící klíč. Žádná síť."
+    },
+    {
+      "title": "Přepínač --ai-check do args.ts + test",
+      "status": "done",
+      "detail": "ParsedArgs run dostane aiCheck:boolean; parser rozpozná --ai-check. Test reálného parsování (zapnuto/vypnuto, neznámá volba dál chybuje)."
+    },
+    {
+      "title": "Zapojit do cli.ts + stderr hláška o chybějícím klíči",
+      "status": "done",
+      "detail": "Když aiCheck → await verifyAiAccess(...), jinak stávající detectAiStatus. Při --ai-check a chybějícím klíči vypsat na stderr jak klíč nastavit (ANTHROPIC_API_KEY nebo node --env-file; žádný dotenv). Selhání pingu nesmí změnit exit kód."
+    },
+    {
+      "title": "Report: verified v JSON (verze 12) i markdownu + testy",
+      "status": "done",
+      "detail": "jsonIndex.ts bump 11→12, union ai nese verified. aiSection i aiSummaryLine v markdown.ts dostanou větev pro verified. Testy renderu."
+    },
+    {
+      "title": "Doběh: tsc + suite + reálné běhy + nezávislý sub-agent",
+      "status": "done",
+      "detail": "tsc, celá vitest suite, reálné běhy (bez klíče = ready/skipped; --ai-check bez klíče = skipped + stderr hláška). Fáze sahá na vstupní bod (--ai-check) a kontrakty mezi moduly (JSON verze, union) → před reportem nezávislý sub-agent (čerstvý kontext) jako self-review."
+    }
+  ],
+  "startedAt": "2026-06-20T13:56:30.842Z",
+  "completedAt": "2026-06-20T14:21:57.567Z",
+  "autoCommit": {
+    "preSha": "13b3457b27a9ed0e260bafa58feada6f25cd83b5",
+    "subject": "Phase 42: AI vrstva: reálný dotaz na Anthropic"
+  }
+}

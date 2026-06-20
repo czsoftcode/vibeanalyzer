@@ -14,11 +14,18 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   bez klíče se sekce čistě označí jako „AI přeskočeno: chybí ANTHROPIC_API_KEY",
   s klíčem jako „připraveno" (reálné volání API přijde v další fázi). Hodnota
   klíče se nikdy nedostane do `.md` ani `.json`.
+- Nový přepínač **`--ai-check`** pošle reálný testovací dotaz na Anthropic API
+  (levný model) a ověří, že AI cesta funguje – v reportu se stav označí jako
+  „AI ověřeno". Bez přepínače zůstává běh offline a zdarma (jen detekce klíče).
+  Při síťové chybě, timeoutu nebo odmítnutém klíči se AI čistě přeskočí
+  s konkrétním důvodem a nástroj doběhne (exit 0). Když klíč chybí, na stderr se
+  vypíše, jak ho nastavit (proměnná prostředí nebo `node --env-file`). Hodnota
+  klíče se nikdy nedostane do reportu ani na stderr.
 
 ### Changed
 
-- Strojový JSON index má **verzi 11** – nově nese pole `ai` se stavem AI vrstvy.
-  Změna tvaru pro konzumenty JSON.
+- Strojový JSON index má **verzi 12** – nově nese pole `ai` se stavem AI vrstvy,
+  včetně varianty „ověřeno" (po `--ai-check`). Změna tvaru pro konzumenty JSON.
 
 ### Fixed
 
