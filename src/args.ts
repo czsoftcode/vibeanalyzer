@@ -20,6 +20,7 @@ export type ParsedArgs =
       aiCheck: boolean;
       aiNonGoal: boolean;
       aiCode: boolean;
+      aiLogic: boolean;
       aiModel: AiModelChoice;
     }
   | { kind: "error"; message: string };
@@ -46,9 +47,10 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * je neúčinné – parser ho jen zaznamená, varování řeší CLI (args bez side efektů).
  * `--ai-check` zapne (opt-in) levný testovací dotaz na API; bez něj se AI vrstva
  * jen podívá po klíči (offline). `--ai-non-goal` zapne (opt-in) reálnou analýzu
- * porušení non-goalů, `--ai-code` reálnou analýzu kvality/rizik kódu – obě jsou
- * samostatné drahé cesty, každá vlastní dotaz na API (lze i obě naráz). `--ai-model
- * <opus|sonnet>` volí model pro obě (default opus). Vyhodnocení (síť, klíč, samotné
+ * porušení non-goalů, `--ai-code` reálnou analýzu kvality/rizik kódu, `--ai-logic`
+ * posouzení funkčnosti kódu jako CELKU vůči záměru z project.md – všechny jsou
+ * samostatné drahé cesty, každá vlastní dotaz na API (lze i víc naráz). `--ai-model
+ * <opus|sonnet>` volí model pro všechny (default opus). Vyhodnocení (síť, klíč, samotné
  * --ai-model bez AI běhu) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
@@ -59,6 +61,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let aiCheck = false;
   let aiNonGoal = false;
   let aiCode = false;
+  let aiLogic = false;
   let aiModel: AiModelChoice = "opus";
 
   for (let i = 0; i < argv.length; i++) {
@@ -106,6 +109,10 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       aiCode = true;
       continue;
     }
+    if (a === "--ai-logic") {
+      aiLogic = true;
+      continue;
+    }
     if (a === "--ai-model") {
       const val = argv[i + 1];
       if (val === undefined || !AI_MODELS.includes(val as AiModelChoice)) {
@@ -135,7 +142,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiNonGoal, aiCode, aiModel };
+  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiNonGoal, aiCode, aiLogic, aiModel };
 }
 
 /** Výsledek validace cílové cesty. */

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "createdAt": "2026-06-15T19:13:16.562Z",
-  "currentPhaseId": null,
+  "currentPhaseId": 46,
   "phases": [
     {
       "id": 1,
@@ -222,6 +222,16 @@
       "id": 44,
       "title": "AI analýza obecného kódu (--ai-code)",
       "status": "done"
+    },
+    {
+      "id": 45,
+      "title": "AI-logika vůči deklarovanému záměru",
+      "status": "done"
+    },
+    {
+      "id": 46,
+      "title": "Větší vstupní strop AI (800k znaků)",
+      "status": "proposed"
     }
   ]
 }

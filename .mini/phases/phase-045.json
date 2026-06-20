@@ -1,0 +1,44 @@
+{
+  "id": 45,
+  "title": "AI-logika vůči deklarovanému záměru",
+  "goal": "Přidat přepínač --ai-logic, který posoudí funkčnost kódu jako celek vůči záměru z project.md (vlastní prompt + schéma, nález míří co nejvíc na konkrétní místo, ale nemusí na jeden řádek), zapojí se jako třetí nezávislé pole do AiReport/reportu; když project.md chybí, režim se čistě přeskočí (odvození záměru z kódu je vyčleněno do pozdější fáze).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přepínač --ai-logic v args.ts",
+      "status": "done",
+      "detail": "ParsedArgs.run dostane aiLogic:boolean; parser pozná --ai-logic; help text (L47-52) ho zmíní jako třetí opt-in režim. Test v args.test.ts (zapne flag, default false)."
+    },
+    {
+      "title": "Logic vrstva v aiResult.ts",
+      "status": "done",
+      "detail": "LOGIC_FINDINGS_SCHEMA (file/line NEpovinné, kind, severity, message), SYSTEM_PROMPT_LOGIC (jen reálné rozpory vůči záměru, radši méně, přiznat aproximaci), buildLogicPrompt(building, payload) posílá jen 'What I'm building', RawLogicFinding, parseLogicFindings, toLogicFindings (chybějící místo legitimní bez značky; vyplněné ověřit, špatné → '[místo neověřeno]'), runAiLogicAnalysis (brána na intent.building; truncated → skip; bez souborů → skip; chyby jako ostatní orchestrátory). Čisté funkce pokryté testy."
+    },
+    {
+      "title": "Třetí pole logic v AiReport + bump JSON verze",
+      "status": "done",
+      "detail": "AiReport v aiStatus.ts o logic:AiStatus; INDEX_VERSION 14→15 v jsonIndex.ts (+ komentář). Test tvaru JSON (obsahuje ai.logic, verze 15)."
+    },
+    {
+      "title": "Render logic sekce v reportu",
+      "status": "done",
+      "detail": "Třetí aiModeBlock 'Logika vs záměr (--ai-logic)' a aiModeSummary řádek v markdown.ts; v bloku VÝRAZNĚ napsat, že jde o neúplnou aproximaci. Test v markdown.test.ts."
+    },
+    {
+      "title": "Zapojení v cli.ts (runAiLayer)",
+      "status": "done",
+      "detail": "wantLogic=parsed.aiLogic; podmínka wantNonGoal||wantCode||wantLogic; pole logic do všech 4 návratů AiReport; runOneAiMode('logiky',…) volá runAiLogicAnalysis(process.env, intent, payload,…). Default běh dál neutrácí."
+    },
+    {
+      "title": "Doběh fáze",
+      "status": "done",
+      "detail": "tsc + celá suite zelená; reálný běh vibeanalyzer . --ai-logic → report s logic sekcí; ověřit skip bez klíče i skip při useknutí; nezávislý sub-agent projde vstupní body a kontrakty (args↔cli↔AiReport↔JSON verze, prompt↔schéma, neúnik klíče/kódu)."
+    }
+  ],
+  "startedAt": "2026-06-20T18:39:43.574Z",
+  "completedAt": "2026-06-20T19:19:16.797Z",
+  "autoCommit": {
+    "preSha": "7e680493f17cffe315009b15458f6e6f3941502d",
+    "subject": "Phase 45: AI-logika vůči deklarovanému záměru"
+  }
+}

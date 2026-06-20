@@ -43,7 +43,9 @@ Volby:
   --ai-check       Pošle levný testovací dotaz na Anthropic API (vyžaduje ANTHROPIC_API_KEY).
   --ai-non-goal    Reálná AI analýza porušení non-goalů (drahé, vyžaduje ANTHROPIC_API_KEY).
   --ai-code        Reálná AI analýza kvality/rizik kódu (drahé, vyžaduje ANTHROPIC_API_KEY).
-                   --ai-non-goal a --ai-code jdou zapnout naráz (každý vlastní dotaz = vlastní cena).
+  --ai-logic       Reálná AI analýza funkčnosti kódu jako celku vůči záměru z project.md
+                   (drahé, vyžaduje ANTHROPIC_API_KEY i záměr; bez něj se přeskočí).
+                   --ai-non-goal, --ai-code i --ai-logic jdou zapnout naráz (každý vlastní dotaz = vlastní cena).
   --ai-model <m>   Model pro AI analýzu: opus (výchozí) nebo sonnet.
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
@@ -410,7 +412,7 @@ export async function run(
     moduleGraph = { kind: "skipped", reason: "graf modulů během sestavování selhal (viz stderr)" };
   }
 
-  // AI vrstva: dva NEZÁVISLÉ režimy (--ai-non-goal, --ai-code) + brána klíče. Bez
+  // AI vrstva: tři NEZÁVISLÉ režimy (--ai-non-goal, --ai-code, --ai-logic) + brána klíče. Bez
   // přepínače jen synchronní brána klíče (offline, nepadá). S přepínačem(i) se
   // SDK/orchestrátor načtou dynamicky až tady (default běh @anthropic-ai/sdk nenahraje)
   // a payload (čtení souborů) se sbírá JEDNOU a sdílí mezi oběma režimy.
@@ -499,11 +501,11 @@ export async function run(
 }
 
 /**
- * Sestaví souhrn AI vrstvy (`AiReport`) podle přepínačů. Dva NEZÁVISLÉ analytické
- * režimy (`--ai-non-goal`, `--ai-code`) sdílejí jeden klíč i JEDEN payload (čtení
- * souborů proběhne jen jednou), ale každý volá API zvlášť (vlastní cena). `--ai-check`
+ * Sestaví souhrn AI vrstvy (`AiReport`) podle přepínačů. Tři NEZÁVISLÉ analytické
+ * režimy (`--ai-non-goal`, `--ai-code`, `--ai-logic`) sdílejí jeden klíč i JEDEN payload
+ * (čtení souborů proběhne jen jednou), ale každý volá API zvlášť (vlastní cena). `--ai-check`
  * je ortogonální ověření přístupu a uplatní se jen BEZ analytického režimu (společný
- * stav do obou polí). Bez přepínače jen synchronní brána klíče (offline, nepadá).
+ * stav do všech polí). Bez přepínače jen synchronní brána klíče (offline, nepadá).
  */
 async function runAiLayer(
   parsed: Extract<ParsedArgs, { kind: "run" }>,
@@ -514,14 +516,15 @@ async function runAiLayer(
 ): Promise<AiReport> {
   const wantNonGoal = parsed.aiNonGoal;
   const wantCode = parsed.aiCode;
+  const wantLogic = parsed.aiLogic;
 
-  if (wantNonGoal || wantCode) {
+  if (wantNonGoal || wantCode || wantLogic) {
     // Klíč zkontrolujeme PŘED čtením souborů – bez klíče nemá smysl číst projekt ani
-    // volat API. Bez klíče oba režimy přeskočí stejným důvodem.
+    // volat API. Bez klíče všechny režimy přeskočí stejným důvodem.
     const pre = detectAiStatus(process.env);
     if (pre.kind === "skipped") {
       console.error(AI_KEY_HINT);
-      return { nonGoal: pre, code: pre };
+      return { nonGoal: pre, code: pre, logic: pre };
     }
     // analyze/classify injektujeme (testy bez sítě); SDK i orchestrátor se načtou
     // dynamicky až tady, ať default běh nenahrává @anthropic-ai/sdk.
@@ -534,8 +537,8 @@ async function runAiLayer(
     }
     const analyzeFn = analyze;
     const classifyFn = classify;
-    const { runAiAnalysis, runAiCodeAnalysis } = await import("./analyze/aiResult.js");
-    // payload se sbírá JEDNOU a sdílí mezi oběma režimy (žádné dvojí čtení souborů).
+    const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
+    // payload se sbírá JEDNOU a sdílí mezi všemi režimy (žádné dvojí čtení souborů).
     const payload = await collectAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
 
     // Když je klíč, ale daný režim není vyžádán, zůstane `ready` (klíč nalezen, dotaz
@@ -550,7 +553,12 @@ async function runAiLayer(
           runAiCodeAnalysis(process.env, payload, parsed.aiModel, analyzeFn, classifyFn),
         )
       : pre;
-    return { nonGoal, code };
+    const logic = wantLogic
+      ? await runOneAiMode("logiky", parsed.aiModel, payload.truncated, () =>
+          runAiLogicAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
+        )
+      : pre;
+    return { nonGoal, code, logic };
   }
 
   if (parsed.aiCheck) {
@@ -575,12 +583,12 @@ async function runAiLayer(
     if (status.kind === "skipped" && status.reason === AI_MISSING_KEY_REASON) {
       console.error(AI_KEY_HINT);
     }
-    // --ai-check ověřuje přístup k API jako celku → společný stav do obou režimů.
-    return { nonGoal: status, code: status };
+    // --ai-check ověřuje přístup k API jako celku → společný stav do všech režimů.
+    return { nonGoal: status, code: status, logic: status };
   }
 
   const gate = detectAiStatus(process.env);
-  return { nonGoal: gate, code: gate };
+  return { nonGoal: gate, code: gate, logic: gate };
 }
 
 /**

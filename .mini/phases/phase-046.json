@@ -1,0 +1,6 @@
+{
+  "id": 46,
+  "title": "Větší vstupní strop AI (800k znaků)",
+  "goal": "Zvětšit AI_PAYLOAD_CHAR_BUDGET v src/analyze/aiPayload.ts z 200_000 na 800_000 znaků (~240k tokenů), aby se do AI vrstvy vešly i větší projekty (nad ~83k tokenů, které se dnes usekávají). Aktualizovat doprovodný komentář/odhad tokenů a testy stropu (truncation hranice). Sdílené všemi třemi AI režimy. POZOR: odhad nákladů před během stále chybí (Fáze 5c/todo 7) a skutečné řešení velkých projektů je krájení na části (backlog) – tato fáze je vědomý mezikrok, ne náhrada za ně; v reportu/komentáři to přiznat.",
+  "status": "proposed"
+}

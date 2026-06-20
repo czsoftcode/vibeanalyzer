@@ -16,9 +16,9 @@ const noSecrets: SecretsResult = {
 };
 const noAudit: AuditResult = { kind: "skipped", reason: "audit nevyžádán (--audit)" };
 const noAi: AiStatus = { kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" };
-/** Souhrn AI vrstvy z jednoho stavu pro oba režimy (zkratka v testech). */
-function aiReport(nonGoal: AiStatus, code: AiStatus = nonGoal): AiReport {
-  return { nonGoal, code };
+/** Souhrn AI vrstvy z jednoho stavu pro všechny tři režimy (zkratka v testech). */
+function aiReport(nonGoal: AiStatus, code: AiStatus = nonGoal, logic: AiStatus = nonGoal): AiReport {
+  return { nonGoal, code, logic };
 }
 const noAiReport: AiReport = aiReport(noAi);
 const noGraph: ModuleGraphResult = {
@@ -33,8 +33,8 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 14 (`ai` je souhrn dvou režimů: nonGoal + code)", () => {
-    expect(INDEX_VERSION).toBe(14);
+  it("verze indexu je 15 (`ai` je souhrn tří režimů: nonGoal + code + logic)", () => {
+    expect(INDEX_VERSION).toBe(15);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
@@ -44,16 +44,18 @@ describe("buildJsonIndex", () => {
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
-  it("nese oba ai režimy 1:1 a NEZÁVISLE (nonGoal i code – ne tiché vynechání)", () => {
+  it("nese všechny tři ai režimy 1:1 a NEZÁVISLE (nonGoal, code i logic – ne tiché vynechání)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    // skipped v obou
+    // skipped ve všech
     const skipped = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
     expect(skipped.ai.nonGoal).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
     expect(skipped.ai.code).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
-    // ready vs verified – každý režim svůj stav
-    const mixed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: { kind: "ready" }, code: { kind: "verified" } });
+    expect(skipped.ai.logic).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
+    // ready vs verified vs skipped – každý režim svůj stav
+    const mixed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: { kind: "ready" }, code: { kind: "verified" }, logic: { kind: "skipped", reason: "bez záměru" } });
     expect(mixed.ai.nonGoal).toEqual({ kind: "ready" });
     expect(mixed.ai.code).toEqual({ kind: "verified" });
+    expect(mixed.ai.logic).toEqual({ kind: "skipped", reason: "bez záměru" });
     // analyzed – nese findings/usage/cenu zvlášť pro každý režim
     const analyzedNonGoal: AiStatus = {
       kind: "analyzed",
@@ -69,9 +71,17 @@ describe("buildJsonIndex", () => {
       usage: { inputTokens: 200, outputTokens: 40 },
       costUsd: 0.002,
     };
-    const analyzed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: analyzedNonGoal, code: analyzedCode });
+    const analyzedLogic: AiStatus = {
+      kind: "analyzed",
+      model: "opus",
+      findings: [{ source: "ai", severity: "error", rule: "logika: chybí funkčnost", message: "neumí X" }],
+      usage: { inputTokens: 300, outputTokens: 60 },
+      costUsd: 0.003,
+    };
+    const analyzed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: analyzedNonGoal, code: analyzedCode, logic: analyzedLogic });
     expect(analyzed.ai.nonGoal).toEqual(analyzedNonGoal);
     expect(analyzed.ai.code).toEqual(analyzedCode);
+    expect(analyzed.ai.logic).toEqual(analyzedLogic);
   });
 
   it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {

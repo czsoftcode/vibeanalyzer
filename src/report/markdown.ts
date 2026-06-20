@@ -339,13 +339,18 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
 }
 
 /**
- * Vykreslí JEDEN AI režim (non-goal nebo code) jako pod-blok pod společnou hlavičkou.
+ * Vykreslí JEDEN AI režim (non-goal / code / logic) jako pod-blok pod společnou hlavičkou.
  * `label` = lidský název režimu, `emptyMsg` = co napsat, když analýza proběhla bez
- * nálezů (rozlišení "ran s 0 nálezy" vs "skipped"). Stavy: skipped / verified /
- * analyzed / ready – každý schválně rozlišitelný (ne falešné "hotovo").
+ * nálezů (rozlišení "ran s 0 nálezy" vs "skipped"). `note` = volitelná trvalá poznámka
+ * hned pod hlavičkou (logika ji používá na přiznání aproximace). Stavy: skipped /
+ * verified / analyzed / ready – každý schválně rozlišitelný (ne falešné "hotovo").
  */
-function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string): string[] {
+function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string, note?: string): string[] {
   const out: string[] = [`### ${label}`, ""];
+  if (note) {
+    out.push(`> ${sanitizeInline(note)}`);
+    out.push("");
+  }
 
   if (!ai || ai.kind === "skipped") {
     const reason = ai?.reason ?? "AI vrstva zatím neproběhla";
@@ -377,9 +382,14 @@ function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string):
   return out;
 }
 
+/** Přiznání u logické analýzy: soud o celku se ověřuje nejhůř ze tří režimů. */
+const AI_LOGIC_APPROX_NOTE =
+  "Pozor: posouzení celku vůči záměru je neúplná APROXIMACE (slabší obrana proti halucinaci než u řádkových nálezů). Každý nález si ověř v kódu.";
+
 /**
- * Sekce "## AI analýza". Dva NEZÁVISLÉ pod-bloky (non-goaly, kód) – každý běží na
- * vlastní přepínač a má vlastní stav/cenu. Strojová vrstva běží beze změny.
+ * Sekce "## AI analýza". Tři NEZÁVISLÉ pod-bloky (non-goaly, kód, logika) – každý běží
+ * na vlastní přepínač a má vlastní stav/cenu. Logika má navíc přiznání aproximace.
+ * Strojová vrstva běží beze změny.
  */
 function aiSection(ai: AiReport | undefined): string[] {
   return [
@@ -387,6 +397,7 @@ function aiSection(ai: AiReport | undefined): string[] {
     "",
     ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno."),
     ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny."),
+    ...aiModeBlock("Logika vs záměr (--ai-logic)", ai?.logic, "Žádný rozpor funkčnosti se záměrem nenalezen.", AI_LOGIC_APPROX_NOTE),
   ];
 }
 
@@ -400,9 +411,9 @@ function aiModeSummary(label: string, ai: AiStatus | undefined): string {
   return `- AI (${label}): připraveno`;
 }
 
-/** Shrnutí obou AI režimů do hlavičky reportu (dvě řádky). */
+/** Shrnutí všech tří AI režimů do hlavičky reportu (tři řádky). */
 function aiSummaryLines(ai: AiReport | undefined): string[] {
-  return [aiModeSummary("non-goaly", ai?.nonGoal), aiModeSummary("kód", ai?.code)];
+  return [aiModeSummary("non-goaly", ai?.nonGoal), aiModeSummary("kód", ai?.code), aiModeSummary("logika", ai?.logic)];
 }
 
 /** Krátké shrnutí stavu grafu modulů do hlavičky reportu. */

@@ -10,22 +10,22 @@ describe("parseArgs", () => {
 
   it("bez argumentu bere aktuální složku a výchozí výstup (null), audit/dev vypnuté", () => {
     const r = parseArgs([], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("vezme cestu jako pozicní argument, výstup zůstává výchozí", () => {
     const r = parseArgs(["./sub"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null, audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: null, audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("--out přepíše výstupní adresář", () => {
     const r = parseArgs(["./sub", "--out", "/tmp/out"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./sub"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("--out= varianta funguje taky", () => {
     const r = parseArgs(["--out=/tmp/out", "x"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("--out= s prázdnou hodnotou je chyba (ne tichý zápis do CWD)", () => {
@@ -35,17 +35,17 @@ describe("parseArgs", () => {
 
   it("--audit zapne audit, dev zůstává vypnuté", () => {
     const r = parseArgs(["--audit"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("--audit --dev zapne obojí", () => {
     const r = parseArgs(["--audit", "--dev", "./p"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./p"), outDir: null, audit: true, dev: true, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "./p"), outDir: null, audit: true, dev: true, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("samotné --dev (bez --audit) se zaznamená, ale audit zůstává vypnutý", () => {
     const r = parseArgs(["--dev"], cwd);
-    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: true, aiCheck: false, aiNonGoal: false, aiCode: false, aiModel: "opus" });
+    expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: false, dev: true, aiCheck: false, aiNonGoal: false, aiCode: false, aiLogic: false, aiModel: "opus" });
   });
 
   it("--ai-check zapne ověření AI (opt-in), ostatní zůstává výchozí", () => {
@@ -57,7 +57,7 @@ describe("parseArgs", () => {
       audit: false,
       dev: false,
       aiCheck: true,
-      aiNonGoal: false, aiCode: false,
+      aiNonGoal: false, aiCode: false, aiLogic: false,
       aiModel: "opus",
     });
   });
@@ -86,6 +86,20 @@ describe("parseArgs", () => {
     expect(r.kind === "run" && r.aiCode).toBe(true);
   });
 
+  it("--ai-logic zapne analýzu logiky nezávisle na ostatních režimech", () => {
+    const r = parseArgs(["--ai-logic", "./p"], cwd);
+    expect(r.kind === "run" && r.aiLogic).toBe(true);
+    expect(r.kind === "run" && r.aiNonGoal).toBe(false);
+    expect(r.kind === "run" && r.aiCode).toBe(false);
+  });
+
+  it("--ai-non-goal, --ai-code i --ai-logic lze zapnout naráz (každý vlastní dotaz)", () => {
+    const r = parseArgs(["--ai-non-goal", "--ai-code", "--ai-logic", "./p"], cwd);
+    expect(r.kind === "run" && r.aiNonGoal).toBe(true);
+    expect(r.kind === "run" && r.aiCode).toBe(true);
+    expect(r.kind === "run" && r.aiLogic).toBe(true);
+  });
+
   it("starý --ai už neexistuje (je to neznámá volba)", () => {
     const r = parseArgs(["--ai", "./p"], cwd);
     expect(r.kind).toBe("error");
@@ -112,10 +126,11 @@ describe("parseArgs", () => {
     if (r.kind === "error") expect(r.message).toContain("opus | sonnet");
   });
 
-  it("default běh: aiNonGoal i aiCode false (default neutrácí za drahou analýzu)", () => {
+  it("default běh: aiNonGoal, aiCode i aiLogic false (default neutrácí za drahou analýzu)", () => {
     const r = parseArgs([], cwd);
     expect(r.kind === "run" && r.aiNonGoal).toBe(false);
     expect(r.kind === "run" && r.aiCode).toBe(false);
+    expect(r.kind === "run" && r.aiLogic).toBe(false);
   });
 
   it("--help a --version mají přednost", () => {

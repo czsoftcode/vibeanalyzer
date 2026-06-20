@@ -9,6 +9,15 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Nový přepínač **`--ai-logic`** spustí reálnou **AI analýzu funkčnosti kódu jako celku
+  vůči záměru** z `project.md` (sekce „What I'm building") – hledá, kde kód neplní, co
+  slibuje (chybějící funkčnost, rozpor se záměrem). Na rozdíl od ostatních AI režimů
+  nález **nemusí mířit na jeden řádek** (posuzuje celek); když místo uvede, ověří se
+  proti poslanému souboru. Je to vědomě **neúplná aproximace** – obrana proti halucinaci
+  je tu nejslabší ze tří režimů, což report výslovně přiznává. Bez záměru se režim čistě
+  přeskočí (záměr je povinný vstup). Drahá cesta je opt-in, běží nezávisle a má vlastní
+  prompt, schéma, spotřebu tokenů i cenu. Tři AI režimy (`--ai-non-goal`, `--ai-code`,
+  `--ai-logic`) jdou zapnout i naráz.
 - Nový přepínač **`--ai-code`** spustí reálnou **AI analýzu kvality a rizik kódu** –
   hledá problémy, které nezachytí parser, tsc ani ESLint (logické chyby, riskantní
   vzorce, race conditions, neošetřené chyby). Každý nález míří na konkrétní místo
@@ -23,10 +32,10 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   Společně s novým `--ai-code` tvoří dva nezávislé AI režimy, které jdou zapnout
   i naráz – každý posílá vlastní dotaz na API (a má tedy vlastní cenu), ale čtení
   projektu proběhne jen jednou. `--ai-model` platí pro oba.
-- Report (`.md` i JSON) nově ukazuje **oba AI režimy odděleně** – non-goaly a kód mají
-  vlastní sekci, vlastní spotřebu tokenů i cenu. Strojový JSON index má **verzi 14**:
-  pole `ai` je nově souhrn dvou nezávislých výsledků (`nonGoal`, `code`) místo
-  jediného. Změna tvaru pro konzumenty JSON.
+- Report (`.md` i JSON) nově ukazuje **všechny AI režimy odděleně** – non-goaly, kód
+  i logika mají vlastní sekci, vlastní spotřebu tokenů i cenu. Strojový JSON index má
+  **verzi 15**: pole `ai` je souhrn tří nezávislých výsledků (`nonGoal`, `code`, `logic`).
+  Změna tvaru pro konzumenty JSON.
 
 ### Fixed
 

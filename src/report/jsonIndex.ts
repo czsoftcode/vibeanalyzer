@@ -22,7 +22,8 @@ import type { SecretsResult } from "../secrets.js";
  * variantu `analyzed` (reálná analýza non-goalů přes `--ai`): nese `findings`,
  * skutečnou `usage` (tokeny) a `costUsd` (odhad ceny). Od verze 14 je `ai` SOUHRN
  * dvou nezávislých režimů (`nonGoal` přes `--ai-non-goal`, `code` přes `--ai-code`),
- * každý vlastní `AiStatus` – dřív byl `ai` jediný `AiStatus`.
+ * každý vlastní `AiStatus` – dřív byl `ai` jediný `AiStatus`. Od verze 15 nese `ai`
+ * i třetí režim `logic` (`--ai-logic`): analýza funkčnosti kódu jako celku vůči záměru.
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -42,14 +43,14 @@ export interface JsonIndex {
   audit: AuditResult;
   /** graf importních závislostí mezi zdrojovými soubory */
   moduleGraph: ModuleGraphResult;
-  /** souhrn AI vrstvy: dva nezávislé režimy (`nonGoal` přes --ai-non-goal, `code` přes
-   *  --ai-code), každý vlastní AiStatus (ready/verified/analyzed/skipped) */
+  /** souhrn AI vrstvy: tři nezávislé režimy (`nonGoal` přes --ai-non-goal, `code` přes
+   *  --ai-code, `logic` přes --ai-logic), každý vlastní AiStatus (ready/verified/analyzed/skipped) */
   ai: AiReport;
 }
 
-/** Bump 13 → 14: `ai` je nově SOUHRN dvou nezávislých režimů (`nonGoal`, `code`) místo
- *  jediného AiStatus. Změna tvaru = kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 14;
+/** Bump 14 → 15: `ai` nese nově i třetí režim `logic` (`--ai-logic`). Změna tvaru =
+ *  kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 15;
 
 export function buildJsonIndex(
   root: string,

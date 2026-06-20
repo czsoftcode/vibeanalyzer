@@ -9,9 +9,9 @@ const base: MarkdownInput = {
   skippedUnreadable: [],
 };
 
-/** Pomocník: AiReport ze dvou stavů (default oba ready). */
-function report(nonGoal: AiStatus, code: AiStatus): AiReport {
-  return { nonGoal, code };
+/** Pomocník: AiReport ze stavů; `logic` se defaultně rovná `code` (testy ho přepíšou, kde záleží). */
+function report(nonGoal: AiStatus, code: AiStatus, logic: AiStatus = code): AiReport {
+  return { nonGoal, code, logic };
 }
 
 const analyzedNonGoal: AiStatus = {
@@ -29,15 +29,38 @@ const analyzedCode: AiStatus = {
   costUsd: 0.0456,
 };
 
-describe("buildMarkdown – AI sekce: dva nezávislé režimy (non-goal + code)", () => {
-  it("chybějící ai (undefined) → jedna hlavička, oba pod-bloky přeskočeno", () => {
+describe("buildMarkdown – AI sekce: tři nezávislé režimy (non-goal + code + logic)", () => {
+  it("chybějící ai (undefined) → jedna hlavička, všechny tři pod-bloky přeskočeno", () => {
     const md = buildMarkdown(base);
     expect(md).toContain("## AI analýza");
     expect(md).toContain("### Porušení non-goalů (--ai-non-goal)");
     expect(md).toContain("### Kvalita a rizika kódu (--ai-code)");
+    expect(md).toContain("### Logika vs záměr (--ai-logic)");
     expect(md).toContain("_Přeskočeno:");
     expect(md).toContain("- AI (non-goaly): přeskočeno");
     expect(md).toContain("- AI (kód): přeskočeno");
+    expect(md).toContain("- AI (logika): přeskočeno");
+  });
+
+  it("logika: přiznání aproximace je VŽDY v bloku + nález míří na celek (bez řádku)", () => {
+    const analyzedLogic: AiStatus = {
+      kind: "analyzed",
+      model: "opus",
+      findings: [{ source: "ai", severity: "error", rule: "logika: chybí funkčnost", message: "neumí slíbené X" }],
+      usage: { inputTokens: 300, outputTokens: 60 },
+      costUsd: 0.0099,
+    };
+    const md = buildMarkdown({ ...base, ai: report(detectAiStatus({}), detectAiStatus({}), analyzedLogic) });
+    expect(md).toContain("neúplná APROXIMACE");
+    expect(md).toContain("logika: chybí funkčnost");
+    expect(md).toContain("neumí slíbené X");
+    expect(md).toContain("- AI (logika): analyzováno (1 nálezů, ~$0.0099)");
+  });
+
+  it("logika skipped (bez záměru) → vlastní důvod + souhrn přeskočeno", () => {
+    const md = buildMarkdown({ ...base, ai: report(detectAiStatus({}), detectAiStatus({}), { kind: "skipped", reason: "chybí záměr v project.md" }) });
+    expect(md).toContain("chybí záměr v project.md");
+    expect(md).toContain("- AI (logika): přeskočeno");
   });
 
   it("bez klíče (reálný detectAiStatus pro oba) → 'chybí ANTHROPIC_API_KEY' v obou", () => {

@@ -34,7 +34,7 @@ interface AiStatusShape {
   reason?: string;
 }
 
-async function readJson(outDir: string): Promise<{ md: string; index: { ai: { nonGoal: AiStatusShape; code: AiStatusShape } } }> {
+async function readJson(outDir: string): Promise<{ md: string; index: { ai: { nonGoal: AiStatusShape; code: AiStatusShape; logic: AiStatusShape } } }> {
   const files = await readdir(outDir);
   const mdName = files.find((f) => f.endsWith(".md"));
   const jsonName = files.find((f) => f.endsWith(".json"));
@@ -165,6 +165,74 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     expect(errs).not.toContain("super-secret");
     expect(JSON.stringify(index)).not.toContain("super-secret");
     expect(md).not.toContain("super-secret");
+  });
+
+  it("--ai-logic s klíčem a záměrem → logic=analyzed, ostatní ready; prompt nese záměr, NE non-goaly; report přizná aproximaci", async () => {
+    vi.stubEnv(AI_KEY_ENV, "sk-ant-secret-logic");
+    await writeFile(path.join(proj, "a.ts"), "export const x = 1;\n", "utf8");
+    await writeFile(
+      path.join(proj, "project.md"),
+      "## What I'm building\nCLI co umí Y.\n\n## Non-goals\n- Do not run code.\n",
+      "utf8",
+    );
+
+    const seen: { system: string; prompt: string; schema: Record<string, unknown> }[] = [];
+    const analyze = vi.fn(async (_key: string, _model: string, system: string, prompt: string, schema: Record<string, unknown>) => {
+      seen.push({ system, prompt, schema });
+      return {
+        rawText: JSON.stringify({
+          findings: [{ kind: "chybí funkčnost", severity: "error", message: "neumí slíbené Y" }],
+        }),
+        usage: { inputTokens: 500, outputTokens: 30 },
+        stopReason: "end_turn",
+      };
+    });
+
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-logic"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+    });
+    expect(code).toBe(0);
+    expect(analyze).toHaveBeenCalledOnce();
+    // logic posílá záměr, ale NE non-goaly (ty řeší --ai-non-goal)
+    expect(seen[0].prompt).toContain("What I'm building");
+    expect(seen[0].prompt).toContain("CLI co umí Y.");
+    expect(seen[0].prompt).not.toContain("Do not run code.");
+    // logic schéma: file/line nepovinné, BEZ nonGoalIndex
+    const items = (seen[0].schema as { properties: { findings: { items: { required: string[]; properties: Record<string, unknown> } } } }).properties.findings.items;
+    expect(items.required).not.toContain("file");
+    expect(items.properties.nonGoalIndex).toBeUndefined();
+
+    const { md, index } = await readJson(outDir);
+    expect(index.ai.logic.kind).toBe("analyzed");
+    expect(index.ai.logic.findings).toHaveLength(1);
+    expect(index.ai.logic.usage).toEqual({ inputTokens: 500, outputTokens: 30 });
+    expect(index.ai.nonGoal).toEqual({ kind: "ready" }); // non-goal nevyžádán
+    expect(index.ai.code).toEqual({ kind: "ready" }); // code nevyžádán
+    expect(md).toContain("Logika vs záměr (--ai-logic)");
+    expect(md).toContain("neúplná APROXIMACE");
+    expect(md).toContain("neumí slíbené Y");
+    expect(JSON.stringify(index)).not.toContain("secret-logic");
+    expect(md).not.toContain("secret-logic");
+  });
+
+  it("--ai-logic bez záměru (project.md chybí) → logic=skipped s důvodem, žádné volání API", async () => {
+    vi.stubEnv(AI_KEY_ENV, "sk-ant-key");
+    await writeFile(path.join(proj, "a.ts"), "export const x = 1;\n", "utf8");
+    // ŽÁDNÝ project.md → bez záměru
+
+    const analyze = vi.fn(async () => ({ rawText: "{}", usage: { inputTokens: 1, outputTokens: 1 }, stopReason: "end_turn" }));
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-logic"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+    });
+    expect(code).toBe(0); // bez záměru se logic čistě přeskočí, exit 0
+    expect(analyze).not.toHaveBeenCalled(); // brána na záměru → žádný drahý dotaz
+    const { index } = await readJson(outDir);
+    expect(index.ai.logic.kind).toBe("skipped");
+    expect(index.ai.logic.reason).toContain("záměr");
   });
 
   it("--ai-code s klíčem → code=analyzed (s druhem problému), nonGoal zůstane ready; prompt NEnese non-goaly", async () => {
