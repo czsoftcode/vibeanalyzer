@@ -1,0 +1,39 @@
+{
+  "id": 33,
+  "title": "Typová kontrola i pro testy",
+  "goal": "Přidat tsconfig.test.json (dědí z base, ale bez exclude testů, noEmit) a napojit ho na npm run typecheck tak, aby kontroloval i *.test.ts; opravit odhalené typové nesoulady, ať projde zeleně. Build (tsc) dál testy nevypouští do dist. Ověření: záměrná typová chyba v testu (vynechané povinné pole) shodí npm run typecheck; bez ní projde zeleně; npm run build dál neemituje test soubory do dist.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Vytvořit tsconfig.test.json",
+      "status": "done",
+      "detail": "Dědí z ./tsconfig.json, noEmit:true, include:[src], exclude:[dist,node_modules] (testy už NEvyloučené). Plná striktnost včetně noUncheckedIndexedAccess. Soubor jen přibyde."
+    },
+    {
+      "title": "Napojit typecheck na nový config",
+      "status": "done",
+      "detail": "npm run typecheck → tsc --noEmit -p tsconfig.test.json (pokryje src i testy jedním během). build (tsc) BEZE ZMĚNY přes tsconfig.json, který testy vylučuje → do dist se test soubory neemitují."
+    },
+    {
+      "title": "Opravit reálné nesoulady tvaru (~12: TS2322/2741/2345/2339)",
+      "status": "done",
+      "detail": "Chybějící/špatná pole v literálech v markdown.tsc.test.ts, markdown.audit.test.ts, findings.test.ts, eslintConfig.test.ts, cli.scanfail.test.ts. Doplnit/opravit tvar na reálný typ, ne as any."
+    },
+    {
+      "title": "Opravit přístup k indexům (~41: TS18048/TS2532)",
+      "status": "done",
+      "detail": "V secrets.test.ts, secrets.scan.test.ts, audit.parse.test.ts ošetřit findings[i]/objektové přístupy guardem (toBeDefined + lokální proměnná) nebo non-null tam, kde test existenci stejně předpokládá. Bez změny chování testu."
+    },
+    {
+      "title": "Zuby + ověření",
+      "status": "done",
+      "detail": "Záměrná typová chyba v testu (vynechané povinné pole) → npm run typecheck spadne (pak vrátit). Čistě: npm run typecheck zelený, npm test zelený (381+), npm run build doběhne a dist/ neobsahuje *.test.js."
+    }
+  ],
+  "startedAt": "2026-06-20T09:09:58.051Z",
+  "completedAt": "2026-06-20T09:29:23.155Z",
+  "autoCommit": {
+    "preSha": "cac9049b7908b774b4d68dcb5fcad0adc72b3048",
+    "subject": "Phase 33: Typová kontrola i pro testy"
+  }
+}

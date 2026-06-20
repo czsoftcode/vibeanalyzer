@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { describe, expect, it } from "vitest";
 import { detectSecrets } from "./secrets.js";
 
@@ -19,9 +20,11 @@ describe("detectSecrets – každý vzor chytne svou ukázku", () => {
   it("AWS Access Key ID", () => {
     const hits = detectSecrets(`const k = "${SAMPLES.awsKeyId}";`);
     expect(hits).toHaveLength(1);
-    expect(hits[0].rule).toBe("aws-access-key-id");
-    expect(hits[0].severity).toBe("error");
-    expect(hits[0].line).toBe(1);
+    const [hit] = hits;
+    assert(hit);
+    expect(hit.rule).toBe("aws-access-key-id");
+    expect(hit.severity).toBe("error");
+    expect(hit.line).toBe(1);
   });
 
   it("GitHub token", () => {
@@ -93,7 +96,7 @@ describe("detectSecrets – ÚNIK: výstup nikdy nenese celou hodnotu (hlavní z
     ];
     for (const secret of secrets) {
       const [hit] = detectSecrets(`x = ${secret}`);
-      expect(hit).toBeDefined();
+      assert(hit);
       // Celá hodnota se NESMÍ objevit v masce.
       expect(hit.masked.includes(secret)).toBe(false);
       // Maska smí ukázat jen krátký veřejný prefix.
@@ -103,6 +106,7 @@ describe("detectSecrets – ÚNIK: výstup nikdy nenese celou hodnotu (hlavní z
 
   it("maska ukáže délku a prefix, ne tělo", () => {
     const [hit] = detectSecrets(`x = ${SAMPLES.awsKeyId}`);
+    assert(hit);
     expect(hit.masked).toBe(`AKIA…(${SAMPLES.awsKeyId.length} znaků)`);
   });
 
@@ -118,7 +122,9 @@ describe("detectSecrets – ÚNIK: výstup nikdy nenese celou hodnotu (hlavní z
     ];
     for (const s of samples) {
       const [hit] = detectSecrets(`x = ${s}`);
+      assert(hit);
       const shown = hit.masked.split("…")[0];
+      assert(shown !== undefined);
       expect(shown.length).toBeLessThanOrEqual(8);
     }
   });
@@ -128,6 +134,7 @@ describe("detectSecrets – čísla řádků a opakované volání", () => {
   it("zásah ukazuje na správný 1-based řádek", () => {
     const text = ["// pozn", "// dalsi", `key = ${SAMPLES.awsKeyId}`].join("\n");
     const [hit] = detectSecrets(text);
+    assert(hit);
     expect(hit.line).toBe(3);
   });
 
@@ -142,7 +149,11 @@ describe("detectSecrets – čísla řádků a opakované volání", () => {
   it("CRLF i LF dávají stejná čísla řádků", () => {
     const lf = `x\ny = ${SAMPLES.awsKeyId}`;
     const crlf = `x\r\ny = ${SAMPLES.awsKeyId}`;
-    expect(detectSecrets(crlf)[0].line).toBe(detectSecrets(lf)[0].line);
-    expect(detectSecrets(crlf)[0].line).toBe(2);
+    const crlfHit = detectSecrets(crlf)[0];
+    const lfHit = detectSecrets(lf)[0];
+    assert(crlfHit);
+    assert(lfHit);
+    expect(crlfHit.line).toBe(lfHit.line);
+    expect(crlfHit.line).toBe(2);
   });
 });

@@ -7,6 +7,8 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-20
+
 ### Changed
 
 - Report nově **rozpozná monorepo s hoisted závislostmi** a hlášky „nenalezený

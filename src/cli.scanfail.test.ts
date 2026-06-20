@@ -61,6 +61,7 @@ describe("run – chybové větve analýzy (scan/build)", () => {
     mockedScan.mockResolvedValueOnce({
       files: [],
       skippedUnreadable: [ROOT_UNREADABLE_MARKER],
+      ignoredByGitignore: 0,
       gitignoreWarnings: [],
     });
     const outDir = path.join(proj, "out");
@@ -75,7 +76,7 @@ describe("run – chybové větve analýzy (scan/build)", () => {
 
   it("legitimně prázdná čitelná složka (skippedUnreadable prázdné) → exit 0, ne falešné selhání", async () => {
     // pojistka, že guard nepleteme: prázdný projekt je validní výsledek, ne chyba
-    mockedScan.mockResolvedValueOnce({ files: [], skippedUnreadable: [], gitignoreWarnings: [] });
+    mockedScan.mockResolvedValueOnce({ files: [], skippedUnreadable: [], ignoredByGitignore: 0, gitignoreWarnings: [] });
     const outDir = path.join(proj, "out");
 
     const code = await run([proj, "--out", outDir], proj);

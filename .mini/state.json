@@ -162,6 +162,11 @@
       "id": 32,
       "title": "Monorepo: upozornit na hoisted node_modules",
       "status": "done"
+    },
+    {
+      "id": 33,
+      "title": "Typová kontrola i pro testy",
+      "status": "done"
     }
   ]
 }

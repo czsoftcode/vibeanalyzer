@@ -32,6 +32,10 @@ describe("eslintConfig", () => {
   it("JS blok má zapnuté JSX parsování (ecmaFeatures.jsx)", () => {
     // bez něj espree padá na .jsx/.js s JSX fatal "Parsing error" (nález 13-1)
     const jsBlock = eslintConfig.find((c) => c.files?.some((f) => String(f).includes("*.js")));
-    expect(jsBlock?.languageOptions?.parserOptions?.ecmaFeatures?.jsx).toBe(true);
+    // @eslint/core typuje parserOptions volně (LanguageOptions = Record<string, unknown>),
+    // takže ecmaFeatures přes typ nedosáhneme. Cast na tvar, který sami v eslintConfig.ts
+    // píšeme – dokumentuje předpoklad, neslepuje cizí data.
+    const parserOptions = jsBlock?.languageOptions?.parserOptions as { ecmaFeatures?: { jsx?: boolean } } | undefined;
+    expect(parserOptions?.ecmaFeatures?.jsx).toBe(true);
   });
 });

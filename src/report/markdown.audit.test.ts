@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { describe, expect, it } from "vitest";
 import type { AuditResult } from "../audit.js";
 import { buildMarkdown, type MarkdownInput } from "./markdown.js";
@@ -69,8 +70,16 @@ describe("buildMarkdown – sekce auditu: tři rozlišitelné stavy", () => {
     const m = md.match(
       /našel (\d+) zranitelností \(kritických (\d+), vysokých (\d+), středních (\d+), nízkých (\d+), informativních (\d+)\)/,
     );
-    expect(m).not.toBeNull();
-    const [, total, critical, high, moderate, low, info] = m!.map(Number);
+    assert(m);
+    const [, total, critical, high, moderate, low, info] = m.map(Number);
+    assert(
+      total !== undefined &&
+        critical !== undefined &&
+        high !== undefined &&
+        moderate !== undefined &&
+        low !== undefined &&
+        info !== undefined,
+    );
     expect(critical + high + moderate + low + info).toBe(total);
     expect(total).toBe(5);
     expect(info).toBe(1);

@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -41,6 +42,7 @@ describe("parseAuditJson – validní v2 report", () => {
     if (res.kind !== "ran") return;
     expect(res.findings).toHaveLength(1);
     const f = res.findings[0];
+    assert(f);
     expect(f.source).toBe("audit");
     expect(f.severity).toBe("error"); // high → error
     expect(f.file).toBe("package-lock.json");
@@ -70,9 +72,9 @@ describe("parseAuditJson – validní v2 report", () => {
         auditReportVersion: 2,
         vulnerabilities: { p: { name: "p", severity: sev, range: "*", via: [], fixAvailable: false } },
       });
-    expect((parseAuditJson(make("critical"), "package-lock.json") as { findings: { severity: string }[] }).findings[0].severity).toBe("error");
-    expect((parseAuditJson(make("moderate"), "package-lock.json") as { findings: { severity: string }[] }).findings[0].severity).toBe("warning");
-    expect((parseAuditJson(make("low"), "package-lock.json") as { findings: { severity: string }[] }).findings[0].severity).toBe("info");
+    expect((parseAuditJson(make("critical"), "package-lock.json") as { findings: { severity: string }[] }).findings[0]!.severity).toBe("error");
+    expect((parseAuditJson(make("moderate"), "package-lock.json") as { findings: { severity: string }[] }).findings[0]!.severity).toBe("warning");
+    expect((parseAuditJson(make("low"), "package-lock.json") as { findings: { severity: string }[] }).findings[0]!.severity).toBe("info");
   });
 
   it("28-2: report BEZ metadata → counts po závažnostech z vuln.severity (ne samé 0)", () => {
@@ -108,8 +110,10 @@ describe("parseAuditJson – validní v2 report", () => {
     const res = parseAuditJson(transitive, "package-lock.json");
     expect(res.kind).toBe("ran");
     if (res.kind !== "ran") return;
-    expect(res.findings[0].message).toContain("zranitelné přes lodash");
-    expect(res.findings[0].rule).toBeUndefined();
+    const [f] = res.findings;
+    assert(f);
+    expect(f.message).toContain("zranitelné přes lodash");
+    expect(f.rule).toBeUndefined();
   });
 
   it("fixAvailable jako objekt → 'oprava: ano (name@version, major)'", () => {
@@ -129,7 +133,9 @@ describe("parseAuditJson – validní v2 report", () => {
     );
     expect(res.kind).toBe("ran");
     if (res.kind !== "ran") return;
-    expect(res.findings[0].message).toContain("oprava: ano (lodash@4.17.21, major");
+    const [f] = res.findings;
+    assert(f);
+    expect(f.message).toContain("oprava: ano (lodash@4.17.21, major");
   });
 });
 
@@ -175,7 +181,9 @@ describe("auditDependencies – složení runneru a parseru (bez sítě)", () =>
     expect(res.kind).toBe("ran");
     if (res.kind !== "ran") return;
     expect(res.findings).toHaveLength(1);
-    expect(res.findings[0].rule).toBe("GHSA-35jh-r3h4-6jhm");
+    const [f] = res.findings;
+    assert(f);
+    expect(f.rule).toBe("GHSA-35jh-r3h4-6jhm");
   });
 
   it("28-1: lockfile npm-shrinkwrap.json → nález míří na NĚJ (ne natvrdo package-lock.json)", async () => {
@@ -191,7 +199,9 @@ describe("auditDependencies – složení runneru a parseru (bez sítě)", () =>
     expect(res.kind).toBe("ran");
     if (res.kind !== "ran") return;
     expect(res.findings).toHaveLength(1);
-    expect(res.findings[0].file).toBe("npm-shrinkwrap.json");
+    const [f] = res.findings;
+    assert(f);
+    expect(f.file).toBe("npm-shrinkwrap.json");
   });
 
   it("chybějící lockfile → skipped i přes auditDependencies", async () => {

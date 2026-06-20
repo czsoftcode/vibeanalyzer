@@ -19,7 +19,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
   });
 
   it("ran s 0 nálezy NENÍ totéž co přeskočeno", () => {
-    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 3, nodeModulesPresent: true, tsVersion: "5.9.3" };
+    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 3, nodeModulesPresent: true, hoistedNodeModules: false, tsVersion: "5.9.3" };
     const md = buildMarkdown({ ...base, tsc });
     expect(md).toContain("_Žádné typové chyby._");
     expect(md).toContain("- tsc: čistý (0 nálezů)");
@@ -32,6 +32,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
       tsVersion: "5.9.3",
       fileCount: 1,
       nodeModulesPresent: true,
+      hoistedNodeModules: false,
       findings: [
         { source: "tsc", severity: "error", file: "src/a.ts", line: 7, column: 3, rule: "TS2322", message: "Type 'string' is not assignable to type 'number'." },
       ],
@@ -58,6 +59,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
       tsVersion: "5.9.3",
       fileCount: 1,
       nodeModulesPresent: true,
+      hoistedNodeModules: false,
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, message: "řádek1\nřádek2 `code`" }],
     };
     const md = buildMarkdown({ ...base, tsc });
@@ -73,6 +75,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
       tsVersion: "5.9.3",
       fileCount: 1,
       nodeModulesPresent: true,
+      hoistedNodeModules: false,
       findings: [{ source: "tsc", severity: "error", file: "evil\n## Injekce.ts", line: 1, column: 1, message: "zpráva" }],
     };
     const md = buildMarkdown({ ...base, tsc });
@@ -90,6 +93,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
       tsVersion: "5.9.3",
       fileCount: 0,
       nodeModulesPresent: true,
+      hoistedNodeModules: false,
       findings: [{ source: "tsc", severity: "error", rule: "TS5023", message: "Unknown compiler option." }],
     };
     const md = buildMarkdown({ ...base, tsc });
@@ -98,7 +102,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
   });
 
   it("ran vždy ukáže POUŽITOU verzi TS; bez rozdílu žádná poznámka o verzi", () => {
-    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 1, nodeModulesPresent: true, tsVersion: "5.9.3" };
+    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 1, nodeModulesPresent: true, hoistedNodeModules: false, tsVersion: "5.9.3" };
     const md = buildMarkdown({ ...base, tsc });
     expect(md).toContain("tsc (TS 5.9.3) proběhl");
     expect(md).not.toContain("projekt používá"); // bez projectTsVersion žádná poznámka o rozdílu
@@ -110,6 +114,7 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
       findings: [],
       fileCount: 1,
       nodeModulesPresent: true,
+      hoistedNodeModules: false,
       tsVersion: "5.9.3",
       projectTsVersion: "5.4.0",
     };

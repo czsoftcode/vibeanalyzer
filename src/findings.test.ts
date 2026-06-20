@@ -25,7 +25,7 @@ describe("formatLocation", () => {
 
 describe("TscResult diskriminace", () => {
   it("ran a skipped jsou rozlišitelné podle kind", () => {
-    const ran: TscResult = { kind: "ran", findings: [], fileCount: 3, nodeModulesPresent: true, hoistedNodeModules: false };
+    const ran: TscResult = { kind: "ran", findings: [], fileCount: 3, nodeModulesPresent: true, hoistedNodeModules: false, tsVersion: "5.9.3" };
     const skipped: TscResult = { kind: "skipped", reason: "není tsconfig" };
     expect(ran.kind).toBe("ran");
     expect(skipped.kind).toBe("skipped");
