@@ -1,4 +1,4 @@
-import type { AiStatus } from "../analyze/aiStatus.js";
+import type { AiReport } from "../analyze/aiStatus.js";
 import type { ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
@@ -20,7 +20,9 @@ import type { SecretsResult } from "../secrets.js";
  * falešné TS2307). Od verze 11 nese stav AI vrstvy (`ai`). Od verze 12 má `ai` i
  * variantu `verified` (levný testovací dotaz, `--ai-check`). Od verze 13 má i
  * variantu `analyzed` (reálná analýza non-goalů přes `--ai`): nese `findings`,
- * skutečnou `usage` (tokeny) a `costUsd` (odhad ceny).
+ * skutečnou `usage` (tokeny) a `costUsd` (odhad ceny). Od verze 14 je `ai` SOUHRN
+ * dvou nezávislých režimů (`nonGoal` přes `--ai-non-goal`, `code` přes `--ai-code`),
+ * každý vlastní `AiStatus` – dřív byl `ai` jediný `AiStatus`.
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -40,15 +42,14 @@ export interface JsonIndex {
   audit: AuditResult;
   /** graf importních závislostí mezi zdrojovými soubory */
   moduleGraph: ModuleGraphResult;
-  /** stav AI vrstvy: ready = klíč nalezen (dotaz neproběhl), verified = ping
-   *  (--ai-check), analyzed = reálná analýza non-goalů (--ai; nálezy+usage+cena),
-   *  skipped = důvod přeskočení (chybí klíč / síť / 401 / žádné non-goaly) */
-  ai: AiStatus;
+  /** souhrn AI vrstvy: dva nezávislé režimy (`nonGoal` přes --ai-non-goal, `code` přes
+   *  --ai-code), každý vlastní AiStatus (ready/verified/analyzed/skipped) */
+  ai: AiReport;
 }
 
-/** Bump 12 → 13: `ai` má novou variantu `analyzed` (reálná analýza přes --ai, nese
- *  findings/usage/costUsd). Rozšíření tvaru unie = kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 13;
+/** Bump 13 → 14: `ai` je nově SOUHRN dvou nezávislých režimů (`nonGoal`, `code`) místo
+ *  jediného AiStatus. Změna tvaru = kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 14;
 
 export function buildJsonIndex(
   root: string,
@@ -59,7 +60,7 @@ export function buildJsonIndex(
   secrets: SecretsResult,
   audit: AuditResult,
   moduleGraph: ModuleGraphResult,
-  ai: AiStatus,
+  ai: AiReport,
 ): JsonIndex {
   return {
     version: INDEX_VERSION,

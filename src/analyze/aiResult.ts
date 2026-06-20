@@ -166,12 +166,16 @@ export function computeCostUsd(usage: AiUsage, model: AiModelChoice): number {
 
 /** Injektované reálné volání modelu (aiAnalyze.realAiAnalyze nebo fake v testech).
  *  Resolve = API odpovědělo (rawText = strukturovaný JSON + usage + stop_reason);
- *  reject = chyba. `stopReason: "max_tokens"` = výstup uříznut (řeší runAiAnalysis). */
+ *  reject = chyba. `stopReason: "max_tokens"` = výstup uříznut (řeší runAiAnalysis).
+ *  `schema` je JSON schéma strukturovaného výstupu – KAŽDÝ režim posílá své vlastní
+ *  (non-goal `FINDINGS_SCHEMA` vs code `CODE_FINDINGS_SCHEMA`); musí sedět na prompt,
+ *  jinak model vrátí tvar, který parser daného režimu odmítne. */
 export type AnalyzeFn = (
   apiKey: string,
   model: AiModelChoice,
   system: string,
   userPrompt: string,
+  schema: { [key: string]: unknown },
 ) => Promise<{ rawText: string; usage: AiUsage; stopReason: string | null }>;
 
 /**
@@ -205,7 +209,7 @@ export async function runAiAnalysis(
   const apiKey = (env[AI_KEY_ENV] as string).trim();
   const prompt = buildAnalyzePrompt(intent?.building ?? null, nonGoals, payload);
   try {
-    const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT, prompt);
+    const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT, prompt, FINDINGS_SCHEMA);
     // Uříznutý/prázdný výstup je PROVOZNÍ stav (thinking sežral max_tokens, model
     // nestihl JSON), NE programová chyba – čistě přeskočíme s důvodem a NAÚČTOVANOU
     // cenou (transparentně, ať uživatel ví, že běh něco stál), místo pádu na
@@ -218,6 +222,185 @@ export async function runAiAnalysis(
       };
     }
     const findings = toFindings(parseFindings(rawText), nonGoals, payload.includedFiles);
+    return { kind: "analyzed", model, findings, usage, costUsd: computeCostUsd(usage, model) };
+  } catch (err: unknown) {
+    const reason = classify(err);
+    if (reason === null) throw err;
+    return { kind: "skipped", reason };
+  }
+}
+
+// ====================================================================================
+// Analýza KVALITY / RIZIK kódu (`--ai-code`) — samostatná vrstva, NEZÁVISLÁ na non-
+// goalech. Vlastní prompt i schéma BEZ `nonGoalIndex`: hledá problémy, které nezachytí
+// parser/tsc/ESLint (logické chyby, rizikové vzorce, sémantika), ne syntaxi/typy.
+// ====================================================================================
+
+/**
+ * JSON schéma pro nálezy analýzy kódu. Záměrně BEZ `nonGoalIndex` (code nálezy se
+ * nevážou na deklarované non-goaly — to je jiná vrstva). `kind` je krátký druh
+ * problému, který se v reportu promítne do `rule`. Číselné meze (`line`) schéma
+ * neumí — `line` ověřujeme až v `toCodeFindings` proti počtu řádků poslaného souboru.
+ */
+export const CODE_FINDINGS_SCHEMA: { [key: string]: unknown } = {
+  type: "object",
+  additionalProperties: false,
+  required: ["findings"],
+  properties: {
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["file", "line", "kind", "severity", "message"],
+        properties: {
+          file: { type: "string" },
+          line: { type: "integer" },
+          kind: { type: "string" },
+          severity: { type: "string", enum: ["error", "warning", "info"] },
+          message: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
+/** Systémový prompt analytika kvality/rizik kódu. POJISTKA proti ukecanosti (a tím
+ *  proti ceně): jen reálné, ověřitelné problémy s konkrétním místem, ne domněnky ani
+ *  stylové drobnosti. Syntaxi a typy řeší stroj (tsc/ESLint) — od AI je nechceme. */
+export const SYSTEM_PROMPT_CODE = [
+  "Jsi zkušený recenzent kódu. Dostaneš zdrojový kód projektu. Tvůj úkol: najít",
+  "REÁLNÉ problémy kvality a rizika, které běžný parser, typová kontrola (tsc) ani",
+  "linter (ESLint) NEodhalí — tedy logické chyby, riskantní/nebezpečné vzorce,",
+  "chybějící ošetření chyb, podezřelou sémantiku, race conditions a podobně.",
+  "",
+  "Pravidla:",
+  "- Hlas jen SKUTEČNÉ, konkrétní problémy, ne domněnky, ne stylové drobnosti. Když",
+  "  nic závažného nevidíš, vrať PRÁZDNÝ seznam — radši méně nálezů s jistotou než",
+  "  zaplavit šumem. (Nemá smysl hlásit syntaktické/typové chyby — ty řeší stroj.)",
+  "- Každý nález MUSÍ ukazovat na konkrétní místo: `file` přesně tak, jak je v hlavičce",
+  "  `// ==== cesta ====` nad kódem, a `line` jako 1-based číslo řádku v TOM souboru.",
+  "- `kind` je krátký druh problému česky (např. „logická chyba\", „neošetřená chyba\",",
+  "  „riskantní vzorec\").",
+  "- Nevymýšlej si soubory ani řádky, které v poslaném kódu nejsou.",
+  "- `message` piš česky, stručně: co je špatně a proč je to riziko.",
+].join("\n");
+
+/** Sestaví uživatelský prompt pro analýzu kódu: (případně přiznané uříznutí) + slepený
+ *  kód s hlavičkami cest. Bez záměru/non-goalů — code vrstva je posuzuje nezávisle. */
+export function buildCodePrompt(payload: AiPayload): string {
+  const parts: string[] = [];
+  if (payload.truncated) {
+    parts.push("> Pozor: kód byl kvůli velikosti uříznut – posouzení je neúplné.");
+    parts.push("");
+  }
+  parts.push("# Zdrojový kód (s hlavičkami cest)");
+  parts.push(payload.text);
+  return parts.join("\n");
+}
+
+/** Surový code nález tak, jak ho vrátí model podle `CODE_FINDINGS_SCHEMA`. */
+export interface RawCodeFinding {
+  file: string;
+  line: number;
+  kind: string;
+  severity: Severity;
+  message: string;
+}
+
+/**
+ * Naparsuje strukturovaný JSON výstup code analýzy na `RawCodeFinding[]`. Stejně jako
+ * `parseFindings` věříme jen tomu, co OPRAVDU přišlo — při špatném tvaru HODÍME
+ * (nečekaný stav, NEmaskovat jako prázdný seznam). Volající (`runAiCodeAnalysis`) ho
+ * nechá probublat, na hranici CLI degraduje se stackem.
+ */
+export function parseCodeFindings(rawText: string): RawCodeFinding[] {
+  const data = JSON.parse(rawText) as unknown;
+  if (typeof data !== "object" || data === null || !Array.isArray((data as { findings?: unknown }).findings)) {
+    throw new Error("AI odpověď (code) nemá očekávaný tvar { findings: [...] }");
+  }
+  const arr = (data as { findings: unknown[] }).findings;
+  return arr.map((item, i) => {
+    if (typeof item !== "object" || item === null) {
+      throw new Error(`AI code nález #${i} není objekt`);
+    }
+    const o = item as Record<string, unknown>;
+    if (
+      typeof o.file !== "string" ||
+      typeof o.line !== "number" ||
+      typeof o.kind !== "string" ||
+      (o.severity !== "error" && o.severity !== "warning" && o.severity !== "info") ||
+      typeof o.message !== "string"
+    ) {
+      throw new Error(`AI code nález #${i} má neočekávaná pole`);
+    }
+    return { file: o.file, line: o.line, kind: o.kind, severity: o.severity, message: o.message };
+  });
+}
+
+/**
+ * Převede surové code nálezy na sdílené `Finding[]` a LEVNĚ ověří tvrzené místo —
+ * stejný kontrakt jako `toFindings`: soubor musí být v poslaném setu a řádek ≤ počet
+ * jeho řádků, jinak se místo NEpovažuje za ověřené (obrana proti halucinaci).
+ * `rule` nese druh problému (`kód: <kind>`); žádná vazba na non-goaly.
+ */
+export function toCodeFindings(raw: RawCodeFinding[], includedFiles: PayloadFile[]): Finding[] {
+  const lineCountByPath = new Map(includedFiles.map((f) => [f.path, f.lineCount]));
+  return raw.map((r) => {
+    const lineCount = lineCountByPath.get(r.file);
+    const inSet = lineCount !== undefined;
+    const lineOk = inSet && Number.isInteger(r.line) && r.line >= 1 && r.line <= lineCount;
+
+    let message = r.message;
+    let file: string | undefined;
+    let line: number | undefined;
+    if (!inSet) {
+      message += ` [místo neověřeno: soubor '${r.file}' nebyl poslán]`;
+    } else if (!lineOk) {
+      file = r.file;
+      message += ` [místo neověřeno: řádek ${r.line} je mimo soubor]`;
+    } else {
+      file = r.file;
+      line = r.line;
+    }
+
+    return { source: "ai" as const, severity: r.severity, file, line, rule: `kód: ${r.kind}`, message };
+  });
+}
+
+/**
+ * Orchestrátor analýzy kódu (za `--ai-code`). Stejná kostra jako `runAiAnalysis`, ale
+ * NEZÁVISLÁ na non-goalech: nepřeskakuje kvůli jejich chybění. Bez klíče → `skipped`
+ * BEZ síťového volání. Bez souborů → `skipped` (není co posuzovat). Jinak složí prompt,
+ * zavolá `analyze`, zpracuje výsledek; uříznutý/prázdný výstup je provozní `skipped`
+ * s naúčtovanou cenou; známá chyba → `skipped` s důvodem; neznámá → probublá se stackem.
+ */
+export async function runAiCodeAnalysis(
+  env: Record<string, string | undefined>,
+  payload: AiPayload,
+  model: AiModelChoice,
+  analyze: AnalyzeFn,
+  classify: (err: unknown) => string | null,
+): Promise<AiStatus> {
+  const gate = detectAiStatus(env);
+  if (gate.kind === "skipped") return gate;
+
+  if (payload.includedFiles.length === 0) {
+    return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
+  }
+
+  const apiKey = (env[AI_KEY_ENV] as string).trim();
+  const prompt = buildCodePrompt(payload);
+  try {
+    const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_CODE, prompt, CODE_FINDINGS_SCHEMA);
+    if (stopReason === "max_tokens" || rawText.trim() === "") {
+      const cost = computeCostUsd(usage, model);
+      return {
+        kind: "skipped",
+        reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
+      };
+    }
+    const findings = toCodeFindings(parseCodeFindings(rawText), payload.includedFiles);
     return { kind: "analyzed", model, findings, usage, costUsd: computeCostUsd(usage, model) };
   } catch (err: unknown) {
     const reason = classify(err);

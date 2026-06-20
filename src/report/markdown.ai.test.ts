@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_KEY_ENV, detectAiStatus } from "../analyze/aiStatus.js";
+import { AI_KEY_ENV, type AiReport, type AiStatus, detectAiStatus } from "../analyze/aiStatus.js";
 import { buildMarkdown, type MarkdownInput } from "./markdown.js";
 
 const base: MarkdownInput = {
@@ -9,67 +9,102 @@ const base: MarkdownInput = {
   skippedUnreadable: [],
 };
 
-describe("buildMarkdown – sekce AI vrstvy: dva rozlišitelné stavy", () => {
-  it("chybějící ai (undefined) → přeskočeno s výchozím důvodem", () => {
+/** Pomocník: AiReport ze dvou stavů (default oba ready). */
+function report(nonGoal: AiStatus, code: AiStatus): AiReport {
+  return { nonGoal, code };
+}
+
+const analyzedNonGoal: AiStatus = {
+  kind: "analyzed",
+  model: "opus",
+  findings: [{ source: "ai", severity: "error", file: "a.ts", line: 5, rule: "non-goal: Nespouštět kód", message: "spouští kód" }],
+  usage: { inputTokens: 1234, outputTokens: 56 },
+  costUsd: 0.0123,
+};
+const analyzedCode: AiStatus = {
+  kind: "analyzed",
+  model: "sonnet",
+  findings: [{ source: "ai", severity: "warning", file: "b.ts", line: 9, rule: "kód: logická chyba", message: "off-by-one" }],
+  usage: { inputTokens: 2000, outputTokens: 80 },
+  costUsd: 0.0456,
+};
+
+describe("buildMarkdown – AI sekce: dva nezávislé režimy (non-goal + code)", () => {
+  it("chybějící ai (undefined) → jedna hlavička, oba pod-bloky přeskočeno", () => {
     const md = buildMarkdown(base);
-    expect(md).toContain("## AI analýza (logika a non-goaly)");
-    expect(md).toContain("AI přeskočeno:");
-    expect(md).toContain("- AI (logika a non-goaly): přeskočeno");
+    expect(md).toContain("## AI analýza");
+    expect(md).toContain("### Porušení non-goalů (--ai-non-goal)");
+    expect(md).toContain("### Kvalita a rizika kódu (--ai-code)");
+    expect(md).toContain("_Přeskočeno:");
+    expect(md).toContain("- AI (non-goaly): přeskočeno");
+    expect(md).toContain("- AI (kód): přeskočeno");
   });
 
-  it("bez klíče (reálný detectAiStatus) → 'AI přeskočeno: chybí ANTHROPIC_API_KEY'", () => {
-    // Kontrakt mezi moduly: text reportu skládáme z REÁLNÉHO výstupu detekce,
-    // ne z ručně zadaného důvodu – kdyby se důvod v aiStatus.ts změnil, test padne.
-    const md = buildMarkdown({ ...base, ai: detectAiStatus({}) });
-    expect(md).toContain("AI přeskočeno: chybí ANTHROPIC_API_KEY");
-    expect(md).toContain("- AI (logika a non-goaly): přeskočeno");
+  it("bez klíče (reálný detectAiStatus pro oba) → 'chybí ANTHROPIC_API_KEY' v obou", () => {
+    // Kontrakt mezi moduly: text reportu skládáme z REÁLNÉHO výstupu detekce.
+    const skip = detectAiStatus({});
+    const md = buildMarkdown({ ...base, ai: report(skip, skip) });
+    expect(md).toContain("chybí ANTHROPIC_API_KEY");
+    expect(md).toContain("- AI (non-goaly): přeskočeno");
+    expect(md).toContain("- AI (kód): přeskočeno");
   });
 
-  it("s klíčem (reálný detectAiStatus) → připraveno, ne falešné 'hotovo'", () => {
-    const md = buildMarkdown({ ...base, ai: detectAiStatus({ [AI_KEY_ENV]: "sk-ant-xxx" }) });
-    expect(md).toContain("AI připraveno (klíč nalezen, dotaz zatím neproběhl)");
-    expect(md).toContain("- AI (logika a non-goaly): připraveno");
-    expect(md).not.toContain("AI přeskočeno");
+  it("s klíčem (reálný detectAiStatus) → oba 'připraveno', ne falešné 'hotovo'", () => {
+    const ready = detectAiStatus({ [AI_KEY_ENV]: "sk-ant-xxx" });
+    const md = buildMarkdown({ ...base, ai: report(ready, ready) });
+    expect(md).toContain("Připraveno (klíč nalezen, dotaz zatím neproběhl)");
+    expect(md).toContain("- AI (non-goaly): připraveno");
+    expect(md).toContain("- AI (kód): připraveno");
   });
 
-  it("verified → 'AI ověřeno' a souhrn 'ověřeno' (ne 'připraveno', ne 'přeskočeno')", () => {
-    const md = buildMarkdown({ ...base, ai: { kind: "verified" } });
-    expect(md).toContain("AI ověřeno (testovací dotaz na API proběhl");
-    expect(md).toContain("- AI (logika a non-goaly): ověřeno");
-    expect(md).not.toContain("AI připraveno");
-    expect(md).not.toContain("AI přeskočeno");
-  });
-
-  it("analyzed → vykreslí nálezy (přes formatLocation), tokeny a cenu + souhrn 'analyzováno'", () => {
-    const md = buildMarkdown({
-      ...base,
-      ai: {
-        kind: "analyzed",
-        model: "opus",
-        findings: [{ source: "ai", severity: "error", file: "a.ts", line: 5, rule: "non-goal: Nespouštět kód", message: "spouští kód" }],
-        usage: { inputTokens: 1234, outputTokens: 56 },
-        costUsd: 0.0123,
-      },
-    });
-    expect(md).toContain("model opus");
+  it("oba analyzed → DVĚ oddělené sekce, DVĚ různé ceny, nálezy přes formatLocation", () => {
+    const md = buildMarkdown({ ...base, ai: report(analyzedNonGoal, analyzedCode) });
+    // non-goal blok
+    expect(md).toContain("Model opus");
     expect(md).toContain("1234 vstup + 56 výstup");
     expect(md).toContain("~$0.0123");
-    expect(md).toContain("`a.ts:5`"); // místo přes formatLocation
+    expect(md).toContain("`a.ts:5`");
     expect(md).toContain("spouští kód");
-    expect(md).toContain("- AI (logika a non-goaly): analyzováno (1 nálezů, ~$0.0123)");
+    // code blok – samostatná cena i nález
+    expect(md).toContain("Model sonnet");
+    expect(md).toContain("2000 vstup + 80 výstup");
+    expect(md).toContain("~$0.0456");
+    expect(md).toContain("`b.ts:9`");
+    expect(md).toContain("off-by-one");
+    expect(md).toContain("kód: logická chyba");
+    // dva souhrny
+    expect(md).toContain("- AI (non-goaly): analyzováno (1 nálezů, ~$0.0123)");
+    expect(md).toContain("- AI (kód): analyzováno (1 nálezů, ~$0.0456)");
   });
 
-  it("analyzed bez nálezů → 'Žádné porušení...' (ne tiché prázdno)", () => {
+  it("nezávislost: non-goal analyzed, code skipped → každý svůj stav", () => {
+    const md = buildMarkdown({ ...base, ai: report(analyzedNonGoal, { kind: "skipped", reason: "žádné zdrojové soubory k analýze" }) });
+    expect(md).toContain("- AI (non-goaly): analyzováno");
+    expect(md).toContain("- AI (kód): přeskočeno");
+    expect(md).toContain("žádné zdrojové soubory");
+  });
+
+  it("analyzed bez nálezů → 'Žádné...' zprávy (ne tiché prázdno), zvlášť pro každý režim", () => {
     const md = buildMarkdown({
       ...base,
-      ai: { kind: "analyzed", model: "sonnet", findings: [], usage: { inputTokens: 10, outputTokens: 2 }, costUsd: 0 },
+      ai: report(
+        { kind: "analyzed", model: "opus", findings: [], usage: { inputTokens: 10, outputTokens: 2 }, costUsd: 0 },
+        { kind: "analyzed", model: "opus", findings: [], usage: { inputTokens: 10, outputTokens: 2 }, costUsd: 0 },
+      ),
     });
     expect(md).toContain("Žádné porušení deklarovaných non-goalů nenalezeno");
-    expect(md).toContain("analyzováno (0 nálezů");
+    expect(md).toContain("Žádné závažné problémy kódu nenalezeny");
+  });
+
+  it("verified (--ai-check) v non-goal poli → 'Ověřeno'", () => {
+    const md = buildMarkdown({ ...base, ai: report({ kind: "verified" }, detectAiStatus({})) });
+    expect(md).toContain("Ověřeno (testovací dotaz na API proběhl");
+    expect(md).toContain("- AI (non-goaly): ověřeno");
   });
 
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {
-    const md = buildMarkdown({ ...base, ai: detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" }) });
+    const ready = detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" });
+    const md = buildMarkdown({ ...base, ai: report(ready, ready) });
     expect(md).not.toContain("super-secret");
   });
 });

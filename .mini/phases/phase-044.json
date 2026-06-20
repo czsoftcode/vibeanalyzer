@@ -1,0 +1,42 @@
+{
+  "id": 44,
+  "title": "AI analýza obecného kódu (--ai-code)",
+  "goal": "Rozšířit AI vrstvu o samostatný režim analýzy kvality a rizik kódu řízený VLASTNÍM přepínačem, oddělený od non-goalů (žádné míchání do jednoho dotazu/pole category). Konkrétně: (1) zavést rozcestník přepínačů a přejmenovat dnešní --ai na --ai-non-goal (zachová chování fáze 43); (2) přidat --ai-code: nový režim hledající problémy kódu, které nezachytí parser/tsc/ESLint (rizikové vzorce, sémantika, kvalita), s vlastním promptem a vlastním JSON schématem BEZ nonGoalIndex; každý nález míří na konkrétní místo v poslaném kódu (kontrola místa jako dosud, obrana proti halucinaci). Non-goal nálezy se dál vážou na deklarované non-goaly přes nonGoalIndex. Report (markdown + JSON, bump verze) a měření tokenů/ceny pokryjí oba režimy zvlášť (podklad pro Fázi 5c, todo 7 dál otevřená). --ai-logic je vyčleněn do samostatné fáze (todo 11).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Přepínače: --ai → --ai-non-goal, přidat --ai-code",
+      "status": "done",
+      "detail": "args.ts: v ParsedArgs nahradit aiAnalyze za aiNonGoal a přidat aiCode; parsovat oba přepínače (--ai-model zůstává sdílený). Aktualizovat args.test.ts (přejmenování + nový přepínač). Ověřitelné: test parsuje oba přepínače nezávisle, starý --ai už neexistuje."
+    },
+    {
+      "title": "Code analýza: prompt + schéma + čisté funkce + orchestrátor (aiResult.ts)",
+      "status": "done",
+      "detail": "SYSTEM_PROMPT_CODE s pojistkou proti ukecanosti (jen reálné problémy, ne domněnky), CODE_FINDINGS_SCHEMA BEZ nonGoalIndex, buildCodePrompt, parse/toFindings varianta pro code (kontrola místa soubor:řádek jako u non-goal, rule = druh problému), reuse computeCostUsd. Orchestrátor runAiCodeAnalysis (po vzoru runAiAnalysis): brána klíče, NEpřeskakuje kvůli chybějícím non-goalům, složí prompt, zavolá injektovaný analyze, zpracuje na Finding[] + cena; známá chyba → skipped, neznámá → probublá. Testy nad čistými funkcemi (schéma bez nonGoalIndex, parse, kontrola místa) i orchestrátorem (mock SDK: zapojení, usage, cena, degradace)."
+    },
+    {
+      "title": "Report nese oba AI výsledky odděleně",
+      "status": "done",
+      "detail": "JsonIndex + buildJsonIndex: dvě AI pole (non-goal + code) místo jednoho, bump INDEX_VERSION 13→14. markdown.ts: aiSection/aiSummaryLine vykreslí obě vrstvy s vlastními usage/cenou. Testy markdown + jsonIndex. Ověřitelné: report s oběma režimy ukáže dvě oddělené sekce + dvě ceny."
+    },
+    {
+      "title": "Zapojení v cli.ts",
+      "status": "done",
+      "detail": "Spustit non-goal i code podle přepínačů; payload posbírat JEDNOU a sdílet mezi oběma voláními; cenu/nálezy/degradaci hlásit zvlášť per režim; --help aktualizovat. Upravit dotčené cli.*.test.ts. Ověřitelné: CLI testy pokryjí běh jen-code, jen-non-goal, oba, žádný."
+    },
+    {
+      "title": "Doběh: tsc + suite + reálný běh + nezávislý sub-agent",
+      "status": "done",
+      "detail": "tsc + celá vitest suite zelená; reálný běh --ai-code na tomhle projektu (změřit skutečné tokeny/cenu code analýzy – podklad pro 5c); nezávislý sub-agent (čerstvý kontext) projde vstupní body + kontrakty (přepínače, JSON verze, prompt↔schéma, degradace)."
+    }
+  ],
+  "startedAt": "2026-06-20T16:53:51.373Z",
+  "resolvedVerify": [
+    "npm run typecheck (s testy) má 22 předexistujících TS2532 v testech"
+  ],
+  "completedAt": "2026-06-20T17:59:59.267Z",
+  "autoCommit": {
+    "preSha": "730bc6fd01ee69b7e7cedd49e59954595aaeb7dd",
+    "subject": "Phase 44: AI analýza obecného kódu (--ai-code)"
+  }
+}

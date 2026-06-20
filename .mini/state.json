@@ -217,6 +217,11 @@
       "id": 43,
       "title": "Reálná AI analýza + měření nákladů",
       "status": "done"
+    },
+    {
+      "id": 44,
+      "title": "AI analýza obecného kódu (--ai-code)",
+      "status": "done"
     }
   ]
 }

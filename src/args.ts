@@ -18,7 +18,8 @@ export type ParsedArgs =
       audit: boolean;
       dev: boolean;
       aiCheck: boolean;
-      aiAnalyze: boolean;
+      aiNonGoal: boolean;
+      aiCode: boolean;
       aiModel: AiModelChoice;
     }
   | { kind: "error"; message: string };
@@ -44,9 +45,11 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * `--dev` k auditu přidá i vývojové závislosti; SAMOTNÉ `--dev` (bez `--audit`)
  * je neúčinné – parser ho jen zaznamená, varování řeší CLI (args bez side efektů).
  * `--ai-check` zapne (opt-in) levný testovací dotaz na API; bez něj se AI vrstva
- * jen podívá po klíči (offline). `--ai` zapne (opt-in) reálnou analýzu non-goalů
- * (drahá cesta); `--ai-model <opus|sonnet>` volí model (default opus). Vyhodnocení
- * (síť, klíč, samotné --ai-model bez --ai) řeší CLI, ne parser.
+ * jen podívá po klíči (offline). `--ai-non-goal` zapne (opt-in) reálnou analýzu
+ * porušení non-goalů, `--ai-code` reálnou analýzu kvality/rizik kódu – obě jsou
+ * samostatné drahé cesty, každá vlastní dotaz na API (lze i obě naráz). `--ai-model
+ * <opus|sonnet>` volí model pro obě (default opus). Vyhodnocení (síť, klíč, samotné
+ * --ai-model bez AI běhu) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let target: string | undefined;
@@ -54,7 +57,8 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let audit = false;
   let dev = false;
   let aiCheck = false;
-  let aiAnalyze = false;
+  let aiNonGoal = false;
+  let aiCode = false;
   let aiModel: AiModelChoice = "opus";
 
   for (let i = 0; i < argv.length; i++) {
@@ -94,8 +98,12 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       aiCheck = true;
       continue;
     }
-    if (a === "--ai") {
-      aiAnalyze = true;
+    if (a === "--ai-non-goal") {
+      aiNonGoal = true;
+      continue;
+    }
+    if (a === "--ai-code") {
+      aiCode = true;
       continue;
     }
     if (a === "--ai-model") {
@@ -127,7 +135,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiAnalyze, aiModel };
+  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiNonGoal, aiCode, aiModel };
 }
 
 /** Výsledek validace cílové cesty. */

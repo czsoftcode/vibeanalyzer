@@ -7,6 +7,33 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Added
+
+- Nový přepínač **`--ai-code`** spustí reálnou **AI analýzu kvality a rizik kódu** –
+  hledá problémy, které nezachytí parser, tsc ani ESLint (logické chyby, riskantní
+  vzorce, race conditions, neošetřené chyby). Každý nález míří na konkrétní místo
+  v kódu (ověřené proti poslanému souboru – jinak označené „místo neověřeno") a nese
+  druh problému (např. „kód: race condition"). Drahá cesta je opt-in; běží nezávisle
+  na non-goalech a má vlastní prompt i schéma. Report a stderr ukážou skutečnou
+  spotřebu tokenů a odhad ceny zvlášť pro tento režim.
+
+### Changed
+
+- Přepínač **`--ai` byl přejmenován na `--ai-non-goal`** (analýza porušení non-goalů).
+  Společně s novým `--ai-code` tvoří dva nezávislé AI režimy, které jdou zapnout
+  i naráz – každý posílá vlastní dotaz na API (a má tedy vlastní cenu), ale čtení
+  projektu proběhne jen jednou. `--ai-model` platí pro oba.
+- Report (`.md` i JSON) nově ukazuje **oba AI režimy odděleně** – non-goaly a kód mají
+  vlastní sekci, vlastní spotřebu tokenů i cenu. Strojový JSON index má **verzi 14**:
+  pole `ai` je nově souhrn dvou nezávislých výsledků (`nonGoal`, `code`) místo
+  jediného. Změna tvaru pro konzumenty JSON.
+
+### Fixed
+
+- AI analýza posílala modelu vždy schéma pro non-goaly, takže `--ai-code` dostával
+  od modelu nepoužitelný tvar odpovědi a tiše se přeskakoval. Každý režim teď posílá
+  své vlastní schéma; chyba byla odhalena reálným během a pokryta testy.
+
 ## [0.4.0] - 2026-06-20
 
 ### Added

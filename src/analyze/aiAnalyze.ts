@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AiModelChoice, AiUsage } from "./aiStatus.js";
-import { AI_MODEL_IDS, FINDINGS_SCHEMA } from "./aiResult.js";
+import { AI_MODEL_IDS } from "./aiResult.js";
 
 /**
  * Pojistka proti ÚPLNÉMU zaseknutí v ms (TS SDK bere timeout v MILISEKUNDÁCH).
@@ -38,20 +38,23 @@ export const AI_ANALYZE_MAX_TOKENS = 16000;
  * až hotovou zprávu (nám stačí finální JSON, dílčí eventy nezpracováváme).
  *
  * `maxRetries: 0` (viz AI_ANALYZE_MAX_RETRIES). `output_config.format` se schématem
- * garantuje parsovatelný tvar. Chyby tady NEodchytáváme – necháme je probublat.
+ * garantuje parsovatelný tvar. `schema` injektuje VOLAJÍCÍ podle režimu (non-goal vs
+ * code) – musí sedět na `system`/prompt, jinak model vrátí tvar, který parser odmítne.
+ * Chyby tady NEodchytáváme – necháme je probublat.
  */
 export const realAiAnalyze = async (
   apiKey: string,
   model: AiModelChoice,
   system: string,
   userPrompt: string,
+  schema: { [key: string]: unknown },
 ): Promise<{ rawText: string; usage: AiUsage; stopReason: string | null }> => {
   const client = new Anthropic({ apiKey, maxRetries: AI_ANALYZE_MAX_RETRIES, timeout: AI_ANALYZE_TIMEOUT_MS });
   const stream = client.messages.stream({
     model: AI_MODEL_IDS[model],
     max_tokens: AI_ANALYZE_MAX_TOKENS,
     thinking: { type: "adaptive" },
-    output_config: { format: { type: "json_schema", schema: FINDINGS_SCHEMA } },
+    output_config: { format: { type: "json_schema", schema } },
     system,
     messages: [{ role: "user", content: userPrompt }],
   });

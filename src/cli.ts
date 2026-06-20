@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { AI_MISSING_KEY_REASON, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import { AI_MISSING_KEY_REASON, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
 import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
 import { collectAiPayload } from "./analyze/aiPayload.js";
 import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
@@ -14,7 +14,7 @@ import { ANALYSIS_TIMEOUT_MS, availableMemoryBytes, computeMemoryLimitMb } from 
 import { buildModuleGraph, type ModuleGraphResult } from "./analyze/moduleGraph.js";
 import { type IsolatedOutcome, runIsolated } from "./analyze/runIsolated.js";
 import { analyzeTypeScript } from "./analyze/tsc.js";
-import { defaultOutDir, parseArgs, validateTarget } from "./args.js";
+import { defaultOutDir, type ParsedArgs, parseArgs, validateTarget } from "./args.js";
 import type { EslintResult, TscResult } from "./findings.js";
 import { loadDirIgnore } from "./gitignore.js";
 import { INTENT_HEADINGS, type Intent, loadIntent, parseIntent } from "./intent.js";
@@ -41,8 +41,10 @@ Argumenty:
 Volby:
   -o, --out <dir>  Kam uložit výstupy (výchozí: ~/.vibeanalyzer/<jméno projektu>).
   --ai-check       Pošle levný testovací dotaz na Anthropic API (vyžaduje ANTHROPIC_API_KEY).
-  --ai             Reálná AI analýza non-goalů (drahé, vyžaduje ANTHROPIC_API_KEY).
-  --ai-model <m>   Model pro --ai: opus (výchozí) nebo sonnet.
+  --ai-non-goal    Reálná AI analýza porušení non-goalů (drahé, vyžaduje ANTHROPIC_API_KEY).
+  --ai-code        Reálná AI analýza kvality/rizik kódu (drahé, vyžaduje ANTHROPIC_API_KEY).
+                   --ai-non-goal a --ai-code jdou zapnout naráz (každý vlastní dotaz = vlastní cena).
+  --ai-model <m>   Model pro AI analýzu: opus (výchozí) nebo sonnet.
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
 
@@ -408,76 +410,11 @@ export async function run(
     moduleGraph = { kind: "skipped", reason: "graf modulů během sestavování selhal (viz stderr)" };
   }
 
-  // AI vrstva. Bez --ai-check jen brána klíče (synchronní, offline, nepadá – proto
-  // bez try/catch). S --ai-check pošleme reálný testovací dotaz; ping/classify
-  // injektujeme (testy bez sítě), default běh tak ani nenahraje @anthropic-ai/sdk –
-  // načte se až tady přes dynamický import() jen když uživatel ověření vyžádal.
-  let ai: AiStatus;
-  if (parsed.aiAnalyze) {
-    // Reálná (drahá) analýza non-goalů. Klíč zkontrolujeme PŘED čtením souborů –
-    // bez klíče nemá smysl číst projekt ani volat API. analyze/classify injektujeme
-    // (testy bez sítě); SDK (aiAnalyze) i orchestrátor (aiResult) se načtou dynamicky
-    // až tady, ať default běh nenahrává @anthropic-ai/sdk.
-    const pre = detectAiStatus(process.env);
-    if (pre.kind === "skipped") {
-      ai = pre;
-      console.error(AI_KEY_HINT);
-    } else {
-      let analyze = deps.aiAnalyzeFn;
-      let classify = deps.aiClassifyFn;
-      if (!analyze || !classify) {
-        const [an, pg] = await Promise.all([import("./analyze/aiAnalyze.js"), import("./analyze/aiPing.js")]);
-        analyze ??= an.realAiAnalyze;
-        classify ??= pg.classifyAiError;
-      }
-      const { runAiAnalysis } = await import("./analyze/aiResult.js");
-      const payload = await collectAiPayload(result.files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
-      console.error(`AI analýza (model ${parsed.aiModel}) běží – u velkého projektu může trvat minuty, neukončuj…`);
-      try {
-        ai = await runAiAnalysis(process.env, intent, payload, parsed.aiModel, analyze, classify);
-      } catch (err: unknown) {
-        // Jen NEČEKANÁ chyba (classify ji nezná – špatný tvar odpovědi, programová
-        // chyba). Nemaskujeme tiše: vypíšeme stack a degradujeme na přeskočeno
-        // (report se stejně vyrobí, exit 0).
-        const e = err as Error;
-        console.error(`Upozornění: AI analýza (--ai) selhala nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
-        ai = { kind: "skipped", reason: "AI analýza selhala nečekaně (viz stderr)" };
-      }
-      if (ai.kind === "analyzed") {
-        console.error(
-          `AI analýza (${ai.model}): ${ai.findings.length} nálezů, ` +
-            `tokeny ${ai.usage.inputTokens} vstup + ${ai.usage.outputTokens} výstup, odhad ceny ~$${ai.costUsd.toFixed(4)}.`,
-        );
-        if (payload.truncated) {
-          console.error("Pozn.: kód byl kvůli velikosti uříznut – analýza je neúplná (viz report).");
-        }
-      }
-    }
-  } else if (parsed.aiCheck) {
-    let ping = deps.aiPingFn;
-    let classify = deps.aiClassifyFn;
-    if (!ping || !classify) {
-      const mod = await import("./analyze/aiPing.js");
-      ping ??= mod.realAiPing;
-      classify ??= mod.classifyAiError;
-    }
-    try {
-      ai = await verifyAiAccess(process.env, ping, classify);
-    } catch (err: unknown) {
-      // Sem spadne jen NEČEKANÁ chyba (classify ji nezná – programová chyba, neznámý
-      // API stav). Nemaskujeme ji tiše jako čistý „skipped": vypíšeme stack a AI
-      // degradujeme na přeskočeno (jako ostatní vrstvy), ať se report stejně vyrobí
-      // (success criterion „report bez pádu"); exit zůstává 0.
-      const e = err as Error;
-      console.error(`Upozornění: ověření AI (--ai-check) selhalo nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
-      ai = { kind: "skipped", reason: "ověření AI selhalo nečekaně (viz stderr)" };
-    }
-    if (ai.kind === "skipped" && ai.reason === AI_MISSING_KEY_REASON) {
-      console.error(AI_KEY_HINT);
-    }
-  } else {
-    ai = detectAiStatus(process.env);
-  }
+  // AI vrstva: dva NEZÁVISLÉ režimy (--ai-non-goal, --ai-code) + brána klíče. Bez
+  // přepínače jen synchronní brána klíče (offline, nepadá). S přepínačem(i) se
+  // SDK/orchestrátor načtou dynamicky až tady (default běh @anthropic-ai/sdk nenahraje)
+  // a payload (čtení souborů) se sbírá JEDNOU a sdílí mezi oběma režimy.
+  const ai = await runAiLayer(parsed, result.files, targetPath, intent, deps);
 
   const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit, moduleGraph, ai);
   const md = buildMarkdown({
@@ -559,6 +496,124 @@ export async function run(
   console.log(`JSON index: ${jsonPath}`);
   console.log(`MD report:  ${mdPath}`);
   return 0;
+}
+
+/**
+ * Sestaví souhrn AI vrstvy (`AiReport`) podle přepínačů. Dva NEZÁVISLÉ analytické
+ * režimy (`--ai-non-goal`, `--ai-code`) sdílejí jeden klíč i JEDEN payload (čtení
+ * souborů proběhne jen jednou), ale každý volá API zvlášť (vlastní cena). `--ai-check`
+ * je ortogonální ověření přístupu a uplatní se jen BEZ analytického režimu (společný
+ * stav do obou polí). Bez přepínače jen synchronní brána klíče (offline, nepadá).
+ */
+async function runAiLayer(
+  parsed: Extract<ParsedArgs, { kind: "run" }>,
+  files: FileEntry[],
+  targetPath: string,
+  intent: Intent | null,
+  deps: RunDeps,
+): Promise<AiReport> {
+  const wantNonGoal = parsed.aiNonGoal;
+  const wantCode = parsed.aiCode;
+
+  if (wantNonGoal || wantCode) {
+    // Klíč zkontrolujeme PŘED čtením souborů – bez klíče nemá smysl číst projekt ani
+    // volat API. Bez klíče oba režimy přeskočí stejným důvodem.
+    const pre = detectAiStatus(process.env);
+    if (pre.kind === "skipped") {
+      console.error(AI_KEY_HINT);
+      return { nonGoal: pre, code: pre };
+    }
+    // analyze/classify injektujeme (testy bez sítě); SDK i orchestrátor se načtou
+    // dynamicky až tady, ať default běh nenahrává @anthropic-ai/sdk.
+    let analyze = deps.aiAnalyzeFn;
+    let classify = deps.aiClassifyFn;
+    if (!analyze || !classify) {
+      const [an, pg] = await Promise.all([import("./analyze/aiAnalyze.js"), import("./analyze/aiPing.js")]);
+      analyze ??= an.realAiAnalyze;
+      classify ??= pg.classifyAiError;
+    }
+    const analyzeFn = analyze;
+    const classifyFn = classify;
+    const { runAiAnalysis, runAiCodeAnalysis } = await import("./analyze/aiResult.js");
+    // payload se sbírá JEDNOU a sdílí mezi oběma režimy (žádné dvojí čtení souborů).
+    const payload = await collectAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
+
+    // Když je klíč, ale daný režim není vyžádán, zůstane `ready` (klíč nalezen, dotaz
+    // neproběhl) – NE falešné „analyzováno".
+    const nonGoal = wantNonGoal
+      ? await runOneAiMode("non-goalů", parsed.aiModel, payload.truncated, () =>
+          runAiAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
+        )
+      : pre;
+    const code = wantCode
+      ? await runOneAiMode("kódu", parsed.aiModel, payload.truncated, () =>
+          runAiCodeAnalysis(process.env, payload, parsed.aiModel, analyzeFn, classifyFn),
+        )
+      : pre;
+    return { nonGoal, code };
+  }
+
+  if (parsed.aiCheck) {
+    let ping = deps.aiPingFn;
+    let classify = deps.aiClassifyFn;
+    if (!ping || !classify) {
+      const mod = await import("./analyze/aiPing.js");
+      ping ??= mod.realAiPing;
+      classify ??= mod.classifyAiError;
+    }
+    let status: AiStatus;
+    try {
+      status = await verifyAiAccess(process.env, ping, classify);
+    } catch (err: unknown) {
+      // Jen NEČEKANÁ chyba (classify ji nezná – programová chyba, neznámý API stav).
+      // Nemaskovat tiše jako čistý „skipped": vypíšeme stack a degradujeme na
+      // přeskočeno (report se stejně vyrobí, exit 0).
+      const e = err as Error;
+      console.error(`Upozornění: ověření AI (--ai-check) selhalo nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      status = { kind: "skipped", reason: "ověření AI selhalo nečekaně (viz stderr)" };
+    }
+    if (status.kind === "skipped" && status.reason === AI_MISSING_KEY_REASON) {
+      console.error(AI_KEY_HINT);
+    }
+    // --ai-check ověřuje přístup k API jako celku → společný stav do obou režimů.
+    return { nonGoal: status, code: status };
+  }
+
+  const gate = detectAiStatus(process.env);
+  return { nonGoal: gate, code: gate };
+}
+
+/**
+ * Spustí jeden AI režim s ohlášením běhu a DEGRADACÍ na hranici CLI: nečekaná chyba
+ * (orchestrátor ji nezatřídil jako známou) se NEmaskuje tiše – vypíše se stack a režim
+ * degraduje na `skipped` (report se stejně vyrobí, exit 0). Při `analyzed` ohlásí na
+ * stderr nálezy, tokeny a cenu (transparentně) + případné uříznutí payloadu.
+ */
+async function runOneAiMode(
+  label: string,
+  model: AiModelChoice,
+  truncated: boolean,
+  call: () => Promise<AiStatus>,
+): Promise<AiStatus> {
+  console.error(`AI analýza ${label} (model ${model}) běží – u velkého projektu může trvat minuty, neukončuj…`);
+  let status: AiStatus;
+  try {
+    status = await call();
+  } catch (err: unknown) {
+    const e = err as Error;
+    console.error(`Upozornění: AI analýza ${label} selhala nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+    return { kind: "skipped", reason: `AI analýza ${label} selhala nečekaně (viz stderr)` };
+  }
+  if (status.kind === "analyzed") {
+    console.error(
+      `AI analýza ${label} (${status.model}): ${status.findings.length} nálezů, ` +
+        `tokeny ${status.usage.inputTokens} vstup + ${status.usage.outputTokens} výstup, odhad ceny ~$${status.costUsd.toFixed(4)}.`,
+    );
+    if (truncated) {
+      console.error(`Pozn.: kód byl kvůli velikosti uříznut – analýza ${label} je neúplná (viz report).`);
+    }
+  }
+  return status;
 }
 
 /** Odpověď na [a/N]: ano jen explicitní 'a/ano/y/yes'; null (EOF), prázdné i cokoli jiného = ne. */

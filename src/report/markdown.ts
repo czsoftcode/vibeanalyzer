@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type { AiStatus } from "../analyze/aiStatus.js";
+import type { AiReport, AiStatus } from "../analyze/aiStatus.js";
 import type { ModuleEdge, ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
@@ -24,8 +24,9 @@ export interface MarkdownInput {
   audit?: AuditResult;
   /** Graf importních závislostí; když chybí, sekce se vykreslí jako "přeskočeno". */
   moduleGraph?: ModuleGraphResult;
-  /** Stav AI vrstvy (brána klíče); když chybí, sekce se vykreslí jako "přeskočeno". */
-  ai?: AiStatus;
+  /** Souhrn AI vrstvy (dva nezávislé režimy: non-goaly + kód); když chybí, obě se
+   *  vykreslí jako "přeskočeno". */
+  ai?: AiReport;
 }
 
 export interface MarkdownOptions {
@@ -338,56 +339,70 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
 }
 
 /**
- * Sekce "## AI analýza (logika a non-goaly)". Tři schválně rozlišitelné stavy:
- *   - skipped  → "_AI přeskočeno: <důvod>_" (chybí klíč, síť/timeout, odmítnutý klíč)
- *   - verified → reálný testovací dotaz na API proběhl (jen s --ai-check)
- *   - ready    → klíč nalezen, ale dotaz ZATÍM neproběhl (ne falešné "hotovo")
- * Strojová vrstva běží beze změny – tahle sekce je jen oznámení stavu.
+ * Vykreslí JEDEN AI režim (non-goal nebo code) jako pod-blok pod společnou hlavičkou.
+ * `label` = lidský název režimu, `emptyMsg` = co napsat, když analýza proběhla bez
+ * nálezů (rozlišení "ran s 0 nálezy" vs "skipped"). Stavy: skipped / verified /
+ * analyzed / ready – každý schválně rozlišitelný (ne falešné "hotovo").
  */
-function aiSection(ai: AiStatus | undefined): string[] {
-  const out: string[] = ["## AI analýza (logika a non-goaly)", ""];
+function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string): string[] {
+  const out: string[] = [`### ${label}`, ""];
 
   if (!ai || ai.kind === "skipped") {
     const reason = ai?.reason ?? "AI vrstva zatím neproběhla";
-    out.push(`_AI přeskočeno: ${sanitizeInline(reason)}_`);
+    out.push(`_Přeskočeno: ${sanitizeInline(reason)}_`);
     out.push("");
     return out;
   }
-
   if (ai.kind === "verified") {
-    out.push("_AI ověřeno (testovací dotaz na API proběhl úspěšně)._");
+    out.push("_Ověřeno (testovací dotaz na API proběhl úspěšně)._");
     out.push("");
     return out;
   }
-
   if (ai.kind === "analyzed") {
     out.push(
-      `_AI analýza non-goalů (model ${sanitizeInline(ai.model)}): tokeny ${ai.usage.inputTokens} vstup + ` +
+      `_Model ${sanitizeInline(ai.model)}: tokeny ${ai.usage.inputTokens} vstup + ` +
         `${ai.usage.outputTokens} výstup, odhad ceny ~$${ai.costUsd.toFixed(4)}._`,
     );
     out.push("");
     if (ai.findings.length === 0) {
-      out.push("Žádné porušení deklarovaných non-goalů nenalezeno.");
+      out.push(emptyMsg);
     } else {
       for (const f of ai.findings) out.push(renderFinding(f));
     }
     out.push("");
     return out;
   }
-
-  out.push("_AI připraveno (klíč nalezen, dotaz zatím neproběhl)._");
+  out.push("_Připraveno (klíč nalezen, dotaz zatím neproběhl)._");
   out.push("");
   return out;
 }
 
-/** Krátké shrnutí stavu AI vrstvy do hlavičky reportu. */
-function aiSummaryLine(ai: AiStatus | undefined): string {
-  if (!ai || ai.kind === "skipped") return "- AI (logika a non-goaly): přeskočeno";
-  if (ai.kind === "verified") return "- AI (logika a non-goaly): ověřeno";
+/**
+ * Sekce "## AI analýza". Dva NEZÁVISLÉ pod-bloky (non-goaly, kód) – každý běží na
+ * vlastní přepínač a má vlastní stav/cenu. Strojová vrstva běží beze změny.
+ */
+function aiSection(ai: AiReport | undefined): string[] {
+  return [
+    "## AI analýza",
+    "",
+    ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno."),
+    ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny."),
+  ];
+}
+
+/** Krátké shrnutí jednoho AI režimu do hlavičky reportu. */
+function aiModeSummary(label: string, ai: AiStatus | undefined): string {
+  if (!ai || ai.kind === "skipped") return `- AI (${label}): přeskočeno`;
+  if (ai.kind === "verified") return `- AI (${label}): ověřeno`;
   if (ai.kind === "analyzed") {
-    return `- AI (logika a non-goaly): analyzováno (${ai.findings.length} nálezů, ~$${ai.costUsd.toFixed(4)})`;
+    return `- AI (${label}): analyzováno (${ai.findings.length} nálezů, ~$${ai.costUsd.toFixed(4)})`;
   }
-  return "- AI (logika a non-goaly): připraveno";
+  return `- AI (${label}): připraveno`;
+}
+
+/** Shrnutí obou AI režimů do hlavičky reportu (dvě řádky). */
+function aiSummaryLines(ai: AiReport | undefined): string[] {
+  return [aiModeSummary("non-goaly", ai?.nonGoal), aiModeSummary("kód", ai?.code)];
 }
 
 /** Krátké shrnutí stavu grafu modulů do hlavičky reportu. */
@@ -676,7 +691,7 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(secretsSummaryLine(input.secrets));
   out.push(auditSummaryLine(input.audit));
   out.push(moduleGraphSummaryLine(input.moduleGraph));
-  out.push(aiSummaryLine(input.ai));
+  out.push(...aiSummaryLines(input.ai));
   out.push("");
 
   out.push(...intentSection(input.intent));

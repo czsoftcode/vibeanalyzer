@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AiStatus } from "../analyze/aiStatus.js";
+import type { AiReport, AiStatus } from "../analyze/aiStatus.js";
 import type { ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
@@ -16,6 +16,11 @@ const noSecrets: SecretsResult = {
 };
 const noAudit: AuditResult = { kind: "skipped", reason: "audit nevyžádán (--audit)" };
 const noAi: AiStatus = { kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" };
+/** Souhrn AI vrstvy z jednoho stavu pro oba režimy (zkratka v testech). */
+function aiReport(nonGoal: AiStatus, code: AiStatus = nonGoal): AiReport {
+  return { nonGoal, code };
+}
+const noAiReport: AiReport = aiReport(noAi);
 const noGraph: ModuleGraphResult = {
   kind: "ran",
   edges: [],
@@ -28,34 +33,45 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 13 (`ai` má variantu `analyzed`)", () => {
-    expect(INDEX_VERSION).toBe(13);
+  it("verze indexu je 14 (`ai` je souhrn dvou režimů: nonGoal + code)", () => {
+    expect(INDEX_VERSION).toBe(14);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
     expect(idx.version).toBe(INDEX_VERSION);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
-  it("nese ai stav 1:1 (skipped i ready – ne tiché vynechání)", () => {
+  it("nese oba ai režimy 1:1 a NEZÁVISLE (nonGoal i code – ne tiché vynechání)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const skipped = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
-    expect(skipped.ai).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
-    const ready = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "ready" });
-    expect(ready.ai).toEqual({ kind: "ready" });
-    const verified = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "verified" });
-    expect(verified.ai).toEqual({ kind: "verified" });
-    const analyzedAi: AiStatus = {
+    // skipped v obou
+    const skipped = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
+    expect(skipped.ai.nonGoal).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
+    expect(skipped.ai.code).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
+    // ready vs verified – každý režim svůj stav
+    const mixed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: { kind: "ready" }, code: { kind: "verified" } });
+    expect(mixed.ai.nonGoal).toEqual({ kind: "ready" });
+    expect(mixed.ai.code).toEqual({ kind: "verified" });
+    // analyzed – nese findings/usage/cenu zvlášť pro každý režim
+    const analyzedNonGoal: AiStatus = {
       kind: "analyzed",
       model: "opus",
       findings: [{ source: "ai", severity: "error", file: "a.ts", line: 1, rule: "non-goal: x", message: "m" }],
       usage: { inputTokens: 100, outputTokens: 20 },
       costUsd: 0.001,
     };
-    const analyzed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, analyzedAi);
-    expect(analyzed.ai).toEqual(analyzedAi);
+    const analyzedCode: AiStatus = {
+      kind: "analyzed",
+      model: "sonnet",
+      findings: [{ source: "ai", severity: "warning", file: "b.ts", line: 2, rule: "kód: riziko", message: "r" }],
+      usage: { inputTokens: 200, outputTokens: 40 },
+      costUsd: 0.002,
+    };
+    const analyzed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { nonGoal: analyzedNonGoal, code: analyzedCode });
+    expect(analyzed.ai.nonGoal).toEqual(analyzedNonGoal);
+    expect(analyzed.ai.code).toEqual(analyzedCode);
   });
 
   it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {
@@ -64,7 +80,7 @@ describe("buildJsonIndex", () => {
       { path: "src/app.min.js", type: "file", ext: ".js", size: 999, depth: 2, minified: true },
     ];
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", files, tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", files, tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
     expect(idx.files).toEqual(files); // pole projde 1:1
     expect(idx.files.find((f) => f.path === "src/app.min.js")?.minified).toBe(true);
     expect(idx.files.find((f) => f.path === "src/index.ts")?.minified).toBe(false);
@@ -78,7 +94,7 @@ describe("buildJsonIndex", () => {
       findings: [{ source: "eslint", severity: "error", file: "a.js", line: 3, column: 5, rule: "eqeqeq", message: "use ===" }],
     };
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, eslint, noSecrets, noAudit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, eslint, noSecrets, noAudit, noGraph, noAiReport);
     expect(idx.eslint).toEqual(eslint);
   });
 
@@ -89,7 +105,7 @@ describe("buildJsonIndex", () => {
       counts: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 },
       findings: [{ source: "audit", severity: "error", file: "package-lock.json", rule: "GHSA-x", message: "lodash@<4 – x; oprava: ano" }],
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, audit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, audit, noGraph, noAiReport);
     expect(idx.audit).toEqual(audit);
   });
 
@@ -101,7 +117,7 @@ describe("buildJsonIndex", () => {
       findings: [{ source: "secret", severity: "error", file: ".env", line: 1, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" }],
       skipped: { minified: 2, large: 1, longLine: 0, binary: 1 },
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets, noAudit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets, noAudit, noGraph, noAiReport);
     expect(idx.secrets).toEqual(secrets); // skipped musí projít 1:1 (ne tiché zahození)
   });
 
@@ -117,7 +133,7 @@ describe("buildJsonIndex", () => {
       tooLarge: 0,
       minified: 2,
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, graph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, graph, noAiReport);
     expect(idx.moduleGraph).toEqual(graph);
   });
 
@@ -131,7 +147,7 @@ describe("buildJsonIndex", () => {
       projectTsVersion: "5.4.0",
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2322", message: "x" }],
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
     expect(idx.tsc).toEqual(tsc);
   });
 });

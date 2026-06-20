@@ -29,6 +29,19 @@ export type AiStatus =
   | { kind: "verified" }
   | { kind: "analyzed"; model: AiModelChoice; findings: Finding[]; usage: AiUsage; costUsd: number };
 
+/**
+ * Souhrn AI vrstvy v reportu. Každý režim běží na vlastní přepínač a je NEZÁVISLÝ –
+ * vlastní `AiStatus` (analyzed s nálezy/usage/cenou, nebo skipped s důvodem):
+ *   - `nonGoal` – analýza porušení non-goalů (`--ai-non-goal`).
+ *   - `code`    – analýza kvality/rizik kódu (`--ai-code`).
+ * Rozšiřitelné o další režim (`--ai-logic`) později. Bez běhu daného přepínače je
+ * příslušné pole ve stavu `ready`/`skipped` (NE falešné „analyzováno").
+ */
+export interface AiReport {
+  nonGoal: AiStatus;
+  code: AiStatus;
+}
+
 /** Jméno env proměnné s klíčem k Anthropic API. Sdílený literál (kontrakt). */
 export const AI_KEY_ENV = "ANTHROPIC_API_KEY";
 

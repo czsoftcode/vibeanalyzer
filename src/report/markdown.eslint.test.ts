@@ -24,8 +24,9 @@ describe("buildMarkdown – sekce Strojové nálezy (ESLint)", () => {
     expect(md).toContain("_Žádné nálezy._");
     expect(md).toContain("- ESLint: čistý (0 nálezů)");
     expect(md).not.toContain("ESLint přeskočeno");
-    // bez minifikátů se poznámka o přeskočení NEvypíše
-    expect(md).not.toContain("Přeskočeno");
+    // bez minifikátů se poznámka o přeskočení minifikátů NEvypíše (cílíme přesně na
+    // tu poznámku, ne na globální „Přeskočeno" – to teď nese i AI sekce)
+    expect(md).not.toContain("minifikátů");
   });
 
   it("ran s nálezy: soubor:řádek:sloupec, závažnost, pravidlo, zpráva", () => {
