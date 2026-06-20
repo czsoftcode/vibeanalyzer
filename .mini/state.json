@@ -232,6 +232,11 @@
       "id": 46,
       "title": "Větší vstupní strop AI (800k znaků)",
       "status": "done"
+    },
+    {
+      "id": 47,
+      "title": "Třetí AI model: GLM-5.2",
+      "status": "done"
     }
   ]
 }

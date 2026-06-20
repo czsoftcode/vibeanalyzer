@@ -17,4 +17,5 @@
 - [ ] classifyAiError nezná overloaded_error (HTTP 529, server přetížen) – při reálném běhu fáze 44 probublal jako 'nečekaná chyba' se stackem místo čisté degradace 'API přetížené, zkus později'. Týká se SDÍLENÉ AI vrstvy (ping i analýza, oba režimy). Pozor: chyba přišla přes streaming (prefix 'Error:'), ověřit, zda je to instance Anthropic.InternalServerError/APIError nebo generický Error (podle toho instanceof vs kontrola err.type/status===529). Degradace teď funguje (exit 0, report vznikne), jde o čistotu klasifikace. Doplnit i test.
 - [ ] odvození záměru z kódu
 - [ ] skip pri velkych projektech i na goal a code nebo zvetsit okno na vice tokenu
-- [ ] model GLM-5.2 od Z.ai
+- [x] model GLM-5.2 od Z.ai
+- [ ] glm: tolerantní parsování AI výstupu – Z.ai endpoint nevynucuje output_config.format (JSON schéma), takže glm vrátí findings s vlastními poli a striktní parser je odmítne (dnes vždy skipped, ale placené). Pro glm posílat schéma+příklad tvaru přímo v system promptu a parsovat tolerantněji (mapovat/validovat, ne spoléhat na output_config). Pozor: tolerantní parser = riziko halucinací, nálezy musí dál ukazovat na ověřitelné místo v kódu. Týká se všech tří režimů (code/non-goal/logic). Ověření: --ai-code --ai-model=glm na malém projektu vrátí reálné nálezy (ne skipped). Navázáno na fázi 47.

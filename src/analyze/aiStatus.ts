@@ -1,8 +1,41 @@
 import type { Finding } from "../findings.js";
 
 /** Který analytický model uživatel zvolil (`--ai-model`). Sdílený literál (kontrakt
- *  args ↔ cli ↔ analýza ↔ cenová tabulka). Mapování na ID modelu je v aiResult.ts. */
-export type AiModelChoice = "opus" | "sonnet";
+ *  args ↔ cli ↔ analýza ↔ provider tabulka). Popis providera je v `AI_PROVIDERS`. */
+export type AiModelChoice = "opus" | "sonnet" | "glm";
+
+/**
+ * Popis providera modelu: jak ho volat (API id, endpoint, klíč) a kolik stojí.
+ * JEDEN zdroj pravdy pro celou AI vrstvu – aby čtyři dřív oddělené tabulky klíčované
+ * `AiModelChoice` (id / ceny / keyEnv / baseURL) nedriftovaly. `baseURL` undefined =
+ * default Anthropic endpoint; jiný (Z.ai) = Anthropic-kompatibilní endpoint volaný
+ * stejným SDK. `keyEnv` = jméno env proměnné s klíčem daného providera (ne hodnota).
+ */
+export interface AiProvider {
+  modelId: string;
+  /** Nepovinné: jiný než default Anthropic endpoint (Z.ai je Anthropic-kompatibilní). */
+  baseURL?: string;
+  keyEnv: string;
+  /** Ceny v USD za milion tokenů (vstup/výstup). Natvrdo – non-goal zakazuje konfig. */
+  prices: { input: number; output: number };
+}
+
+/**
+ * Provider per model. opus/sonnet jedou na Anthropic (default endpoint, ANTHROPIC_API_KEY).
+ * glm (GLM-5.2 od Z.ai) jede na Anthropic-kompatibilní endpoint Z.ai s vlastním klíčem
+ * ZAI_API_KEY – výrazně levnější. Ceny glm: zdroj docs.z.ai/guides/overview/pricing
+ * (cache rate tu nemodelujeme – počítáme flat input).
+ */
+export const AI_PROVIDERS: Record<AiModelChoice, AiProvider> = {
+  opus: { modelId: "claude-opus-4-8", keyEnv: "ANTHROPIC_API_KEY", prices: { input: 5, output: 25 } },
+  sonnet: { modelId: "claude-sonnet-4-6", keyEnv: "ANTHROPIC_API_KEY", prices: { input: 3, output: 15 } },
+  glm: {
+    modelId: "glm-5.2",
+    baseURL: "https://api.z.ai/api/anthropic",
+    keyEnv: "ZAI_API_KEY",
+    prices: { input: 1.4, output: 4.4 },
+  },
+};
 
 /** Spotřeba tokenů z odpovědi API (z `usage`). `inputTokens` může být null (fallback),
  *  proto se při čtení coalescuje na 0 – sem ukládáme už číslo. */
@@ -49,26 +82,78 @@ export interface AiReport {
   oversizedFiles?: string[];
 }
 
-/** Jméno env proměnné s klíčem k Anthropic API. Sdílený literál (kontrakt). */
+/** Jméno env proměnné s klíčem k Anthropic API. Default provider (opus/sonnet) i
+ *  Anthropic-only cesta `--ai-check` (ping). Sdílený literál (kontrakt). */
 export const AI_KEY_ENV = "ANTHROPIC_API_KEY";
 
-/** Důvod přeskočení, když klíč chybí. Sdílený s reportem (markdown/JSON) i testy. */
-export const AI_MISSING_KEY_REASON = `chybí ${AI_KEY_ENV}`;
+/** Důvod přeskočení, když chybí klíč dané env proměnné. Dynamický (per provider) –
+ *  s glm už není jediný klíč. */
+export function missingKeyReason(keyEnv: string): string {
+  return `chybí ${keyEnv}`;
+}
+
+/** Důvod přeskočení, když chybí Anthropic klíč. Sdílený s `--ai-check` cestou (cli)
+ *  i testy – musí zůstat PŘESNÁ konstanta (cli porovnává reason === této hodnotě). */
+export const AI_MISSING_KEY_REASON = missingKeyReason(AI_KEY_ENV);
 
 /**
- * Čistá detekce nad PŘEDANÝM prostředím (ne přímo `process.env` – aby šla
- * testovat bez globálního stavu). Klíč chybějící, prázdný nebo jen z whitespace
- * → `skipped` s konkrétním důvodem; jinak `ready`.
+ * Nízkoúrovňová detekce existence KONKRÉTNÍHO klíče (bez vědomí o modelu/providerech).
+ * Klíč chybějící, prázdný nebo jen z whitespace → `skipped` s plain důvodem (bez
+ * cross-provider nápovědy); jinak `ready`. Používá ji ping cesta (`--ai-check`), kde
+ * je provider vždy Anthropic a nápověda na glm by byla matoucí.
  *
- * POZOR: funkce nikdy nevrací hodnotu klíče – jen příznak, že existuje. Klíč je
- * tajemství a nesmí se dostat do perzistovaného reportu.
+ * POZOR: nikdy nevrací hodnotu klíče – jen příznak existence. Klíč je tajemství.
  */
-export function detectAiStatus(env: Record<string, string | undefined>): AiStatus {
-  const raw = env[AI_KEY_ENV];
+export function detectKeyStatus(env: Record<string, string | undefined>, keyEnv: string): AiStatus {
+  const raw = env[keyEnv];
   if (raw === undefined || raw.trim() === "") {
-    return { kind: "skipped", reason: AI_MISSING_KEY_REASON };
+    return { kind: "skipped", reason: missingKeyReason(keyEnv) };
   }
   return { kind: "ready" };
+}
+
+/**
+ * Najde provider JINÉHO modelu, jehož klíč JE v prostředí nastaven (a liší se od
+ * `selectedKeyEnv`). Pro nápovědu „máš klíč jiného providera – přepni model". Vrací
+ * první takový (opus/sonnet sdílí ANTHROPIC, takže pro chybějící ZAI navrhne opus).
+ */
+function findAltProvider(
+  env: Record<string, string | undefined>,
+  selectedKeyEnv: string,
+): { model: AiModelChoice; keyEnv: string } | null {
+  for (const model of Object.keys(AI_PROVIDERS) as AiModelChoice[]) {
+    const keyEnv = AI_PROVIDERS[model].keyEnv;
+    if (keyEnv === selectedKeyEnv) continue;
+    const raw = env[keyEnv];
+    if (raw !== undefined && raw.trim() !== "") {
+      return { model, keyEnv };
+    }
+  }
+  return null;
+}
+
+/**
+ * Brána AI vrstvy pro ZVOLENÝ model (model-aware): hlídá klíč providera daného modelu
+ * (`AI_PROVIDERS[model].keyEnv`), default `opus` (= Anthropic, zpětně kompatibilní se
+ * starým chováním bez argumentu). Když klíč chybí, ale je nastaven klíč JINÉHO providera,
+ * důvod přeskočení to napoví (… přidej --ai-model=X?). Default model `opus` zachovává
+ * původní kontrakt: `detectAiStatus({})` → „chybí ANTHROPIC_API_KEY".
+ *
+ * POZOR: nikdy nevrací hodnotu klíče – jen příznak existence.
+ */
+export function detectAiStatus(
+  env: Record<string, string | undefined>,
+  model: AiModelChoice = "opus",
+): AiStatus {
+  const keyEnv = AI_PROVIDERS[model].keyEnv;
+  const base = detectKeyStatus(env, keyEnv);
+  if (base.kind !== "skipped") return base;
+
+  const alt = findAltProvider(env, keyEnv);
+  if (alt) {
+    return { kind: "skipped", reason: `${missingKeyReason(keyEnv)}; nalezen ${alt.keyEnv} – přidej --ai-model=${alt.model}?` };
+  }
+  return base;
 }
 
 /**
@@ -89,7 +174,10 @@ export async function verifyAiAccess(
   ping: (apiKey: string) => Promise<void>,
   classify: (err: unknown) => string | null,
 ): Promise<AiStatus> {
-  const gate = detectAiStatus(env);
+  // Ping je Anthropic-only (haiku) → gate přímo na Anthropic klíč, BEZ model-aware
+  // cross-provider nápovědy (navrhovat glm u --ai-check by bylo matoucí). Tím zůstane
+  // reason PŘESNĚ `AI_MISSING_KEY_REASON` a cli porovnání drží.
+  const gate = detectKeyStatus(env, AI_KEY_ENV);
   if (gate.kind === "skipped") return gate;
 
   const apiKey = (env[AI_KEY_ENV] as string).trim();

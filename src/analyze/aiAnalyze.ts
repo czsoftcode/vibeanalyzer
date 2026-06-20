@@ -1,6 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AiModelChoice, AiUsage } from "./aiStatus.js";
-import { AI_MODEL_IDS } from "./aiResult.js";
+import { AI_PROVIDERS, type AiModelChoice, type AiUsage } from "./aiStatus.js";
+
+/**
+ * Options pro Anthropic klienta podle zvoleného modelu. Vytaženo zvlášť, aby šel
+ * `baseURL` výběr unit-testovat bez sítě/SDK mocku. Pro glm se nastaví Z.ai endpoint
+ * (Anthropic-kompatibilní), pro opus/sonnet zůstane `baseURL` undefined → SDK použije
+ * default Anthropic endpoint. `maxRetries`/`timeout` jsou společné (viz konstanty výš).
+ */
+export function buildAnalyzeClientOptions(apiKey: string, model: AiModelChoice) {
+  return {
+    apiKey,
+    baseURL: AI_PROVIDERS[model].baseURL,
+    maxRetries: AI_ANALYZE_MAX_RETRIES,
+    timeout: AI_ANALYZE_TIMEOUT_MS,
+  };
+}
 
 /**
  * Pojistka proti ÚPLNÉMU zaseknutí v ms (TS SDK bere timeout v MILISEKUNDÁCH).
@@ -49,9 +63,9 @@ export const realAiAnalyze = async (
   userPrompt: string,
   schema: { [key: string]: unknown },
 ): Promise<{ rawText: string; usage: AiUsage; stopReason: string | null }> => {
-  const client = new Anthropic({ apiKey, maxRetries: AI_ANALYZE_MAX_RETRIES, timeout: AI_ANALYZE_TIMEOUT_MS });
+  const client = new Anthropic(buildAnalyzeClientOptions(apiKey, model));
   const stream = client.messages.stream({
-    model: AI_MODEL_IDS[model],
+    model: AI_PROVIDERS[model].modelId,
     max_tokens: AI_ANALYZE_MAX_TOKENS,
     thinking: { type: "adaptive" },
     output_config: { format: { type: "json_schema", schema } },

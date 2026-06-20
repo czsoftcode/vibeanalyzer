@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { AI_MISSING_KEY_REASON, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
 import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
 import { collectAiPayload } from "./analyze/aiPayload.js";
 import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
@@ -46,7 +46,10 @@ Volby:
   --ai-logic       Reálná AI analýza funkčnosti kódu jako celku vůči záměru z project.md
                    (drahé, vyžaduje ANTHROPIC_API_KEY i záměr; bez něj se přeskočí).
                    --ai-non-goal, --ai-code i --ai-logic jdou zapnout naráz (každý vlastní dotaz = vlastní cena).
-  --ai-model <m>   Model pro AI analýzu: opus (výchozí) nebo sonnet.
+  --ai-model <m>   Model pro AI analýzu: opus (výchozí), sonnet nebo glm.
+                   opus/sonnet jedou na Anthropic (ANTHROPIC_API_KEY); glm (GLM-5.2 od
+                   Z.ai) je levnější a jede na Anthropic-kompatibilní endpoint Z.ai
+                   s vlastním klíčem ZAI_API_KEY.
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
 
@@ -62,6 +65,17 @@ const AI_KEY_HINT = `Pozn.: --ai-check vyžaduje proměnnou prostředí ANTHROPI
 Nastav ji a spusť nástroj znovu, např.:
   ANTHROPIC_API_KEY=sk-ant-... vibeanalyzer --ai-check
 nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --ai-check
+(Vestavěnou .env podporu schválně nepřidáváme – nástroj je sám skener tajemství.)`;
+
+// Hláška pro analytické režimy (--ai-non-goal/--ai-code/--ai-logic), když chybí klíč
+// ZVOLENÉHO modelu. keyEnv se liší dle providera (ANTHROPIC_API_KEY vs ZAI_API_KEY pro
+// glm), proto je text parametrizovaný. Konkrétní nápovědu „máš klíč jiného providera"
+// už nese reason ve statusu (z detectAiStatus); tady jen JAK klíč nastavit.
+const aiKeyHint = (keyEnv: string): string =>
+  `Pozn.: AI analýza vyžaduje proměnnou prostředí ${keyEnv}, která teď chybí.
+Nastav ji a spusť nástroj znovu, např.:
+  ${keyEnv}=... vibeanalyzer --ai-code
+nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --ai-code
 (Vestavěnou .env podporu schválně nepřidáváme – nástroj je sám skener tajemství.)`;
 
 // Cesta k child skriptu pro izolovaný běh. Odvozená od PŘÍPONY tohoto modulu:
@@ -521,9 +535,9 @@ async function runAiLayer(
   if (wantNonGoal || wantCode || wantLogic) {
     // Klíč zkontrolujeme PŘED čtením souborů – bez klíče nemá smysl číst projekt ani
     // volat API. Bez klíče všechny režimy přeskočí stejným důvodem.
-    const pre = detectAiStatus(process.env);
+    const pre = detectAiStatus(process.env, parsed.aiModel);
     if (pre.kind === "skipped") {
-      console.error(AI_KEY_HINT);
+      console.error(aiKeyHint(AI_PROVIDERS[parsed.aiModel].keyEnv));
       return { nonGoal: pre, code: pre, logic: pre };
     }
     // analyze/classify injektujeme (testy bez sítě); SDK i orchestrátor se načtou
@@ -590,7 +604,7 @@ async function runAiLayer(
     return { nonGoal: status, code: status, logic: status };
   }
 
-  const gate = detectAiStatus(process.env);
+  const gate = detectAiStatus(process.env, parsed.aiModel);
   return { nonGoal: gate, code: gate, logic: gate };
 }
 

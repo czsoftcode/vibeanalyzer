@@ -120,6 +120,9 @@ describe("computeCostUsd – cena ze skutečné usage", () => {
   it("sonnet: 1M vstup × $3 + 0,2M výstup × $15 = $6", () => {
     expect(computeCostUsd(usage, "sonnet")).toBeCloseTo(3 + 3, 6); // 3 + (0.2*15=3)
   });
+  it("glm: 1M vstup × $1,4 + 0,2M výstup × $4,4 = $2,28 (výrazně levnější)", () => {
+    expect(computeCostUsd(usage, "glm")).toBeCloseTo(1.4 + 0.88, 6); // 1.4 + (0.2*4.4=0.88)
+  });
 });
 
 describe("runAiAnalysis – orchestrátor (analyze/classify injektované, bez sítě)", () => {
@@ -316,6 +319,30 @@ describe("runAiCodeAnalysis – orchestrátor (analyze/classify injektované)", 
     const ai = await runAiCodeAnalysis({ [AI_KEY_ENV]: "k" }, { text: "", includedFiles: [], truncated: false, oversizedFiles: [] }, "opus", analyze, classifyNone);
     expect(ai).toMatchObject({ kind: "skipped" });
     expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("model 'glm' gatuje na ZAI_API_KEY: jen ANTHROPIC nastavený → skipped, analyze se nezavolá", async () => {
+    // Zub na kontrakt model→klíč: kdyby orchestrátor četl natvrdo ANTHROPIC místo
+    // providerova keyEnv, glm by tu chybně proběhl.
+    const analyze = vi.fn(okAnalyze);
+    const ai = await runAiCodeAnalysis({ [AI_KEY_ENV]: "sk-ant-k" }, payload, "glm", analyze, classifyNone);
+    expect(ai.kind).toBe("skipped");
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("model 'glm' + ZAI_API_KEY → analyzed; dostane ZAI klíč a počítá glm ceníkem", async () => {
+    const seen: string[] = [];
+    const captureAnalyze: AnalyzeFn = async (apiKey) => {
+      seen.push(apiKey);
+      return { rawText: JSON.stringify({ findings: [] }), usage: { inputTokens: 1000, outputTokens: 100 }, stopReason: "end_turn" };
+    };
+    const ai = await runAiCodeAnalysis({ ZAI_API_KEY: "zai-secret" }, payload, "glm", captureAnalyze, classifyNone);
+    expect(ai.kind).toBe("analyzed");
+    expect(seen).toEqual(["zai-secret"]); // gate sáhl na ZAI klíč, ne ANTHROPIC
+    if (ai.kind === "analyzed") {
+      // glm: 1000/1e6*1.4 + 100/1e6*4.4 = 0.00184 (opus by dal 0.0075 → zub na ceník)
+      expect(ai.costUsd).toBeCloseTo(0.00184, 6);
+    }
   });
 
   it("síťová chyba (classify ji zná) → skipped s důvodem", async () => {

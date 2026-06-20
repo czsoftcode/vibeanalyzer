@@ -9,6 +9,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Nová volba modelu **`--ai-model glm`** (GLM-5.2 od Z.ai) jako třetí možnost vedle
+  `opus`/`sonnet` – výrazně levnější (vstup $1,4 / výstup $4,4 za milion tokenů oproti
+  opus $5 / $25), běží přes Anthropic-kompatibilní endpoint Z.ai s vlastním klíčem
+  **`ZAI_API_KEY`**. **Známé omezení:** Z.ai zatím **nevynucuje JSON schéma odpovědi**,
+  takže reálná analýza s `glm` dnes vždy skončí přeskočením (a přitom se za dotaz platí) –
+  plné zprovoznění (tolerantní parsování) je v plánu. Do té doby `glm` na ostro nepoužívej.
 - Report nově **přiznává zdrojové soubory, které AI nevidělo**, protože překročily strop
   na jeden soubor (100 kB) – vypíšou se jednou v sekci „AI analýza" v `.md` i v poli
   `ai.oversizedFiles` v JSON. Žádné tiché vynechání: víš, co se do dotazu nedostalo.
@@ -31,6 +37,11 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- **Který API klíč je potřeba, určuje nově zvolený model:** `glm` hlídá `ZAI_API_KEY`,
+  `opus`/`sonnet` dál `ANTHROPIC_API_KEY`. Když klíč zvoleného modelu chybí, ale máš
+  nastavený klíč jiného providera, hláška o přeskočení to napoví (např. „nalezen
+  ZAI_API_KEY – přidej --ai-model=glm?"). Ověření přístupu `--ai-check` zůstává čistě
+  na Anthropic.
 - Přepínač **`--ai` byl přejmenován na `--ai-non-goal`** (analýza porušení non-goalů).
   Společně s novým `--ai-code` tvoří dva nezávislé AI režimy, které jdou zapnout
   i naráz – každý posílá vlastní dotaz na API (a má tedy vlastní cenu), ale čtení

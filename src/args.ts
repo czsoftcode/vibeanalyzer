@@ -5,7 +5,7 @@ import type { AiModelChoice } from "./analyze/aiStatus.js";
 import { projectKey } from "./projectPaths.js";
 
 /** Povolené hodnoty `--ai-model` (kontrakt s AiModelChoice). */
-const AI_MODELS: readonly AiModelChoice[] = ["opus", "sonnet"];
+const AI_MODELS: readonly AiModelChoice[] = ["opus", "sonnet", "glm"];
 
 /** Výsledek parsování argumentů příkazové řádky. */
 export type ParsedArgs =
@@ -50,7 +50,7 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * porušení non-goalů, `--ai-code` reálnou analýzu kvality/rizik kódu, `--ai-logic`
  * posouzení funkčnosti kódu jako CELKU vůči záměru z project.md – všechny jsou
  * samostatné drahé cesty, každá vlastní dotaz na API (lze i víc naráz). `--ai-model
- * <opus|sonnet>` volí model pro všechny (default opus). Vyhodnocení (síť, klíč, samotné
+ * <opus|sonnet|glm>` volí model pro všechny (default opus). Vyhodnocení (síť, klíč, samotné
  * --ai-model bez AI běhu) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {

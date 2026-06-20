@@ -115,6 +115,11 @@ describe("parseArgs", () => {
     expect(r.kind === "run" && r.aiModel).toBe("sonnet");
   });
 
+  it("--ai-model glm je platná třetí volba (obě formy)", () => {
+    expect(parseArgs(["--ai-code", "--ai-model", "glm"], cwd)).toMatchObject({ kind: "run", aiModel: "glm" });
+    expect(parseArgs(["--ai-code", "--ai-model=glm"], cwd)).toMatchObject({ kind: "run", aiModel: "glm" });
+  });
+
   it("--ai-model bez hodnoty je chyba", () => {
     const r = parseArgs(["--ai-non-goal", "--ai-model"], cwd);
     expect(r.kind).toBe("error");
@@ -123,7 +128,7 @@ describe("parseArgs", () => {
   it("--ai-model s neznámým modelem je chyba", () => {
     const r = parseArgs(["--ai-non-goal", "--ai-model", "gpt"], cwd);
     expect(r.kind).toBe("error");
-    if (r.kind === "error") expect(r.message).toContain("opus | sonnet");
+    if (r.kind === "error") expect(r.message).toContain("opus | sonnet | glm");
   });
 
   it("default běh: aiNonGoal, aiCode i aiLogic false (default neutrácí za drahou analýzu)", () => {

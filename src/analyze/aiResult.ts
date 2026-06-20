@@ -1,20 +1,7 @@
 import type { Finding, Severity } from "../findings.js";
 import type { Intent } from "../intent.js";
-import { AI_KEY_ENV, type AiModelChoice, type AiStatus, type AiUsage, detectAiStatus } from "./aiStatus.js";
+import { AI_PROVIDERS, type AiModelChoice, type AiStatus, type AiUsage, detectAiStatus } from "./aiStatus.js";
 import type { AiPayload, PayloadFile } from "./aiPayload.js";
-
-/** ID modelů pro Anthropic API. Sdíleno s reálným voláním (aiAnalyze.ts). */
-export const AI_MODEL_IDS: Record<AiModelChoice, string> = {
-  opus: "claude-opus-4-8",
-  sonnet: "claude-sonnet-4-6",
-};
-
-/** Ceny v USD za milion tokenů (vstup/výstup). Natvrdo – non-goal zakazuje konfig.
- *  Zdroj pro výpočet ceny ze skutečné `usage`. */
-export const AI_PRICES_USD_PER_MTOK: Record<AiModelChoice, { input: number; output: number }> = {
-  opus: { input: 5, output: 25 },
-  sonnet: { input: 3, output: 15 },
-};
 
 /**
  * JSON schéma pro strukturovaný výstup (output_config.format). Garantuje
@@ -158,9 +145,9 @@ export function toFindings(raw: RawAiFinding[], nonGoals: string[], includedFile
   });
 }
 
-/** Cena v USD ze skutečné spotřeby tokenů × cenová tabulka zvoleného modelu. */
+/** Cena v USD ze skutečné spotřeby tokenů × ceník providera zvoleného modelu. */
 export function computeCostUsd(usage: AiUsage, model: AiModelChoice): number {
-  const p = AI_PRICES_USD_PER_MTOK[model];
+  const p = AI_PROVIDERS[model].prices;
   return (usage.inputTokens / 1_000_000) * p.input + (usage.outputTokens / 1_000_000) * p.output;
 }
 
@@ -195,7 +182,7 @@ export async function runAiAnalysis(
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
 ): Promise<AiStatus> {
-  const gate = detectAiStatus(env);
+  const gate = detectAiStatus(env, model);
   if (gate.kind === "skipped") return gate;
 
   const nonGoals = intent?.nonGoals ?? null;
@@ -206,7 +193,7 @@ export async function runAiAnalysis(
     return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
   }
 
-  const apiKey = (env[AI_KEY_ENV] as string).trim();
+  const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
   const prompt = buildAnalyzePrompt(intent?.building ?? null, nonGoals, payload);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT, prompt, FINDINGS_SCHEMA);
@@ -382,14 +369,14 @@ export async function runAiCodeAnalysis(
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
 ): Promise<AiStatus> {
-  const gate = detectAiStatus(env);
+  const gate = detectAiStatus(env, model);
   if (gate.kind === "skipped") return gate;
 
   if (payload.includedFiles.length === 0) {
     return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
   }
 
-  const apiKey = (env[AI_KEY_ENV] as string).trim();
+  const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
   const prompt = buildCodePrompt(payload);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_CODE, prompt, CODE_FINDINGS_SCHEMA);
@@ -587,7 +574,7 @@ export async function runAiLogicAnalysis(
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
 ): Promise<AiStatus> {
-  const gate = detectAiStatus(env);
+  const gate = detectAiStatus(env, model);
   if (gate.kind === "skipped") return gate;
 
   const building = intent?.building ?? null;
@@ -610,7 +597,7 @@ export async function runAiLogicAnalysis(
     };
   }
 
-  const apiKey = (env[AI_KEY_ENV] as string).trim();
+  const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
   const prompt = buildLogicPrompt(building, payload);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_LOGIC, prompt, LOGIC_FINDINGS_SCHEMA);

@@ -1,0 +1,47 @@
+{
+  "id": 47,
+  "title": "Třetí AI model: GLM-5.2",
+  "goal": "Přidat 'glm' jako třetí volbu --ai-model, která analytické režimy (--ai-code/--ai-non-goal/--ai-logic) posílá přes Anthropic-kompatibilní endpoint Z.ai (https://api.z.ai/api/anthropic) s vlastním API klíčem ZAI_API_KEY, včetně model id 'glm-5.2' a cenové tabulky AI_PRICES_USD_PER_MTOK; ping --ai-check zůstává mimo rozsah. Pozor: structured outputs (output_config.format) na Z.ai endpointu nejsou potvrzené – musí se ověřit živým během; cena GLM-5.2 v dokumentaci chybí, dohledat reálný ceník.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Provider tabulka + glm do typů a args",
+      "status": "done",
+      "detail": "Jedna tabulka Record<AiModelChoice,{modelId,baseURL?,keyEnv,prices}> v aiStatus.ts. glm do AiModelChoice a do AI_MODELS (args.ts). Hodnoty glm: glm-5.2 / https://api.z.ai/api/anthropic / ZAI_API_KEY / vstup 1.4, výstup 4.4. AI_MODEL_IDS/AI_PRICES v aiResult odvodit z ní (jeden zdroj pravdy, bez kruhové závislosti). Test: args přijme glm, tabulka pokrývá 3 modely, computeCostUsd(glm)=1.4/4.4."
+    },
+    {
+      "title": "Model-aware detectAiStatus s dynamickým důvodem",
+      "status": "done",
+      "detail": "detectAiStatus(env, model) čte keyEnv vybraného modelu; AI_MISSING_KEY_REASON → funkce per keyEnv. Test: glm gatuje na ZAI_API_KEY (NE ANTHROPIC), opus na ANTHROPIC_API_KEY; chybějící klíč vrátí důvod se správným jménem proměnné."
+    },
+    {
+      "title": "Nápověda na klíč jiného providera",
+      "status": "done",
+      "detail": "Když chybí klíč vybraného modelu, ale je nastaven klíč jiného providera, důvod přeskočení to napoví (chybí ANTHROPIC_API_KEY; nalezen ZAI_API_KEY – přidej --ai-model=glm?). Test: ZAI nastaven + opus vybrán + klíč chybí → reason obsahuje nápovědu; oba klíče chybí → bez nápovědy."
+    },
+    {
+      "title": "Klient na Z.ai baseURL podle modelu",
+      "status": "done",
+      "detail": "realAiAnalyze staví new Anthropic s baseURL z provider tabulky podle modelu (glm → Z.ai endpoint; opus/sonnet → default, baseURL se nepředá). Test: zachytit options konstruktoru – pro glm se baseURL nastaví, pro opus/sonnet ne."
+    },
+    {
+      "title": "Protáhnout model do gatingu, ping na Anthropic",
+      "status": "done",
+      "detail": "Tři run funkce v aiResult čtou keyEnv vybraného modelu (ne AI_KEY_ENV); cli volání detectAiStatus předají parsed.aiModel; AI_KEY_HINT zobecnit per keyEnv; nahradit reason===AI_MISSING_KEY_REASON strukturní detekcí. --ai-check/verifyAiAccess ponechat na Anthropic defaultu. Test: --ai-check prochází beze změny; missing-key hint v cli funguje i s dynamickým důvodem."
+    },
+    {
+      "title": "Živý běh glm, help, self-review",
+      "status": "done",
+      "detail": "Akceptační brána: --ai-code --ai-model=glm se ZAI_API_KEY na malém projektu → report bez pádu (ověří, že Z.ai ctí output_config.format/thinking:adaptive; pokud ne → NÁLEZ + samostatná fáze). Doplnit help o glm, potvrdit, že INDEX_VERSION se nemění. Před reportem nezávislý adversarial sub-agent na gating/kontrakt model→klíč."
+    }
+  ],
+  "startedAt": "2026-06-20T20:08:33.325Z",
+  "resolvedVerify": [
+    "Reálný --ai-code/--ai-non-goal/--ai-logic s glm na vlastním projektu"
+  ],
+  "completedAt": "2026-06-20T20:53:41.604Z",
+  "autoCommit": {
+    "preSha": "d9cf2cf54a3bca1ae6bcceb17433aa4529578213",
+    "subject": "Phase 47: Třetí AI model: GLM-5.2"
+  }
+}

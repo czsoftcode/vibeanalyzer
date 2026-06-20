@@ -14,7 +14,13 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
-import { AI_ANALYZE_MAX_RETRIES, AI_ANALYZE_MAX_TOKENS, AI_ANALYZE_TIMEOUT_MS, realAiAnalyze } from "./aiAnalyze.js";
+import {
+  AI_ANALYZE_MAX_RETRIES,
+  AI_ANALYZE_MAX_TOKENS,
+  AI_ANALYZE_TIMEOUT_MS,
+  buildAnalyzeClientOptions,
+  realAiAnalyze,
+} from "./aiAnalyze.js";
 
 type FakeMsg = {
   content: { type: string; text?: string; thinking?: string }[];
@@ -83,5 +89,33 @@ describe("realAiAnalyze – streaming SDK volání (mock, bez sítě)", () => {
   it("konstanty: žádný retry, prakticky neomezený timeout (pojistka)", () => {
     expect(AI_ANALYZE_MAX_RETRIES).toBe(0);
     expect(AI_ANALYZE_TIMEOUT_MS).toBeGreaterThanOrEqual(600_000);
+  });
+
+  it("model 'glm' → glm-5.2 + klient na Z.ai baseURL", async () => {
+    fakeFinal({ content: [{ type: "text", text: "{}" }], usage: { input_tokens: 1, output_tokens: 1 } });
+    await realAiAnalyze("zai-key", "glm", "s", "p");
+    expect(streamMock.mock.calls[0]?.[0].model).toBe("glm-5.2");
+    expect(ctorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "zai-key", baseURL: "https://api.z.ai/api/anthropic" }),
+    );
+  });
+});
+
+describe("buildAnalyzeClientOptions – endpoint dle modelu (bez sítě)", () => {
+  it("glm → baseURL Z.ai Anthropic-kompatibilní endpoint", () => {
+    expect(buildAnalyzeClientOptions("zai-x", "glm").baseURL).toBe("https://api.z.ai/api/anthropic");
+  });
+
+  it("opus/sonnet → baseURL nenastaven (SDK použije default Anthropic)", () => {
+    // Zub: kdyby se baseURL nastavoval i pro Anthropic modely, opus by netrefil default.
+    expect(buildAnalyzeClientOptions("k", "opus").baseURL).toBeUndefined();
+    expect(buildAnalyzeClientOptions("k", "sonnet").baseURL).toBeUndefined();
+  });
+
+  it("nese apiKey, žádný retry, velký timeout", () => {
+    const o = buildAnalyzeClientOptions("secret-key", "glm");
+    expect(o.apiKey).toBe("secret-key");
+    expect(o.maxRetries).toBe(AI_ANALYZE_MAX_RETRIES);
+    expect(o.timeout).toBe(AI_ANALYZE_TIMEOUT_MS);
   });
 });
