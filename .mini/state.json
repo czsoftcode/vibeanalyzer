@@ -202,6 +202,11 @@
       "id": 40,
       "title": "Dokončit tři adversarial nity",
       "status": "done"
+    },
+    {
+      "id": 41,
+      "title": "Kostra AI vrstvy: detekce klíče a přeskočení",
+      "status": "done"
     }
   ]
 }

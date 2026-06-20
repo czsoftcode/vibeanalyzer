@@ -7,6 +7,19 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Added
+
+- Report nově zahrnuje **AI vrstvu (logika a non-goaly)** – zatím jen bránu
+  klíče. Před AI během se zjistí, jestli je k dispozici `ANTHROPIC_API_KEY`:
+  bez klíče se sekce čistě označí jako „AI přeskočeno: chybí ANTHROPIC_API_KEY",
+  s klíčem jako „připraveno" (reálné volání API přijde v další fázi). Hodnota
+  klíče se nikdy nedostane do `.md` ani `.json`.
+
+### Changed
+
+- Strojový JSON index má **verzi 11** – nově nese pole `ai` se stavem AI vrstvy.
+  Změna tvaru pro konzumenty JSON.
+
 ### Fixed
 
 - `--out=` s **prázdnou hodnotou** (např. `vibeanalyzer . --out=`) nově vrátí

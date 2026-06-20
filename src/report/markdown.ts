@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import type { AiStatus } from "../analyze/aiStatus.js";
 import type { ModuleEdge, ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
@@ -23,6 +24,8 @@ export interface MarkdownInput {
   audit?: AuditResult;
   /** Graf importních závislostí; když chybí, sekce se vykreslí jako "přeskočeno". */
   moduleGraph?: ModuleGraphResult;
+  /** Stav AI vrstvy (brána klíče); když chybí, sekce se vykreslí jako "přeskočeno". */
+  ai?: AiStatus;
 }
 
 export interface MarkdownOptions {
@@ -334,6 +337,34 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
   return `- Závislosti: ${audit.findings.length} nálezů`;
 }
 
+/**
+ * Sekce "## AI analýza (logika a non-goaly)". Zatím jen brána klíče – reálný
+ * dotaz na API ještě neproběhl. Dva stavy, schválně rozlišitelné:
+ *   - skipped → "_AI přeskočeno: <důvod>_" (např. chybí ANTHROPIC_API_KEY)
+ *   - ready   → klíč nalezen, ale dotaz ZATÍM neproběhl (ne falešné "hotovo").
+ * Strojová vrstva běží beze změny – tahle sekce je jen oznámení stavu.
+ */
+function aiSection(ai: AiStatus | undefined): string[] {
+  const out: string[] = ["## AI analýza (logika a non-goaly)", ""];
+
+  if (!ai || ai.kind === "skipped") {
+    const reason = ai?.reason ?? "AI vrstva zatím neproběhla";
+    out.push(`_AI přeskočeno: ${sanitizeInline(reason)}_`);
+    out.push("");
+    return out;
+  }
+
+  out.push("_AI připraveno (klíč nalezen, dotaz zatím neproběhl)._");
+  out.push("");
+  return out;
+}
+
+/** Krátké shrnutí stavu AI vrstvy do hlavičky reportu. */
+function aiSummaryLine(ai: AiStatus | undefined): string {
+  if (!ai || ai.kind === "skipped") return "- AI (logika a non-goaly): přeskočeno";
+  return "- AI (logika a non-goaly): připraveno";
+}
+
 /** Krátké shrnutí stavu grafu modulů do hlavičky reportu. */
 function moduleGraphSummaryLine(mg: ModuleGraphResult | undefined): string {
   if (!mg || mg.kind === "skipped") return "- Graf modulů: přeskočeno";
@@ -620,6 +651,7 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push(secretsSummaryLine(input.secrets));
   out.push(auditSummaryLine(input.audit));
   out.push(moduleGraphSummaryLine(input.moduleGraph));
+  out.push(aiSummaryLine(input.ai));
   out.push("");
 
   out.push(...intentSection(input.intent));
@@ -646,6 +678,8 @@ export function buildMarkdown(input: MarkdownInput, options: MarkdownOptions = {
   out.push("");
 
   out.push(...moduleGraphSection(input.moduleGraph, maxModuleNodes, maxModuleEdges));
+
+  out.push(...aiSection(input.ai));
 
   out.push("## Soubory");
   out.push("");

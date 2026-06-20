@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { detectAiStatus } from "./analyze/aiStatus.js";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { auditDependencies, type AuditResult } from "./audit.js";
 import { analyzeESLint } from "./analyze/eslint.js";
@@ -385,7 +386,12 @@ export async function run(
     moduleGraph = { kind: "skipped", reason: "graf modulů během sestavování selhal (viz stderr)" };
   }
 
-  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit, moduleGraph);
+  // AI vrstva: zatím jen brána klíče. Čistá detekce nad process.env – nepadá,
+  // proto bez try/catch (falešný catch by jen maskoval programovou chybu). Bez
+  // klíče se AI vrstva v reportu označí jako přeskočená, strojová vrstva běží dál.
+  const ai = detectAiStatus(process.env);
+
+  const index = buildJsonIndex(targetPath, generatedAt, result.files, tsc, eslint, secrets, audit, moduleGraph, ai);
   const md = buildMarkdown({
     root: targetPath,
     generatedAt,
@@ -397,6 +403,7 @@ export async function run(
     secrets,
     audit,
     moduleGraph,
+    ai,
   });
 
   // Volná dvojice výstupních cest. Dva běhy ve stejné ms dají stejný stamp a

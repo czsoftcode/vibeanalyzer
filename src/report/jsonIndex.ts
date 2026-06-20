@@ -1,3 +1,4 @@
+import type { AiStatus } from "../analyze/aiStatus.js";
 import type { ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
@@ -16,7 +17,8 @@ import type { SecretsResult } from "../secrets.js";
  * tajemství (minifikáty / velké / binárky / dlouhé řádky) – aby ani JSON tiše
  * nevynechával balast. Od verze 10 nese `tsc` (ran) příznak `hoistedNodeModules`
  * (kořen bez `node_modules`, ale leží výš – monorepo; fail-closed analýza může dát
- * falešné TS2307).
+ * falešné TS2307). Od verze 11 nese stav AI vrstvy (`ai`) – zatím jen brána klíče
+ * (`ready`/`skipped`), aby šlo z JSONu poznat "AI přeskočeno" vs "připraveno".
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -36,11 +38,13 @@ export interface JsonIndex {
   audit: AuditResult;
   /** graf importních závislostí mezi zdrojovými soubory */
   moduleGraph: ModuleGraphResult;
+  /** stav AI vrstvy (brána klíče): ready = klíč nalezen, skipped = důvod přeskočení */
+  ai: AiStatus;
 }
 
-/** Bump 9 → 10: `tsc` (ran) nese `hoistedNodeModules` – nové povinné pole mění tvar
- *  embedded výsledku v každém JSON. Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 10;
+/** Bump 10 → 11: index nese `ai` (stav AI vrstvy) – nové povinné pole mění tvar
+ *  JSON. Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 11;
 
 export function buildJsonIndex(
   root: string,
@@ -51,6 +55,7 @@ export function buildJsonIndex(
   secrets: SecretsResult,
   audit: AuditResult,
   moduleGraph: ModuleGraphResult,
+  ai: AiStatus,
 ): JsonIndex {
   return {
     version: INDEX_VERSION,
@@ -62,5 +67,6 @@ export function buildJsonIndex(
     secrets,
     audit,
     moduleGraph,
+    ai,
   };
 }

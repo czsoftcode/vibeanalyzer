@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AiStatus } from "../analyze/aiStatus.js";
 import type { ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import type { EslintResult, TscResult } from "../findings.js";
@@ -14,6 +15,7 @@ const noSecrets: SecretsResult = {
   skipped: { minified: 0, large: 0, longLine: 0, binary: 0 },
 };
 const noAudit: AuditResult = { kind: "skipped", reason: "audit nevyžádán (--audit)" };
+const noAi: AiStatus = { kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" };
 const noGraph: ModuleGraphResult = {
   kind: "ran",
   edges: [],
@@ -26,15 +28,23 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 10 (tsc.hoistedNodeModules)", () => {
-    expect(INDEX_VERSION).toBe(10);
+  it("verze indexu je 11 (nese stav AI vrstvy `ai`)", () => {
+    expect(INDEX_VERSION).toBe(11);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph);
-    expect(idx.version).toBe(10);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
+    expect(idx.version).toBe(INDEX_VERSION);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
+  });
+
+  it("nese ai stav 1:1 (skipped i ready – ne tiché vynechání)", () => {
+    const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
+    const skipped = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
+    expect(skipped.ai).toEqual({ kind: "skipped", reason: "chybí ANTHROPIC_API_KEY" });
+    const ready = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "ready" });
+    expect(ready.ai).toEqual({ kind: "ready" });
   });
 
   it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {
@@ -43,7 +53,7 @@ describe("buildJsonIndex", () => {
       { path: "src/app.min.js", type: "file", ext: ".js", size: 999, depth: 2, minified: true },
     ];
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", files, tsc, noEslint, noSecrets, noAudit, noGraph);
+    const idx = buildJsonIndex("/p", "t", files, tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
     expect(idx.files).toEqual(files); // pole projde 1:1
     expect(idx.files.find((f) => f.path === "src/app.min.js")?.minified).toBe(true);
     expect(idx.files.find((f) => f.path === "src/index.ts")?.minified).toBe(false);
@@ -57,7 +67,7 @@ describe("buildJsonIndex", () => {
       findings: [{ source: "eslint", severity: "error", file: "a.js", line: 3, column: 5, rule: "eqeqeq", message: "use ===" }],
     };
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const idx = buildJsonIndex("/p", "t", [], tsc, eslint, noSecrets, noAudit, noGraph);
+    const idx = buildJsonIndex("/p", "t", [], tsc, eslint, noSecrets, noAudit, noGraph, noAi);
     expect(idx.eslint).toEqual(eslint);
   });
 
@@ -68,7 +78,7 @@ describe("buildJsonIndex", () => {
       counts: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 },
       findings: [{ source: "audit", severity: "error", file: "package-lock.json", rule: "GHSA-x", message: "lodash@<4 – x; oprava: ano" }],
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, audit, noGraph);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, audit, noGraph, noAi);
     expect(idx.audit).toEqual(audit);
   });
 
@@ -80,7 +90,7 @@ describe("buildJsonIndex", () => {
       findings: [{ source: "secret", severity: "error", file: ".env", line: 1, rule: "aws-access-key-id", message: "Možné tajemství (AWS Access Key ID): AKIA…(20 znaků)" }],
       skipped: { minified: 2, large: 1, longLine: 0, binary: 1 },
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets, noAudit, noGraph);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, secrets, noAudit, noGraph, noAi);
     expect(idx.secrets).toEqual(secrets); // skipped musí projít 1:1 (ne tiché zahození)
   });
 
@@ -96,7 +106,7 @@ describe("buildJsonIndex", () => {
       tooLarge: 0,
       minified: 2,
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, graph);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, graph, noAi);
     expect(idx.moduleGraph).toEqual(graph);
   });
 
@@ -110,7 +120,7 @@ describe("buildJsonIndex", () => {
       projectTsVersion: "5.4.0",
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2322", message: "x" }],
     };
-    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph);
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAi);
     expect(idx.tsc).toEqual(tsc);
   });
 });

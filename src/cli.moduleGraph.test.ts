@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run } from "./cli.js";
+import { INDEX_VERSION } from "./report/jsonIndex.js";
 
 // End-to-end: skutečný běh CLI nad fixturou, čteme vygenerovaný .md i .json.
 // In-process (bez forku), ať je rychlé – necílíme izolaci strojové vrstvy.
@@ -56,7 +57,7 @@ describe("run – e2e graf modulů", () => {
 
     // JSON nese graf 1:1 s vyřešenou hranou .js → .ts.
     const index = JSON.parse(json);
-    expect(index.version).toBe(10);
+    expect(index.version).toBe(INDEX_VERSION);
     expect(index.moduleGraph.kind).toBe("ran");
     expect(index.moduleGraph.edges).toEqual([{ from: "src/a.ts", to: "src/b.ts" }]);
     expect(index.moduleGraph.isolated).toEqual(["src/lonely.ts"]);

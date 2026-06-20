@@ -1,0 +1,39 @@
+{
+  "id": 41,
+  "title": "Kostra AI vrstvy: detekce klíče a přeskočení",
+  "goal": "Přidat modul, který před AI během zjistí dostupnost ANTHROPIC_API_KEY; když chybí, vrátí strukturovaný stav 'AI přeskočeno' s důvodem, který se promítne do reportu (.md i JSON). Strojová vrstva běží beze změny. Ověření: bez klíče report obsahuje 'AI přeskočeno: chybí ANTHROPIC_API_KEY'; s klíčem stav 'připraveno' (reálné volání API až později).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Modul detekce klíče: AiStatus union",
+      "status": "done",
+      "detail": "Nový src/analyze/aiStatus.ts: čistá detectAiStatus(env) vracející { kind: 'skipped'; reason } | { kind: 'ready' }. Env jako parametr (ne přímo process.env). Prázdný/whitespace/chybějící klíč → skipped s důvodem 'chybí ANTHROPIC_API_KEY'. Unit testy: chybí, prázdný, whitespace, validní."
+    },
+    {
+      "title": "Zapojit detekci do cli.ts",
+      "status": "done",
+      "detail": "Zavolat detectAiStatus(process.env), předat ai do buildJsonIndex i buildMarkdown. Bez try/catch (čistá funkce nepadá). Klíč se nikam netiskne."
+    },
+    {
+      "title": "JSON index: pole ai + bump verze",
+      "status": "done",
+      "detail": "Přidat JsonIndex.ai, bump INDEX_VERSION 10→11, rozšířit signaturu buildJsonIndex. Test ověří přítomnost ai i novou verzi (sdílená konstanta = kontrakt)."
+    },
+    {
+      "title": "Markdown: AI sekce + souhrnný řádek",
+      "status": "done",
+      "detail": "aiSection + aiSummaryLine. Skip → 'AI přeskočeno: <důvod>', ready → 'připraveno (klíč nalezen, dotaz zatím neproběhl)'. Testy obou variant krmí reálný výstup detectAiStatus, ne ručně složený objekt."
+    },
+    {
+      "title": "Doběh: tsc + suite + reálný běh bez klíče",
+      "status": "done",
+      "detail": "typecheck a vitest run zelené; ruční běh CLI s unset ANTHROPIC_API_KEY potvrdí text v .md. Nezávislý adversarial self-review na cross-module kontrakt verze JSON."
+    }
+  ],
+  "startedAt": "2026-06-20T13:14:13.929Z",
+  "completedAt": "2026-06-20T13:37:32.974Z",
+  "autoCommit": {
+    "preSha": "cb6ce7e8a96bb12e3ae507ad78886f6327996a0f",
+    "subject": "Phase 41: Kostra AI vrstvy: detekce klíče a přeskočení"
+  }
+}
