@@ -15,9 +15,9 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   **`ZAI_API_KEY`**. Funguje u **všech tří AI režimů** (`--ai-code`, `--ai-non-goal`
   i `--ai-logic`) – vrací reálné nálezy mířící na konkrétní místo v kódu. Z.ai nevynucuje
   JSON schéma odpovědi jako Anthropic, proto si nástroj ve všech třech režimech umí poradit
-  s tvarem, který glm vrací (obal, holé pole i JSON v markdown ohrazení). **Pozor:** u
-  `--ai-logic` na **velkém projektu** může glm narazit na limit délky výstupu a režim se
-  čistě přeskočí (řeší se zvlášť); u `opus`/`sonnet` fungují všechny tři režimy normálně.
+  s tvarem, který glm vrací (obal, holé pole i JSON v markdown ohrazení). Strop délky
+  výstupu i míra „přemýšlení" jsou pro glm doladěné (viz Fixed níže), takže `--ai-logic`
+  i na velkém projektu vrací nálezy a neuřezává se.
 - Report nově **přiznává zdrojové soubory, které AI nevidělo**, protože překročily strop
   na jeden soubor (100 kB) – vypíšou se jednou v sekci „AI analýza" v `.md` i v poli
   `ai.oversizedFiles` v JSON. Žádné tiché vynechání: víš, co se do dotazu nedostalo.
@@ -61,6 +61,13 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Fixed
 
+- **`--ai-model glm` na reálném projektu už neuřezává výstup.** `--ai-logic` (a další
+  AI režimy) s glm dřív padaly na limit délky výstupu a čistě se přeskočily. Příčina:
+  Z.ai jede ve výchozím stavu „reasoning_effort: max", takže model promyslel tolik, že
+  na samotnou odpověď nezbylo místo; navíc náš plošný strop 16k tokenů glm stahoval
+  pod jeho vlastní výchozí strop (64k). Nově je tvar dotazu **per-model** – glm dostává
+  64k strop, explicitní „thinking: enabled" a **nízký reasoning_effort** (hlavní oprava),
+  `opus`/`sonnet` zůstávají beze změny. Reálně ověřeno během na projektu.
 - AI analýza posílala modelu vždy schéma pro non-goaly, takže `--ai-code` dostával
   od modelu nepoužitelný tvar odpovědi a tiše se přeskakoval. Každý režim teď posílá
   své vlastní schéma; chyba byla odhalena reálným během a pokryta testy.

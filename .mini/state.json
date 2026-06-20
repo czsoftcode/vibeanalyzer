@@ -1,7 +1,7 @@
 {
   "version": 2,
   "createdAt": "2026-06-15T19:13:16.562Z",
-  "currentPhaseId": 50,
+  "currentPhaseId": null,
   "phases": [
     {
       "id": 1,
@@ -251,7 +251,7 @@
     {
       "id": 50,
       "title": "glm: vyšší strop výstupu a thinking",
-      "status": "proposed"
+      "status": "done"
     }
   ]
 }

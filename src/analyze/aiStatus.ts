@@ -18,6 +18,31 @@ export interface AiProvider {
   keyEnv: string;
   /** Ceny v USD za milion tokenů (vstup/výstup). Natvrdo – non-goal zakazuje konfig. */
   prices: { input: number; output: number };
+  /**
+   * Strop výstupních tokenů (per-model, protože poskytovatelé se liší). POZOR: thinking
+   * se počítá DO výstupu. U Anthropic (opus/sonnet) měření ukázalo, že sonnet „promyslel"
+   * ~7,5k a na 8000 stropu nezbylo místo na JSON → uříznuto; proto rezerva 16k. glm jede
+   * na vlastní default 64k (Z.ai default je 65536; náš dřívější plošný 16k ho STAHOVAL
+   * pod jeho default a uřezával výstup). Reziduální uříznutí řeší runAiAnalysis čistým
+   * skipem (stop_reason=max_tokens), ne pádem.
+   */
+  maxTokens: number;
+  /**
+   * Tvar pole `thinking` pro SDK volání. Anthropic (opus/sonnet) umí `adaptive` (model si
+   * sám řídí rozsah). Z.ai `adaptive` NEZNÁ (zná jen enabled/disabled) a tiše ho ignoruje
+   * → spadne na default enabled + reasoning_effort=max → sežere strop. Proto glm dostává
+   * explicitní `enabled`. POZN.: Z.ai `enabled` NEpoužívá budget_tokens (řídí se přes
+   * `reasoningEffort`), proto vlastní volný tvar – Anthropic SDK typ u `enabled` budget
+   * vyžaduje, ale to je Anthropic-only kontrakt, sem nepatří.
+   */
+  thinking: { type: "adaptive" } | { type: "enabled" };
+  /**
+   * Rozšíření Z.ai (NE standardní Anthropic parametr). Síla uvažování pro GLM-5.2+; default
+   * poskytovatele je „max", což je přesně příčina uřezávání → posíláme nízkou hodnotu.
+   * Nastaveno JEN pro glm; opus/sonnet ho nemají (Anthropic by neznámé pole mohl odmítnout).
+   * Povolené hodnoty Z.ai: max|xhigh|high|medium|low|minimal|none.
+   */
+  reasoningEffort?: "max" | "xhigh" | "high" | "medium" | "low" | "minimal" | "none";
 }
 
 /**
@@ -27,13 +52,28 @@ export interface AiProvider {
  * (cache rate tu nemodelujeme – počítáme flat input).
  */
 export const AI_PROVIDERS: Record<AiModelChoice, AiProvider> = {
-  opus: { modelId: "claude-opus-4-8", keyEnv: "ANTHROPIC_API_KEY", prices: { input: 5, output: 25 } },
-  sonnet: { modelId: "claude-sonnet-4-6", keyEnv: "ANTHROPIC_API_KEY", prices: { input: 3, output: 15 } },
+  opus: {
+    modelId: "claude-opus-4-8",
+    keyEnv: "ANTHROPIC_API_KEY",
+    prices: { input: 5, output: 25 },
+    maxTokens: 16000,
+    thinking: { type: "adaptive" },
+  },
+  sonnet: {
+    modelId: "claude-sonnet-4-6",
+    keyEnv: "ANTHROPIC_API_KEY",
+    prices: { input: 3, output: 15 },
+    maxTokens: 16000,
+    thinking: { type: "adaptive" },
+  },
   glm: {
     modelId: "glm-5.2",
     baseURL: "https://api.z.ai/api/anthropic",
     keyEnv: "ZAI_API_KEY",
     prices: { input: 1.4, output: 4.4 },
+    maxTokens: 65536,
+    thinking: { type: "enabled" },
+    reasoningEffort: "low",
   },
 };
 

@@ -35,14 +35,6 @@ export const AI_ANALYZE_TIMEOUT_MS = 1_800_000;
 export const AI_ANALYZE_MAX_RETRIES = 0;
 
 /**
- * Strop výstupních tokenů. POZOR: adaptive thinking se počítá DO výstupu – měření
- * ukázalo, že sonnet „promyslel" ~7,5k tokenů a na 8000 stropu mu nezbylo místo na
- * samotný JSON → uříznutá odpověď. Proto velká rezerva (16k). Reziduální uříznutí
- * navíc řeší runAiAnalysis čistým skipem (stop_reason=max_tokens), ne pádem.
- */
-export const AI_ANALYZE_MAX_TOKENS = 16000;
-
-/**
  * Reálný analytický dotaz. Resolve = API odpovědělo strukturovaným JSONem (rawText)
  * + skutečná `usage`; reject = chyba (zatřídí ji `classifyAiError` u volajícího).
  *
@@ -55,6 +47,10 @@ export const AI_ANALYZE_MAX_TOKENS = 16000;
  * garantuje parsovatelný tvar. `schema` injektuje VOLAJÍCÍ podle režimu (non-goal vs
  * code) – musí sedět na `system`/prompt, jinak model vrátí tvar, který parser odmítne.
  * Chyby tady NEodchytáváme – necháme je probublat.
+ *
+ * Tvar dotazu (max_tokens, thinking, příp. reasoning_effort) je PER-MODEL z `AI_PROVIDERS`
+ * – ne plošná konstanta. glm potřebuje vyšší strop + explicitní enabled thinking s nízkým
+ * reasoning_effort (Z.ai rozšíření), jinak default effort=max sežere strop a výstup se uřízne.
  */
 export const realAiAnalyze = async (
   apiKey: string,
@@ -64,14 +60,27 @@ export const realAiAnalyze = async (
   schema: { [key: string]: unknown },
 ): Promise<{ rawText: string; usage: AiUsage; stopReason: string | null }> => {
   const client = new Anthropic(buildAnalyzeClientOptions(apiKey, model));
-  const stream = client.messages.stream({
-    model: AI_PROVIDERS[model].modelId,
-    max_tokens: AI_ANALYZE_MAX_TOKENS,
-    thinking: { type: "adaptive" },
+  const provider = AI_PROVIDERS[model];
+
+  // Standardní pole projdou typovou kontrolou SDK. `thinking` castíme cíleně: provider
+  // typ povoluje i Z.ai `enabled` bez budget_tokens, který Anthropic SDK typ u `enabled`
+  // vyžaduje – to je ale Anthropic-only kontrakt (opus/sonnet stejně jedou `adaptive`).
+  const base: Anthropic.MessageStreamParams = {
+    model: provider.modelId,
+    max_tokens: provider.maxTokens,
+    thinking: provider.thinking as Anthropic.Messages.ThinkingConfigParam,
     output_config: { format: { type: "json_schema", schema } },
     system,
     messages: [{ role: "user", content: userPrompt }],
-  });
+  };
+  // reasoning_effort je rozšíření Z.ai (jen glm) – Anthropic SDK typ ho NEzná, proto ho
+  // přidáváme cíleně jen tady (ne castem celého requestu na any). Bez effortu (opus/sonnet)
+  // posíláme `base` beze změny, ať Anthropic nedostane neznámé pole.
+  const params = provider.reasoningEffort
+    ? { ...base, reasoning_effort: provider.reasoningEffort }
+    : base;
+
+  const stream = client.messages.stream(params);
   const res = await stream.finalMessage();
 
   // Strukturovaný výstup přijde jako textový blok (JSON). Thinking bloky ignorujeme.

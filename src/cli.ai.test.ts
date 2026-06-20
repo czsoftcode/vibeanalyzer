@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AI_KEY_ENV } from "./analyze/aiStatus.js";
+import { AI_KEY_ENV, AI_PROVIDERS } from "./analyze/aiStatus.js";
 import { run } from "./cli.js";
 
 // End-to-end: skutečný běh CLI nad fixturou. Hlídá KONTRAKT mezi cli.ts a JSON –
@@ -17,6 +17,11 @@ beforeEach(async () => {
   proj = await mkdtemp(path.join(tmpdir(), "vibe-cli-ai-"));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
+  // Hermetičnost: reálný ZAI_API_KEY v prostředí jinak protéká do detectAiStatus a u
+  // "bez klíče" větví přidá nápovědu "nalezen ZAI_API_KEY – přidej --ai-model=glm?",
+  // takže testy gating na Anthropic byly nedeterministické. Default = žádný alt klíč;
+  // test, který glm klíč chce, ať si ho stubne explicitně.
+  vi.stubEnv(AI_PROVIDERS.glm.keyEnv, "");
 });
 
 afterEach(async () => {

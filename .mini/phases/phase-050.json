@@ -2,5 +2,36 @@
   "id": 50,
   "title": "glm: vyšší strop výstupu a thinking",
   "goal": "Pro glm zvednout AI_ANALYZE_MAX_TOKENS na 64k jako per-model hodnotu (opus/sonnet beze změny) a posílat platný thinking type=enabled s nižším reasoning effort místo neplatného type=adaptive, aby --ai-logic --ai-model=glm na reálném projektu nepadalo na stop_reason=max_tokens a vrátilo nálezy mířící na konkrétní místo v kódu.",
-  "status": "proposed"
+  "status": "done",
+  "steps": [
+    {
+      "title": "Per-model request konfig do AI_PROVIDERS",
+      "status": "done",
+      "detail": "aiStatus.ts: rozšířit AiProvider o maxTokens, thinking (tvar pro SDK) a nepovinný reasoningEffort. opus/sonnet 16000 + {type:adaptive} bez effortu; glm 65536 + {type:enabled} + low. Rozhodnout osud konstanty AI_ANALYZE_MAX_TOKENS (sdílený literál vs zrušit + opravit importy). Výstup: tsc projde, žádný mrtvý literál."
+    },
+    {
+      "title": "realAiAnalyze posílá per-model tvar",
+      "status": "done",
+      "detail": "aiAnalyze.ts: číst max_tokens a thinking z AI_PROVIDERS[model] místo natvrdo. reasoning_effort přidat do těla volání JEN pro glm jako cílené extra pole mimo typ SDK (ne cast celého requestu na any). opus/sonnet beze změny. Výstup: opus/sonnet adaptive+16k bez effortu, glm enabled+65536+effort low."
+    },
+    {
+      "title": "Per-model zuby v aiAnalyze.test.ts",
+      "status": "done",
+      "detail": "Rozlišení modelů: glm → max_tokens 65536, thinking {type:enabled}, reasoning_effort low; opus/sonnet → max_tokens 16000, thinking {type:adaptive} a pole reasoning_effort CHYBÍ. Nepřepsat do bezzubého stavu — záměna glm/opus hodnot musí test shodit. Výstup: zelená sada hlídající per-model rozdíl i absenci effortu u Anthropic."
+    },
+    {
+      "title": "Nezávislý self-review + zelená sada",
+      "status": "done",
+      "detail": "Pustit npm test a tsc. Protože fáze sahá na vstupní bod AI volání a kontrakt aiStatus↔aiAnalyze, pustit dle projektového CLAUDE.md nezávislého sub-agenta (čerstvý kontext) na adversarial self-review tvaru requestu a per-model větvení. Výstup: zelené testy + zápis nálezů."
+    }
+  ],
+  "startedAt": "2026-06-20T23:08:44.666Z",
+  "resolvedVerify": [
+    "Reálný běh: --ai-logic --ai-model=glm na reálném projektu vrátí nálezy bez stop_reason=max_tokens"
+  ],
+  "completedAt": "2026-06-20T23:32:33.625Z",
+  "autoCommit": {
+    "preSha": "2fa42b9e9188cc0f1d74970e3529897ff782604f",
+    "subject": "Phase 50: glm: vyšší strop výstupu a thinking"
+  }
 }
