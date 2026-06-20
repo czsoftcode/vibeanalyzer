@@ -26,14 +26,14 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 9 (secrets.skipped počty přeskočených)", () => {
-    expect(INDEX_VERSION).toBe(9);
+  it("verze indexu je 10 (tsc.hoistedNodeModules)", () => {
+    expect(INDEX_VERSION).toBe(10);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
     const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph);
-    expect(idx.version).toBe(9);
+    expect(idx.version).toBe(10);
     expect(idx.tsc).toEqual({ kind: "skipped", reason: "není tsconfig" });
   });
 
@@ -105,6 +105,7 @@ describe("buildJsonIndex", () => {
       kind: "ran",
       fileCount: 2,
       nodeModulesPresent: false,
+      hoistedNodeModules: true,
       tsVersion: "5.9.3",
       projectTsVersion: "5.4.0",
       findings: [{ source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2322", message: "x" }],

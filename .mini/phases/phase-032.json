@@ -1,0 +1,44 @@
+{
+  "id": 32,
+  "title": "Monorepo: upozornit na hoisted node_modules",
+  "goal": "Když kořen nemá node_modules, ale rodičovský adresář ano, report přidá upozornění, že TS2307 'cannot find module' nálezy mohou být artefaktem fail-closed analýzy (hoisted monorepo), ne skutečnou chybou kódu. Ověření: fixture monorepa (root bez node_modules, parent s ním) přidá do reportu upozornění; běžný projekt s vlastním node_modules ho neobsahuje.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Detekce hoisted node_modules + injektovatelný probe",
+      "status": "done",
+      "detail": "Do TscAnalyzeDeps přidat hasNodeModulesDir?(dir):Promise<boolean> (default reálný stat, sdílený i pro kontrolu kořene). Helper projde rodiče od path.dirname(root) nahoru k FS root (zastávka když dirname(p)===p), vrátí true u prvního nalezeného node_modules. Walk se spustí jen když kořen node_modules nemá (jinak false bez procházení)."
+    },
+    {
+      "title": "Nové pole hoistedNodeModules v TscResult a jeho naplnění",
+      "status": "done",
+      "detail": "V findings.ts přidat hoistedNodeModules:boolean do varianty kind:ran (s komentářem). V analyzeTypeScript (tsc.ts) ho spočítat a vrátit. Existující nodeModulesPresent beze změny."
+    },
+    {
+      "title": "Render trojstavu v markdown.ts",
+      "status": "done",
+      "detail": "Přidat HOISTED_NOTE konstantu (monorepo/hoisted, fail-closed → TS2307 mohou být artefakt; přiznat pnpm mez). V tscSection vybrat právě jednu větev: kořen má nm → nic; kořen nemá + hoisted + mezi nálezy je rule===TS2307 → HOISTED_NOTE; kořen nemá + ne-hoisted → stávající NODE_MODULES_NOTE (beze změny). Nikdy obě naráz."
+    },
+    {
+      "title": "Test detekce (tsc.ts) přes injektovaný probe",
+      "status": "done",
+      "detail": "Deterministicky bez reálného FS: hoisted=true (kořen ne, předek ano), false (nikde), zastavení na FS root, short-circuit když kořen node_modules má. Záruba: dočasné rozbití walku shodí test."
+    },
+    {
+      "title": "Test renderu (markdown.ts) trojstavu",
+      "status": "done",
+      "detail": "Vzájemná exkluze (nikdy obě poznámky), HOISTED_NOTE jen s reálným TS2307 nálezem (hoisted bez TS2307 → žádná nová poznámka), pnpm-like (kořen má nm) → žádná poznámka, ne-hoisted bez nm → stará poznámka."
+    },
+    {
+      "title": "Self-kontrola unhappy path + build + testy",
+      "status": "done",
+      "detail": "Projít checklist (exit kódy, dosažitelnost větví, kontrakt rule===TS2307 filtrován přes kód ne text), spustit npm test a build. U chybové cesty walku (např. EACCES na stat) ověřit, že nespadne, jen vrátí false."
+    }
+  ],
+  "startedAt": "2026-06-20T08:37:16.349Z",
+  "completedAt": "2026-06-20T09:04:47.969Z",
+  "autoCommit": {
+    "preSha": "fbc1d6d3012bfe210c9205acd017352e68969e7c",
+    "subject": "Phase 32: Monorepo: upozornit na hoisted node_modules"
+  }
+}

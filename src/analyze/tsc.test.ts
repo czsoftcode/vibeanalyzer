@@ -337,6 +337,62 @@ describe("analyzeTypeScript", () => {
     expect(res.findings.some((f) => f.rule === "TS6053")).toBe(true);
   }, 30_000);
 
+  // --- hoisted node_modules detekce (fáze 32) ---
+  // Probe je injektovatelný (deterministický, BEZ reálného FS výš): vrací true jen pro
+  // adresáře v `trueDirs` a loguje pořadí dotazů, ať jde ověřit i short-circuit a dojezd
+  // k FS root. analyzeTypeScript musí proběhnout (ran), aby pole vzniklo → minimální projekt.
+  async function ranWithProbe(trueDirs: (root: string) => string[]): Promise<{ res: Awaited<ReturnType<typeof analyzeTypeScript>>; queried: string[]; root: string }> {
+    const root = await tmp();
+    await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["ok.ts"] }));
+    await writeFile(path.join(root, "ok.ts"), "export const x = 1;\n");
+    const allow = new Set(trueDirs(root));
+    const queried: string[] = [];
+    const res = await analyzeTypeScript(root, {
+      hasNodeModulesDir: async (dir) => {
+        queried.push(dir);
+        return allow.has(dir);
+      },
+    });
+    return { res, queried, root };
+  }
+
+  it("hoisted: kořen bez node_modules, předek má → hoistedNodeModules=true", async () => {
+    const { res } = await ranWithProbe((root) => [path.dirname(root)]); // přímý rodič má node_modules
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.nodeModulesPresent).toBe(false);
+    expect(res.hoistedNodeModules).toBe(true);
+  }, 30_000);
+
+  it("ne-hoisted: node_modules nikde (ani výš) → hoistedNodeModules=false", async () => {
+    const { res } = await ranWithProbe(() => []); // probe vždy false
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.nodeModulesPresent).toBe(false);
+    expect(res.hoistedNodeModules).toBe(false);
+  }, 30_000);
+
+  it("ZUBY: kořen MÁ node_modules → hoisted=false a walk se VŮBEC nespustí (jen dotaz na kořen)", async () => {
+    // short-circuit: kdyby walk běžel i s lokálními node_modules, queried by mělo víc položek
+    const { res, queried, root } = await ranWithProbe((r) => [r]); // node_modules přímo v kořeni
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.nodeModulesPresent).toBe(true);
+    expect(res.hoistedNodeModules).toBe(false);
+    expect(queried).toEqual([root]); // POUZE kořen – žádný předek se nedotazoval
+  }, 30_000);
+
+  it("ZUBY: walk dojede až k FS root a tam zastaví (node_modules je jen v kořeni FS)", async () => {
+    const fsRoot = path.parse(await tmp()).root; // "/" na Linuxu
+    const { res, queried } = await ranWithProbe(() => [fsRoot]); // node_modules až úplně nahoře
+    expect(res.kind).toBe("ran");
+    if (res.kind !== "ran") return;
+    expect(res.hoistedNodeModules).toBe(true);
+    expect(queried).toContain(fsRoot); // walk se dostal až k FS root
+    // a nezacyklil se: FS root je dotázán právě jednou (zastávka dirname(p)===p)
+    expect(queried.filter((d) => d === fsRoot)).toHaveLength(1);
+  }, 30_000);
+
   it("zdravý projekt (relativní importy + lib Promise/Array) typuje BEZ falešných chyb", async () => {
     // ověření, že gate nerozbil legitimní cesty: import uvnitř root se resolvuje
     // a lib.es*.d.ts (Promise/Array – MIMO root, v přibaleném TS) se načte.

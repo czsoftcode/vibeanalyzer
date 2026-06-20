@@ -48,6 +48,13 @@ export type TscResult =
        * (TS2307 ap.) jsou očekávané a report to musí přiznat, ne vydávat za bug.
        */
       nodeModulesPresent: boolean;
+      /**
+       * Kořen NEMÁ `node_modules`, ale některý jeho PŘEDEK ano (hoisted závislosti
+       * – monorepo). Contained host (fáze 28) je fail-closed → importy balíčků padnou
+       * na TS2307; report to musí přiznat jako možný artefakt analýzy, ne chybu kódu.
+       * Když kořen `node_modules` MÁ, je `false` (walk se vůbec nespustí).
+       */
+      hoistedNodeModules: boolean;
       /** verze PŘIBALENÉHO TypeScriptu, kterou se typovalo (vždy se použije náš TS) */
       tsVersion: string;
       /**

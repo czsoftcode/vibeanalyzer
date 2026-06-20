@@ -9,6 +9,16 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- Report nově **rozpozná monorepo s hoisted závislostmi** a hlášky „nenalezený
+  modul" (TS2307) za takové situace nevydává za chybu kódu. Když v kořeni
+  analyzované složky chybí `node_modules`, ale leží **výš** (typické pro monorepa,
+  kde závislosti hoistnou o úroveň/víc nad balíček), a typová analýza zároveň reálně
+  nahlásila aspoň jednu hlášku „nenalezený modul", přidá se upozornění, že tyto
+  nálezy jsou nejspíš **artefakt analyzátoru** (čteme záměrně jen zadanou složku),
+  ne chyba projektu. Poznámky jsou vzájemně výlučné – nikdy se neukáže současně
+  „chybí node_modules" i „hoisted monorepo". Vědomé omezení v1: **pnpm** monorepo s
+  lokálním symlinkovaným `node_modules` v balíčku se takto nerozpozná. JSON index
+  proto povýšil na verzi 10 (`tsc.hoistedNodeModules`).
 - Typová analýza (`tsc`) je teď **zavřená do kořene analyzovaného projektu**. Dřív
   mohl `import "../../něco"` nebo `/// <reference path="../../něco" />` ukrytý ve
   zdrojáku přimět TypeScript přečíst soubor **mimo** analyzovanou složku a vtáhnout

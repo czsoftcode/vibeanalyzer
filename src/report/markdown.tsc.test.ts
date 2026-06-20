@@ -43,11 +43,13 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
     expect(md).toContain("- tsc: 1 nálezů");
   });
 
-  it("chybějící node_modules → upozornění o nenalezených modulech", () => {
-    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 1, nodeModulesPresent: false, tsVersion: "5.9.3" };
+  it("chybějící node_modules (ne-hoisted) → stará poznámka o nenalezených modulech", () => {
+    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 1, nodeModulesPresent: false, hoistedNodeModules: false, tsVersion: "5.9.3" };
     const md = buildMarkdown({ ...base, tsc });
     expect(md).toContain("chybí `node_modules`");
     expect(md).toContain("TS2307");
+    // vzájemná exkluze: ne-hoisted NESMÍ ukázat hoisted poznámku
+    expect(md).not.toContain("monorepo");
   });
 
   it("víceřádková zpráva i backtick se zploští do jedné odrážky", () => {
@@ -120,5 +122,32 @@ describe("buildMarkdown – sekce Strojové nálezy (tsc)", () => {
     const md = buildMarkdown({ ...base });
     expect(md).toContain("## Strojové nálezy (tsc)");
     expect(md).toContain("_tsc přeskočeno:");
+  });
+});
+
+describe("buildMarkdown – trojstav poznámky o node_modules (hoisted monorepo)", () => {
+  const ts2307 = { source: "tsc", severity: "error", file: "a.ts", line: 1, column: 1, rule: "TS2307", message: "Cannot find module 'lodash'." } as const;
+
+  it("hoisted + reálný TS2307 → hoisted poznámka, NE stará (vzájemná exkluze)", () => {
+    const tsc: TscResult = { kind: "ran", findings: [ts2307], fileCount: 1, nodeModulesPresent: false, hoistedNodeModules: true, tsVersion: "5.9.3" };
+    const md = buildMarkdown({ ...base, tsc });
+    expect(md).toContain("monorepo");
+    expect(md).toContain("hoisted");
+    // stará poznámka ("chybí node_modules") se NESMÍ objevit zároveň
+    expect(md).not.toContain("tsc běžel bez nainstalovaných závislostí");
+  });
+
+  it("hoisted, ale BEZ TS2307 → žádná poznámka (nic nepadlo, není co vysvětlovat)", () => {
+    const tsc: TscResult = { kind: "ran", findings: [], fileCount: 1, nodeModulesPresent: false, hoistedNodeModules: true, tsVersion: "5.9.3" };
+    const md = buildMarkdown({ ...base, tsc });
+    expect(md).not.toContain("monorepo"); // žádná hoisted poznámka bez reálné příčiny
+    expect(md).not.toContain("chybí `node_modules`"); // ani stará – kořen sice nemá, ale leží výš
+  });
+
+  it("pnpm-like (kořen MÁ node_modules) → žádná poznámka, i kdyby byl TS2307", () => {
+    const tsc: TscResult = { kind: "ran", findings: [ts2307], fileCount: 1, nodeModulesPresent: true, hoistedNodeModules: false, tsVersion: "5.9.3" };
+    const md = buildMarkdown({ ...base, tsc });
+    expect(md).not.toContain("monorepo");
+    expect(md).not.toContain("chybí `node_modules`");
   });
 });

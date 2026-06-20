@@ -86,6 +86,15 @@ const NODE_MODULES_NOTE =
   "> Pozor: v projektu chybí `node_modules` – tsc běžel bez nainstalovaných závislostí. " +
   "Chyby typu „nenalezený modul“ (TS2307 ap.) jsou za téhle situace očekávané, ne nutně chyba projektu.";
 
+const HOISTED_NOTE =
+  "> Pozor: v kořeni chybí `node_modules`, ale leží výš (monorepo s hoisted závislostmi). " +
+  "Analyzátor čte záměrně jen tuto složku (fail-closed), takže importy balíčků z nadřazeného " +
+  "`node_modules` padly na „nenalezený modul“ (TS2307) – tyto nálezy jsou nejspíš artefakt analýzy, " +
+  "ne chyba tvého kódu. Pozn.: pnpm monorepo s lokálním symlinkovaným `node_modules` takto nerozpoznáme.";
+
+/** Kód tsc diagnostiky „Cannot find module“ – kontrakt s toFinding v analyze/tsc.ts. */
+const TS_CANNOT_FIND_MODULE = "TS2307";
+
 /**
  * Sekce "## Strojové nálezy (tsc)". Vykreslí TŘI stavy odlišitelně, ať se "čistý
  * projekt" neplete s "vrstva neproběhla" (tichý falešný úspěch):
@@ -116,9 +125,21 @@ function tscSection(tsc: TscResult | undefined): string[] {
     );
     out.push("");
   }
+  // Trojstav (vzájemně výlučné – nikdy obě poznámky naráz): kořen MÁ node_modules →
+  // žádná poznámka; kořen NEMÁ, ale leží výš (hoisted) A tsc fakt nahlásil TS2307 →
+  // hoisted poznámka (přesnější příčina záplavy); kořen NEMÁ ani výš → stará poznámka
+  // (chybí závislosti). Hoisted se VÁŽE na reálný TS2307 (jinak by strašila bez příčiny);
+  // stará zůstává nepodmíněná jako dřív. Pozn.: hoisted-bez-TS2307 = žádná poznámka
+  // (nic nepadlo → není co vysvětlovat, a „chybí node_modules“ by lhalo).
   if (!tsc.nodeModulesPresent) {
-    out.push(NODE_MODULES_NOTE);
-    out.push("");
+    const hasMissingModule = tsc.findings.some((f) => f.rule === TS_CANNOT_FIND_MODULE);
+    if (tsc.hoistedNodeModules && hasMissingModule) {
+      out.push(HOISTED_NOTE);
+      out.push("");
+    } else if (!tsc.hoistedNodeModules) {
+      out.push(NODE_MODULES_NOTE);
+      out.push("");
+    }
   }
 
   if (tsc.findings.length === 0) {

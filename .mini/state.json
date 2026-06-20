@@ -157,6 +157,11 @@
       "id": 31,
       "title": "Render auditu: zobrazit info",
       "status": "done"
+    },
+    {
+      "id": 32,
+      "title": "Monorepo: upozornit na hoisted node_modules",
+      "status": "done"
     }
   ]
 }

@@ -14,7 +14,9 @@ import type { SecretsResult } from "../secrets.js";
  * `*.min.<ext>`) a `moduleGraph.minified` počítadlo z grafu vyřazených minifikátů.
  * Od verze 9 nese `secrets.skipped` počty záměrně přeskočených souborů skeneru
  * tajemství (minifikáty / velké / binárky / dlouhé řádky) – aby ani JSON tiše
- * nevynechával balast.
+ * nevynechával balast. Od verze 10 nese `tsc` (ran) příznak `hoistedNodeModules`
+ * (kořen bez `node_modules`, ale leží výš – monorepo; fail-closed analýza může dát
+ * falešné TS2307).
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -36,9 +38,9 @@ export interface JsonIndex {
   moduleGraph: ModuleGraphResult;
 }
 
-/** Bump 8 → 9: `secrets.skipped` nese počty záměrně přeskočených souborů
- *  (minifikáty / velké / dlouhé řádky / binárky). Kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 9;
+/** Bump 9 → 10: `tsc` (ran) nese `hoistedNodeModules` – nové povinné pole mění tvar
+ *  embedded výsledku v každém JSON. Kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 10;
 
 export function buildJsonIndex(
   root: string,

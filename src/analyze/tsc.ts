@@ -16,6 +16,12 @@ export interface TscAnalyzeDeps {
   onStart?: (fileCount: number, tsVersion: string) => void;
   /** injektovatelné čtení verze TS projektu (test si podstrčí svou); jinak reálné */
   readProjectTsVersion?: (root: string) => Promise<string | undefined>;
+  /**
+   * Injektovatelné zjištění, zda adresář obsahuje `node_modules` (test si podstrčí
+   * deterministický probe); jinak reálný stat. Sdílí se pro kontrolu kořene i pro
+   * walk přes předky (hoisted závislosti / monorepo).
+   */
+  hasNodeModulesDir?: (dir: string) => Promise<boolean>;
 }
 
 /**
@@ -122,7 +128,11 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   // a report by lhal "0 nálezů" nad rozbitým configem (tichý falešný úspěch).
   const diagnostics = [...configDiagnostics, ...ts.getPreEmitDiagnostics(program)];
   const findings = [...diagnostics.map((d) => toFinding(ts, d, root)), ...containmentFindings];
-  const nodeModulesPresent = await hasNodeModules(root);
+  const hasNmDir = deps.hasNodeModulesDir ?? hasNodeModulesDir;
+  const nodeModulesPresent = await hasNmDir(root);
+  // Hoisted detekce má smysl JEN když kořen node_modules nemá – jinak walk přeskočíme
+  // (žádné procházení FS) a hoisted je false (kořen má závislosti lokálně).
+  const hoistedNodeModules = nodeModulesPresent ? false : await ancestorHasNodeModules(root, hasNmDir);
 
   // Verzi TS projektu jen ČTEME (data), abychom přiznali případný rozdíl proti
   // přibalené verzi. projectTsVersion vyplníme JEN když existuje a LIŠÍ SE – jinak
@@ -130,7 +140,7 @@ export async function analyzeTypeScript(root: string, deps: TscAnalyzeDeps = {})
   const projectTs = await readProjectTsVersion(root);
   const projectTsVersion = projectTs && projectTs !== version ? projectTs : undefined;
 
-  return { kind: "ran", findings, fileCount: insideFiles.length, nodeModulesPresent, tsVersion: version, projectTsVersion };
+  return { kind: "ran", findings, fileCount: insideFiles.length, nodeModulesPresent, hoistedNodeModules, tsVersion: version, projectTsVersion };
 }
 
 /**
@@ -255,12 +265,32 @@ async function readProjectTypescriptVersion(root: string): Promise<string | unde
   }
 }
 
-async function hasNodeModules(root: string): Promise<boolean> {
+async function hasNodeModulesDir(dir: string): Promise<boolean> {
   try {
-    const s = await stat(path.join(root, "node_modules"));
+    const s = await stat(path.join(dir, "node_modules"));
     return s.isDirectory();
   } catch {
     return false;
+  }
+}
+
+/**
+ * Má některý PŘEDEK kořene `node_modules`? (hoisted závislosti – monorepo, kde
+ * `node_modules` leží o úroveň/víc výš). Jde od path.dirname(root) nahoru až k FS
+ * root (kde path.dirname(p) === p) a vrátí true u prvního nalezeného.
+ *
+ * NENÍ to bezpečnostní hranice (jen informativní poznámka do reportu), proto stačí
+ * prostý dirname-loop bez realpathu/symlink-rozpletu – na rozdíl od contained hostu.
+ * Chybové cesty (EACCES, ENOENT) řeší probe sám: vrací false (radši nezahlásit než
+ * spadnout), takže walk plyne dál a nikdy nehází.
+ */
+async function ancestorHasNodeModules(root: string, probe: (dir: string) => Promise<boolean>): Promise<boolean> {
+  let dir = path.dirname(path.resolve(root));
+  for (;;) {
+    if (await probe(dir)) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false; // dosáhli jsme kořene filesystému (dir byl zkontrolován výše)
+    dir = parent;
   }
 }
 
