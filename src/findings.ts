@@ -4,8 +4,8 @@
  * vykreslují). Pozdější ESLint i AI vrstva se nabalí sem, ne každá zvlášť.
  */
 
-/** Který nástroj nález vyrobil. (AI vrstva rozšíří v dalších fázích.) */
-export type FindingSource = "tsc" | "eslint" | "secret" | "audit";
+/** Který nástroj nález vyrobil. `ai` = nález z AI analýzy (non-goaly, fáze 43+). */
+export type FindingSource = "tsc" | "eslint" | "secret" | "audit" | "ai";
 
 /** Závažnost nálezu, sjednocená napříč nástroji. */
 export type Severity = "error" | "warning" | "info";

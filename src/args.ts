@@ -1,13 +1,26 @@
 import { constants as fsConstants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import * as path from "node:path";
+import type { AiModelChoice } from "./analyze/aiStatus.js";
 import { projectKey } from "./projectPaths.js";
+
+/** Povolené hodnoty `--ai-model` (kontrakt s AiModelChoice). */
+const AI_MODELS: readonly AiModelChoice[] = ["opus", "sonnet"];
 
 /** Výsledek parsování argumentů příkazové řádky. */
 export type ParsedArgs =
   | { kind: "help" }
   | { kind: "version" }
-  | { kind: "run"; targetPath: string; outDir: string | null; audit: boolean; dev: boolean; aiCheck: boolean }
+  | {
+      kind: "run";
+      targetPath: string;
+      outDir: string | null;
+      audit: boolean;
+      dev: boolean;
+      aiCheck: boolean;
+      aiAnalyze: boolean;
+      aiModel: AiModelChoice;
+    }
   | { kind: "error"; message: string };
 
 /**
@@ -30,8 +43,10 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * `--audit` zapne (opt-in) audit závislostí přes `npm audit` (síťová operace).
  * `--dev` k auditu přidá i vývojové závislosti; SAMOTNÉ `--dev` (bez `--audit`)
  * je neúčinné – parser ho jen zaznamená, varování řeší CLI (args bez side efektů).
- * `--ai-check` zapne (opt-in) reálný testovací dotaz na API; bez něj se AI vrstva
- * jen podívá po klíči (offline). Vyhodnocení (síť, klíč) řeší CLI, ne parser.
+ * `--ai-check` zapne (opt-in) levný testovací dotaz na API; bez něj se AI vrstva
+ * jen podívá po klíči (offline). `--ai` zapne (opt-in) reálnou analýzu non-goalů
+ * (drahá cesta); `--ai-model <opus|sonnet>` volí model (default opus). Vyhodnocení
+ * (síť, klíč, samotné --ai-model bez --ai) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let target: string | undefined;
@@ -39,6 +54,8 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let audit = false;
   let dev = false;
   let aiCheck = false;
+  let aiAnalyze = false;
+  let aiModel: AiModelChoice = "opus";
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
@@ -77,6 +94,27 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       aiCheck = true;
       continue;
     }
+    if (a === "--ai") {
+      aiAnalyze = true;
+      continue;
+    }
+    if (a === "--ai-model") {
+      const val = argv[i + 1];
+      if (val === undefined || !AI_MODELS.includes(val as AiModelChoice)) {
+        return { kind: "error", message: `Volba --ai-model vyžaduje model: ${AI_MODELS.join(" | ")}.` };
+      }
+      aiModel = val as AiModelChoice;
+      i++;
+      continue;
+    }
+    if (a.startsWith("--ai-model=")) {
+      const val = a.slice("--ai-model=".length);
+      if (!AI_MODELS.includes(val as AiModelChoice)) {
+        return { kind: "error", message: `Volba --ai-model vyžaduje model: ${AI_MODELS.join(" | ")}.` };
+      }
+      aiModel = val as AiModelChoice;
+      continue;
+    }
     if (a.startsWith("-")) {
       return { kind: "error", message: `Neznámá volba: ${a}` };
     }
@@ -89,7 +127,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir, audit, dev, aiCheck };
+  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiAnalyze, aiModel };
 }
 
 /** Výsledek validace cílové cesty. */

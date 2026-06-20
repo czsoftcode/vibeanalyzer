@@ -28,8 +28,8 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 12 (`ai` má variantu `verified`)", () => {
-    expect(INDEX_VERSION).toBe(12);
+  it("verze indexu je 13 (`ai` má variantu `analyzed`)", () => {
+    expect(INDEX_VERSION).toBe(13);
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {
@@ -47,6 +47,15 @@ describe("buildJsonIndex", () => {
     expect(ready.ai).toEqual({ kind: "ready" });
     const verified = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, { kind: "verified" });
     expect(verified.ai).toEqual({ kind: "verified" });
+    const analyzedAi: AiStatus = {
+      kind: "analyzed",
+      model: "opus",
+      findings: [{ source: "ai", severity: "error", file: "a.ts", line: 1, rule: "non-goal: x", message: "m" }],
+      usage: { inputTokens: 100, outputTokens: 20 },
+      costUsd: 0.001,
+    };
+    const analyzed = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, analyzedAi);
+    expect(analyzed.ai).toEqual(analyzedAi);
   });
 
   it("nese files 1:1 včetně příznaku minified (kontrakt JSONu)", () => {

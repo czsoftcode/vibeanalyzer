@@ -18,8 +18,9 @@ import type { SecretsResult } from "../secrets.js";
  * nevynechával balast. Od verze 10 nese `tsc` (ran) příznak `hoistedNodeModules`
  * (kořen bez `node_modules`, ale leží výš – monorepo; fail-closed analýza může dát
  * falešné TS2307). Od verze 11 nese stav AI vrstvy (`ai`). Od verze 12 má `ai` i
- * variantu `verified` (reálný testovací dotaz na API proběhl, jen s `--ai-check`)
- * vedle `ready` (klíč je, dotaz neproběhl) a `skipped` (chybí klíč / síť / odmítnutí).
+ * variantu `verified` (levný testovací dotaz, `--ai-check`). Od verze 13 má i
+ * variantu `analyzed` (reálná analýza non-goalů přes `--ai`): nese `findings`,
+ * skutečnou `usage` (tokeny) a `costUsd` (odhad ceny).
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -39,14 +40,15 @@ export interface JsonIndex {
   audit: AuditResult;
   /** graf importních závislostí mezi zdrojovými soubory */
   moduleGraph: ModuleGraphResult;
-  /** stav AI vrstvy: ready = klíč nalezen (dotaz neproběhl), verified = dotaz na
-   *  API proběhl (--ai-check), skipped = důvod přeskočení (chybí klíč / síť / 401) */
+  /** stav AI vrstvy: ready = klíč nalezen (dotaz neproběhl), verified = ping
+   *  (--ai-check), analyzed = reálná analýza non-goalů (--ai; nálezy+usage+cena),
+   *  skipped = důvod přeskočení (chybí klíč / síť / 401 / žádné non-goaly) */
   ai: AiStatus;
 }
 
-/** Bump 11 → 12: `ai` má novou variantu `verified` (reálné ověření přes --ai-check).
- *  Rozšíření tvaru unie = kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 12;
+/** Bump 12 → 13: `ai` má novou variantu `analyzed` (reálná analýza přes --ai, nese
+ *  findings/usage/costUsd). Rozšíření tvaru unie = kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 13;
 
 export function buildJsonIndex(
   root: string,

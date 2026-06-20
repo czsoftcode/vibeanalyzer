@@ -1,9 +1,11 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { AI_MISSING_KEY_REASON, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
+import { collectAiPayload } from "./analyze/aiPayload.js";
 import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { auditDependencies, type AuditResult } from "./audit.js";
@@ -38,7 +40,9 @@ Argumenty:
 
 Volby:
   -o, --out <dir>  Kam uložit výstupy (výchozí: ~/.vibeanalyzer/<jméno projektu>).
-  --ai-check       Pošle testovací dotaz na Anthropic API (vyžaduje ANTHROPIC_API_KEY).
+  --ai-check       Pošle levný testovací dotaz na Anthropic API (vyžaduje ANTHROPIC_API_KEY).
+  --ai             Reálná AI analýza non-goalů (drahé, vyžaduje ANTHROPIC_API_KEY).
+  --ai-model <m>   Model pro --ai: opus (výchozí) nebo sonnet.
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
 
@@ -165,8 +169,10 @@ export interface RunDeps {
   moduleGraphFn?: typeof buildModuleGraph;
   /** Injektovatelný AI ping (test si podstrčí fake; jinak reálný přes import SDK). */
   aiPingFn?: typeof realAiPing;
-  /** Injektovatelná klasifikace chyby pingu (test si podstrčí; jinak reálná). */
+  /** Injektovatelná klasifikace chyby pingu/analýzy (test si podstrčí; jinak reálná). */
   aiClassifyFn?: typeof classifyAiError;
+  /** Injektovatelné reálné volání analýzy (test si podstrčí fake; jinak reálné přes SDK). */
+  aiAnalyzeFn?: typeof realAiAnalyze;
 }
 
 export async function run(
@@ -407,7 +413,47 @@ export async function run(
   // injektujeme (testy bez sítě), default běh tak ani nenahraje @anthropic-ai/sdk –
   // načte se až tady přes dynamický import() jen když uživatel ověření vyžádal.
   let ai: AiStatus;
-  if (parsed.aiCheck) {
+  if (parsed.aiAnalyze) {
+    // Reálná (drahá) analýza non-goalů. Klíč zkontrolujeme PŘED čtením souborů –
+    // bez klíče nemá smysl číst projekt ani volat API. analyze/classify injektujeme
+    // (testy bez sítě); SDK (aiAnalyze) i orchestrátor (aiResult) se načtou dynamicky
+    // až tady, ať default běh nenahrává @anthropic-ai/sdk.
+    const pre = detectAiStatus(process.env);
+    if (pre.kind === "skipped") {
+      ai = pre;
+      console.error(AI_KEY_HINT);
+    } else {
+      let analyze = deps.aiAnalyzeFn;
+      let classify = deps.aiClassifyFn;
+      if (!analyze || !classify) {
+        const [an, pg] = await Promise.all([import("./analyze/aiAnalyze.js"), import("./analyze/aiPing.js")]);
+        analyze ??= an.realAiAnalyze;
+        classify ??= pg.classifyAiError;
+      }
+      const { runAiAnalysis } = await import("./analyze/aiResult.js");
+      const payload = await collectAiPayload(result.files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
+      console.error(`AI analýza (model ${parsed.aiModel}) běží – u velkého projektu může trvat minuty, neukončuj…`);
+      try {
+        ai = await runAiAnalysis(process.env, intent, payload, parsed.aiModel, analyze, classify);
+      } catch (err: unknown) {
+        // Jen NEČEKANÁ chyba (classify ji nezná – špatný tvar odpovědi, programová
+        // chyba). Nemaskujeme tiše: vypíšeme stack a degradujeme na přeskočeno
+        // (report se stejně vyrobí, exit 0).
+        const e = err as Error;
+        console.error(`Upozornění: AI analýza (--ai) selhala nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+        ai = { kind: "skipped", reason: "AI analýza selhala nečekaně (viz stderr)" };
+      }
+      if (ai.kind === "analyzed") {
+        console.error(
+          `AI analýza (${ai.model}): ${ai.findings.length} nálezů, ` +
+            `tokeny ${ai.usage.inputTokens} vstup + ${ai.usage.outputTokens} výstup, odhad ceny ~$${ai.costUsd.toFixed(4)}.`,
+        );
+        if (payload.truncated) {
+          console.error("Pozn.: kód byl kvůli velikosti uříznut – analýza je neúplná (viz report).");
+        }
+      }
+    }
+  } else if (parsed.aiCheck) {
     let ping = deps.aiPingFn;
     let classify = deps.aiClassifyFn;
     if (!ping || !classify) {

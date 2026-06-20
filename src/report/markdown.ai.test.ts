@@ -40,6 +40,34 @@ describe("buildMarkdown – sekce AI vrstvy: dva rozlišitelné stavy", () => {
     expect(md).not.toContain("AI přeskočeno");
   });
 
+  it("analyzed → vykreslí nálezy (přes formatLocation), tokeny a cenu + souhrn 'analyzováno'", () => {
+    const md = buildMarkdown({
+      ...base,
+      ai: {
+        kind: "analyzed",
+        model: "opus",
+        findings: [{ source: "ai", severity: "error", file: "a.ts", line: 5, rule: "non-goal: Nespouštět kód", message: "spouští kód" }],
+        usage: { inputTokens: 1234, outputTokens: 56 },
+        costUsd: 0.0123,
+      },
+    });
+    expect(md).toContain("model opus");
+    expect(md).toContain("1234 vstup + 56 výstup");
+    expect(md).toContain("~$0.0123");
+    expect(md).toContain("`a.ts:5`"); // místo přes formatLocation
+    expect(md).toContain("spouští kód");
+    expect(md).toContain("- AI (logika a non-goaly): analyzováno (1 nálezů, ~$0.0123)");
+  });
+
+  it("analyzed bez nálezů → 'Žádné porušení...' (ne tiché prázdno)", () => {
+    const md = buildMarkdown({
+      ...base,
+      ai: { kind: "analyzed", model: "sonnet", findings: [], usage: { inputTokens: 10, outputTokens: 2 }, costUsd: 0 },
+    });
+    expect(md).toContain("Žádné porušení deklarovaných non-goalů nenalezeno");
+    expect(md).toContain("analyzováno (0 nálezů");
+  });
+
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {
     const md = buildMarkdown({ ...base, ai: detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" }) });
     expect(md).not.toContain("super-secret");

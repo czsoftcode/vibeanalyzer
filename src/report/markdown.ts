@@ -360,6 +360,21 @@ function aiSection(ai: AiStatus | undefined): string[] {
     return out;
   }
 
+  if (ai.kind === "analyzed") {
+    out.push(
+      `_AI analýza non-goalů (model ${sanitizeInline(ai.model)}): tokeny ${ai.usage.inputTokens} vstup + ` +
+        `${ai.usage.outputTokens} výstup, odhad ceny ~$${ai.costUsd.toFixed(4)}._`,
+    );
+    out.push("");
+    if (ai.findings.length === 0) {
+      out.push("Žádné porušení deklarovaných non-goalů nenalezeno.");
+    } else {
+      for (const f of ai.findings) out.push(renderFinding(f));
+    }
+    out.push("");
+    return out;
+  }
+
   out.push("_AI připraveno (klíč nalezen, dotaz zatím neproběhl)._");
   out.push("");
   return out;
@@ -369,6 +384,9 @@ function aiSection(ai: AiStatus | undefined): string[] {
 function aiSummaryLine(ai: AiStatus | undefined): string {
   if (!ai || ai.kind === "skipped") return "- AI (logika a non-goaly): přeskočeno";
   if (ai.kind === "verified") return "- AI (logika a non-goaly): ověřeno";
+  if (ai.kind === "analyzed") {
+    return `- AI (logika a non-goaly): analyzováno (${ai.findings.length} nálezů, ~$${ai.costUsd.toFixed(4)})`;
+  }
   return "- AI (logika a non-goaly): připraveno";
 }
 

@@ -1,16 +1,33 @@
+import type { Finding } from "../findings.js";
+
+/** Který analytický model uživatel zvolil (`--ai-model`). Sdílený literál (kontrakt
+ *  args ↔ cli ↔ analýza ↔ cenová tabulka). Mapování na ID modelu je v aiResult.ts. */
+export type AiModelChoice = "opus" | "sonnet";
+
+/** Spotřeba tokenů z odpovědi API (z `usage`). `inputTokens` může být null (fallback),
+ *  proto se při čtení coalescuje na 0 – sem ukládáme už číslo. */
+export interface AiUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /**
- * Stav AI vrstvy. Tři rozlišitelné stavy (diskriminovaná unie jako u ostatních
- * vrstev – tsc, audit, …), aby ze strojového výstupu šlo poznat, co se stalo:
- *   - `skipped`  – AI neproběhla (chybí klíč, síť/timeout, odmítnutý klíč) + důvod.
+ * Stav AI vrstvy. Rozlišitelné stavy (diskriminovaná unie jako u ostatních vrstev –
+ * tsc, audit, …), aby ze strojového výstupu šlo poznat, co se stalo:
+ *   - `skipped`  – AI neproběhla (chybí klíč, síť/timeout, odmítnutý klíč, žádné
+ *                  non-goaly) + důvod.
  *   - `ready`    – klíč nalezen, ale reálný dotaz NEPROBĚHL (default běh bez
- *                  `--ai-check`). NE falešné „hotovo".
- *   - `verified` – reálný testovací dotaz na API proběhl (jen s `--ai-check`).
+ *                  `--ai-check`/`--ai`). NE falešné „hotovo".
+ *   - `verified` – levný testovací dotaz na API proběhl (jen s `--ai-check`).
  *                  Schválně ne dřív: `ready` ≠ „ověřeno".
+ *   - `analyzed` – reálná analýza non-goalů proběhla (jen s `--ai`): nese nálezy,
+ *                  skutečnou spotřebu tokenů a spočítanou cenu.
  */
 export type AiStatus =
   | { kind: "skipped"; reason: string }
   | { kind: "ready" }
-  | { kind: "verified" };
+  | { kind: "verified" }
+  | { kind: "analyzed"; model: AiModelChoice; findings: Finding[]; usage: AiUsage; costUsd: number };
 
 /** Jméno env proměnné s klíčem k Anthropic API. Sdílený literál (kontrakt). */
 export const AI_KEY_ENV = "ANTHROPIC_API_KEY";

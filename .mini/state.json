@@ -212,6 +212,11 @@
       "id": 42,
       "title": "AI vrstva: reálný dotaz na Anthropic",
       "status": "done"
+    },
+    {
+      "id": 43,
+      "title": "Reálná AI analýza + měření nákladů",
+      "status": "done"
     }
   ]
 }

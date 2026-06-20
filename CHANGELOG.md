@@ -7,6 +7,8 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-20
+
 ### Added
 
 - Report nově zahrnuje **AI vrstvu (logika a non-goaly)** – zatím jen bránu
@@ -21,11 +23,20 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   s konkrétním důvodem a nástroj doběhne (exit 0). Když klíč chybí, na stderr se
   vypíše, jak ho nastavit (proměnná prostředí nebo `node --env-file`). Hodnota
   klíče se nikdy nedostane do reportu ani na stderr.
+- Nový přepínač **`--ai`** spustí reálnou **AI analýzu non-goalů**: vybraný
+  zdrojový kód projektu se pošle na Claude (model přes **`--ai-model opus|sonnet`**,
+  výchozí opus) a vrátí se nálezy porušení deklarovaných non-goalů, každý
+  s odkazem na konkrétní místo v kódu (ověřené proti poslanému souboru – jinak
+  označené „místo neověřeno"). Report i stderr ukážou **skutečnou spotřebu tokenů
+  a odhad ceny**. Drahá cesta je opt-in; bez `--ai` se nic neposílá. Volání běží
+  přes streaming (drží spojení živé u dlouhé analýzy) a bez retry – aby se
+  nestalo, že u velkého projektu zaplatíš za výsledek, který klient zahodí.
 
 ### Changed
 
-- Strojový JSON index má **verzi 12** – nově nese pole `ai` se stavem AI vrstvy,
-  včetně varianty „ověřeno" (po `--ai-check`). Změna tvaru pro konzumenty JSON.
+- Strojový JSON index má **verzi 13** – pole `ai` nově nese i variantu
+  „analyzováno" (po `--ai`) s nálezy, spotřebou tokenů a cenou. Změna tvaru pro
+  konzumenty JSON.
 
 ### Fixed
 

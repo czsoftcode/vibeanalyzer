@@ -1,0 +1,49 @@
+{
+  "id": 43,
+  "title": "Reálná AI analýza + měření nákladů",
+  "goal": "První měřitelný kus fáze 6: poslat ohraničenou část projektu (žádné krájení na desítky částí) spolu se záměrem z project.md na opus-4.8 a vrátit strukturované nálezy, každý mířící na konkrétní místo v kódu (file:line, obrana proti halucinaci – zatím tvrzené místo, plné ověření existence řádku až následně). Hlavní výstup: zaznamenat a zobrazit SKUTEČNOU spotřebu tokenů (z usage v odpovědi API) a spočítanou cenu – empirický základ pro pozdější odhad (fáze 5c). Analytický model opus-4.8 (ping zůstává haiku). Testy mockují SDK a ověří jen zapojení (prompt se složí, usage se zachytí, cena se spočítá, odpověď se naparsuje), ne konkrétní nálezy; reálné měření je ruční běh (testuje se na tomhle projektu – není rozsáhlý). Drahá cesta zůstává opt-in (za --ai-check nebo obdobnou bránou), aby default běh dál neutrácel.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "CLI: --ai + výběr modelu --ai-model + test",
+      "status": "done",
+      "detail": "args.ts: nový bool --ai (reálná analýza) a --ai-model <opus|sonnet> (default opus). Parser je rozpozná, neznámý model = chyba. Test reálného parsování (default opus, přepnutí na sonnet, --ai bez modelu, neznámý model chybuje)."
+    },
+    {
+      "title": "Sběr payloadu z projektu pod stropem (čistý modul) + test",
+      "status": "done",
+      "detail": "Nový modul (aiPayload.ts): z naskenovaných souborů vybrat zdrojové (.ts/.js/.tsx/.jsx…) bez minifikátů/binárek/velkých, přečíst obsahy (reader injektovaný), složit do textu s hlavičkami cest POD char/token stropem (konstanta). Vrátí { text, includedFiles: {path, lineCount}[], truncated }. Test: filtry, uříznutí nad strop → truncated:true, zachycené počty řádků."
+    },
+    {
+      "title": "Reálný AI dotaz na non-goaly: prompt + JSON schema + SDK call",
+      "status": "done",
+      "detail": "Nový modul (aiAnalyze.ts): sestavit prompt (záměr building + nonGoals + payload), JSON schéma pro non-goal nálezy (file, line, severity, který non-goal, message) přes output_config.format, zavolat zvolený model (maxRetries 1-2, timeout ~120 s, non-streaming, max_tokens ~4-8k, adaptive thinking). Vrátí surový strukturovaný výsledek + usage. Tenká síťová část (jako realAiPing), injektovatelná."
+    },
+    {
+      "title": "Zpracování výsledku: parse → Finding[] + kontrola místa + cena (čisté funkce) + testy",
+      "status": "done",
+      "detail": "Naparsovat schéma → Finding[] (source ai, který non-goal v rule); kontrola halucinace (file v poslaném setu + line ≤ lineCount → jinak místo neověřeno); cena z usage × cenová tabulka (opus 5/25, sonnet 3/15 za MTok). Testy s fake výsledkem + fake usage: mapování, kontrola místa (uvnitř/mimo), výpočet ceny pro oba modely."
+    },
+    {
+      "title": "AiStatus.analyzed + zapojení do cli.ts + degradace + cena na stderr",
+      "status": "done",
+      "detail": "Rozšířit union o analyzed { model, findings, usage, costUsd }. V cli.ts za --ai spustit analýzu (deps injektované), degradace jako u pingu (síť/timeout/401 → skipped + důvod, exit 0; nečekaná chyba → stack + degrade), chybějící klíč → stávající hláška, cenu na stderr. Klíč ani obsah kódu nad rámec nálezů se nesmí dostat do reportu/stderr."
+    },
+    {
+      "title": "Report: analyzed v JSON (verze 13) i markdownu + testy",
+      "status": "done",
+      "detail": "jsonIndex.ts bump 12 → 13; markdown.ts větev analyzed – vykreslit nálezy (přes formatLocation), počet tokenů a cenu. Testy renderu."
+    },
+    {
+      "title": "Doběh: tsc + suite + reálný běh (měření) + nezávislý sub-agent",
+      "status": "done",
+      "detail": "tsc, celá suite. Reálný ruční běh --ai na tomhle projektu (opus i sonnet) – zaznamenat skutečné tokeny a cenu (smysl fáze). Fáze sahá na vstupní bod (--ai/--ai-model) a kontrakty (JSON verze, union, prompt↔schéma) → před reportem nezávislý sub-agent (čerstvý kontext)."
+    }
+  ],
+  "startedAt": "2026-06-20T14:50:26.169Z",
+  "completedAt": "2026-06-20T15:58:14.110Z",
+  "autoCommit": {
+    "preSha": "f5f952aafae6fefe185ea2638f915bba3b8bf3cb",
+    "subject": "Phase 43: Reálná AI analýza + měření nákladů"
+  }
+}
