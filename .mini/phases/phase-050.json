@@ -1,0 +1,6 @@
+{
+  "id": 50,
+  "title": "glm: vyšší strop výstupu a thinking",
+  "goal": "Pro glm zvednout AI_ANALYZE_MAX_TOKENS na 64k jako per-model hodnotu (opus/sonnet beze změny) a posílat platný thinking type=enabled s nižším reasoning effort místo neplatného type=adaptive, aby --ai-logic --ai-model=glm na reálném projektu nepadalo na stop_reason=max_tokens a vrátilo nálezy mířící na konkrétní místo v kódu.",
+  "status": "proposed"
+}

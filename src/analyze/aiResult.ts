@@ -45,6 +45,14 @@ export const SYSTEM_PROMPT = [
   "- `nonGoalIndex` je 0-based index do seznamu non-goalů, který porušení odpovídá.",
   "- Nevymýšlej si soubory ani řádky, které v poslaném kódu nejsou.",
   "- `message` piš česky, stručně: co a proč non-goal porušuje.",
+  "",
+  "Odpověz VÝHRADNĚ JSON objektem PŘESNĚ tohoto tvaru (klíč `findings` je povinný obal,",
+  "ne holé pole; každá položka má přesně tato pole, nic navíc):",
+  '{ "findings": [ { "file": "<cesta>", "line": <číslo>, "nonGoalIndex": <0-based index>,',
+  '    "severity": "error|warning|info", "message": "<popis>" } ] }',
+  "Když nic neporušuje, vrať `{ \"findings\": [] }`. (Tvar dodrž i bez ohledu na to, co o",
+  "formátu říká API – řídí se TÍMTO popisem.) Vrať ČISTÝ JSON – žádný markdown, žádné ```",
+  "ohrazení (code fence), žádný text před ani za JSONem.",
 ].join("\n");
 
 /** Sestaví uživatelský prompt: záměr + číslované non-goaly + (případně přiznané
@@ -113,11 +121,9 @@ export function unwrapFindings(rawText: string, label = ""): unknown[] {
  * nechá probublat, na hranici CLI degraduje se stackem.
  */
 export function parseFindings(rawText: string): RawAiFinding[] {
-  const data = JSON.parse(rawText) as unknown;
-  if (typeof data !== "object" || data === null || !Array.isArray((data as { findings?: unknown }).findings)) {
-    throw new Error("AI odpověď nemá očekávaný tvar { findings: [...] }");
-  }
-  const arr = (data as { findings: unknown[] }).findings;
+  // Přijme obal `{ findings: [...] }` i holé `[...]` (vč. markdown fence) – glm (Z.ai) nectí
+  // output_config schéma. Validaci polí níže (vč. severity) NEMĚNÍME: žádné defaultování.
+  const arr = unwrapFindings(rawText, "(non-goal) ");
   return arr.map((item, i) => {
     if (typeof item !== "object" || item === null) {
       throw new Error(`AI nález #${i} není objekt`);
@@ -496,6 +502,15 @@ export const SYSTEM_PROMPT_LOGIC = [
   "- Nevymýšlej si soubory ani řádky, které v poslaném kódu nejsou.",
   "- `kind` je krátký druh rozporu česky (např. „chybí funkčnost\", „rozpor se záměrem\").",
   "- `message` piš česky, stručně: co kód (ne)dělá a jak se to s záměrem rozchází.",
+  "",
+  "Odpověz VÝHRADNĚ JSON objektem PŘESNĚ tohoto tvaru (klíč `findings` je povinný obal,",
+  "ne holé pole). `file` a `line` jsou NEPOVINNÉ – uveď je jen tehdy, když rozpor míří na",
+  "konkrétní místo; u soudu o celku je VYNECH (klidně celý objekt jen s kind/severity/message):",
+  '{ "findings": [ { "file": "<cesta, volitelné>", "line": <číslo, volitelné>,',
+  '    "kind": "<druh>", "severity": "error|warning|info", "message": "<popis>" } ] }',
+  "Když kód záměr naplňuje, vrať `{ \"findings\": [] }`. (Tvar dodrž i bez ohledu na to, co",
+  "o formátu říká API – řídí se TÍMTO popisem.) Vrať ČISTÝ JSON – žádný markdown, žádné ```",
+  "ohrazení (code fence), žádný text před ani za JSONem.",
 ].join("\n");
 
 /** Sestaví uživatelský prompt pro logickou analýzu: záměr ("What I'm building") + slepený
@@ -528,11 +543,9 @@ export interface RawLogicFinding {
  * pořádku, ale když přijdou, musí mít správný typ (jinak hodíme).
  */
 export function parseLogicFindings(rawText: string): RawLogicFinding[] {
-  const data = JSON.parse(rawText) as unknown;
-  if (typeof data !== "object" || data === null || !Array.isArray((data as { findings?: unknown }).findings)) {
-    throw new Error("AI odpověď (logic) nemá očekávaný tvar { findings: [...] }");
-  }
-  const arr = (data as { findings: unknown[] }).findings;
+  // Přijme obal `{ findings: [...] }` i holé `[...]` (vč. markdown fence) – glm (Z.ai) nectí
+  // output_config schéma. Validaci polí níže (vč. nepovinného místa) NEMĚNÍME.
+  const arr = unwrapFindings(rawText, "(logic) ");
   return arr.map((item, i) => {
     if (typeof item !== "object" || item === null) {
       throw new Error(`AI logic nález #${i} není objekt`);

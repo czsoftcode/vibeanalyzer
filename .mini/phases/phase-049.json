@@ -1,0 +1,39 @@
+{
+  "id": 49,
+  "title": "glm pro non-goal a logic",
+  "goal": "Zapojit sdílený unwrapFindings (fence + obal i holé pole) do parseFindings a parseLogicFindings a doplnit explicitní kontrakt tvaru + příklad do SYSTEM_PROMPT a SYSTEM_PROMPT_LOGIC, aby --ai-non-goal --ai-model=glm i --ai-logic --ai-model=glm na malém projektu vrátily reálné nálezy (ne skipped).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Zpevnit SYSTEM_PROMPT (non-goal): kontrakt tvaru + příklad",
+      "status": "done",
+      "detail": "Přidat explicitní 'odpověz výhradně JSON tvaru { findings: [...] }, čistý JSON bez code fence' + minimální neutrální příklad jedné položky s povinným nonGoalIndex (0-based). Příklad držet tak, ať nevypadá jako reálný nález ke zkopírování (obrana proti echu)."
+    },
+    {
+      "title": "Zpevnit SYSTEM_PROMPT_LOGIC: kontrakt tvaru + příklad",
+      "status": "done",
+      "detail": "Totéž pro logic, příklad musí ukázat, že file/line jsou NEpovinné (jedna položka s místem, zmínka že u soudu o celku se vynechají). Bez nonGoalIndex."
+    },
+    {
+      "title": "parseFindings a parseLogicFindings přes unwrapFindings",
+      "status": "done",
+      "detail": "V obou parserech nahradit přímý JSON.parse(rawText) voláním unwrapFindings(rawText, '(non-goal) '/'(logic) '). Striktní validaci polí (vč. severity a nepovinného místa u logic) NEMĚNIT. Žádné defaultování."
+    },
+    {
+      "title": "Testy se zuby pro oba parsery",
+      "status": "done",
+      "detail": "Pro každý: (a) holé [...] i obal {findings:[...]} dají stejný výsledek; (b) sloupnutí markdown fence; (c) položka bez/se špatnou severity se ODMÍTNE (hodí). U logic navíc: chybějící file/line projde, ale špatný typ file/line hodí. Existující obalové testy musí projít beze změny."
+    },
+    {
+      "title": "Živá akceptační brána glm + adversarial self-review",
+      "status": "done",
+      "detail": "Reálně --ai-non-goal --ai-model=glm i --ai-logic --ai-model=glm na malém projektu → reálné nálezy (ne skipped). Před reportem nezávislý sub-agent (čerstvý kontext), protože fáze sahá na kontrakt výstupu modelu → naše typy."
+    }
+  ],
+  "startedAt": "2026-06-20T22:05:34.824Z",
+  "completedAt": "2026-06-20T22:53:59.199Z",
+  "autoCommit": {
+    "preSha": "c12bdd8544f6258ab17eab19c85f41feb59ee81a",
+    "subject": "Phase 49: glm pro non-goal a logic"
+  }
+}

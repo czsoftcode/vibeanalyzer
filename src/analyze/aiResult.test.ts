@@ -75,6 +75,31 @@ describe("parseFindings", () => {
     const raw = JSON.stringify({ findings: [{ file: "a.ts", line: "x", nonGoalIndex: 0, severity: "error", message: "m" }] });
     expect(() => parseFindings(raw)).toThrow();
   });
+
+  it("HOLÉ pole [...] (glm bez obalu) → stejný výsledek jako obal { findings: [...] }", () => {
+    // Zub: kdyby parser přestal rozbalovat holé pole, glm by zase spadl do skipped.
+    const item = { file: "a.ts", line: 3, nonGoalIndex: 1, severity: "warning", message: "spouští kód" };
+    const bare = parseFindings(JSON.stringify([item]));
+    const wrapped = parseFindings(JSON.stringify({ findings: [item] }));
+    expect(bare).toEqual(wrapped);
+    expect(bare).toEqual([item]);
+  });
+
+  it("markdown fence kolem JSONu (glm) se sloupne", () => {
+    const item = { file: "a.ts", line: 1, nonGoalIndex: 0, severity: "error", message: "m" };
+    const fenced = "```json\n" + JSON.stringify([item]) + "\n```";
+    expect(parseFindings(fenced)).toEqual([item]);
+  });
+
+  it("chybějící severity HODÍ (NEdoplňuje default – žádná fabrikace)", () => {
+    const raw = JSON.stringify([{ file: "a.ts", line: 1, nonGoalIndex: 0, message: "m" }]);
+    expect(() => parseFindings(raw)).toThrow();
+  });
+
+  it("neplatná severity HODÍ (jen error|warning|info)", () => {
+    const raw = JSON.stringify([{ file: "a.ts", line: 1, nonGoalIndex: 0, severity: "critical", message: "m" }]);
+    expect(() => parseFindings(raw)).toThrow();
+  });
 });
 
 describe("toFindings – mapování + levná kontrola místa", () => {
@@ -475,6 +500,36 @@ describe("parseLogicFindings – nepovinné místo", () => {
 
   it("přítomné file špatného typu → hodí", () => {
     const raw = JSON.stringify({ findings: [{ file: 5, kind: "k", severity: "info", message: "m" }] });
+    expect(() => parseLogicFindings(raw)).toThrow();
+  });
+
+  it("přítomné line špatného typu → hodí", () => {
+    const raw = JSON.stringify({ findings: [{ line: "x", kind: "k", severity: "info", message: "m" }] });
+    expect(() => parseLogicFindings(raw)).toThrow();
+  });
+
+  it("HOLÉ pole [...] (glm bez obalu) → stejný výsledek jako obal { findings: [...] }", () => {
+    // Zub: kdyby parser přestal rozbalovat holé pole, glm by zase spadl do skipped.
+    const item = { kind: "chybí funkčnost", severity: "error", message: "neumí X" };
+    const bare = parseLogicFindings(JSON.stringify([item]));
+    const wrapped = parseLogicFindings(JSON.stringify({ findings: [item] }));
+    expect(bare).toEqual(wrapped);
+    expect(bare).toEqual([item]);
+  });
+
+  it("markdown fence kolem JSONu (glm) se sloupne", () => {
+    const item = { file: "a.ts", line: 1, kind: "rozpor se záměrem", severity: "warning", message: "m" };
+    const fenced = "```\n" + JSON.stringify([item]) + "\n```";
+    expect(parseLogicFindings(fenced)).toEqual([item]);
+  });
+
+  it("chybějící severity HODÍ (NEdoplňuje default)", () => {
+    const raw = JSON.stringify([{ kind: "k", message: "m" }]);
+    expect(() => parseLogicFindings(raw)).toThrow();
+  });
+
+  it("neplatná severity HODÍ (jen error|warning|info)", () => {
+    const raw = JSON.stringify([{ kind: "k", severity: "critical", message: "m" }]);
     expect(() => parseLogicFindings(raw)).toThrow();
   });
 });
