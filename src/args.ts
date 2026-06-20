@@ -51,7 +51,15 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       continue;
     }
     if (a.startsWith("--out=")) {
-      out = a.slice("--out=".length);
+      // Na rozdíl od dvouargumentové formy NEodmítáme hodnotu začínající "-":
+      // rovnítko ji explicitně oddělilo, takže `--out=-x` jednoznačně znamená
+      // adresář "-x" (žádné riziko spolknutí následujícího příznaku). Odmítáme
+      // jen prázdnou hodnotu, která by se přes path.resolve tiše rozvinula na CWD.
+      const val = a.slice("--out=".length);
+      if (val === "") {
+        return { kind: "error", message: `Volba --out vyžaduje cestu k adresáři.` };
+      }
+      out = val;
       continue;
     }
     if (a === "--audit") {

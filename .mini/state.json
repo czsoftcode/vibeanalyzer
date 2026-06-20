@@ -172,6 +172,11 @@
       "id": 34,
       "title": "Triáž a úklid otevřených nálezů",
       "status": "done"
+    },
+    {
+      "id": 35,
+      "title": "Odmítnout prázdné --out=",
+      "status": "done"
     }
   ]
 }

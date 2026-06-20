@@ -44,7 +44,7 @@ Shoda časového razítka v jedné ms tiše přepíše předchozí výstup
 
 fileTimestamp má rozlišení na milisekundy. Report tvrdí, že soubory se kvůli razítku 'jen koexistují, nepřepíšou'. To platí jen mezi různými ms. Dvě dostatečně rychlé/skriptované běhy do téhož outDir ve stejné ms vyrobí identické jméno vibeanalyzer-<stamp>.json/.md → druhý writeFile tiše přepíše první bez varování. V praxi vzácné (sekvenční CLI), ale tvrzení v reportu je nepřesné a kolize je tichá.
 
-## 1-6 · nit · open
+## 1-6 · nit · resolved
 **Where:** src/args.ts:45-47
 **Reviewed-at:** cfb68eb76b2892c3327fda3b6f3be9dcefc02941
 **Source:** adversarial

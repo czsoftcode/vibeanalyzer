@@ -7,6 +7,12 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `--out=` s **prázdnou hodnotou** (např. `vibeanalyzer . --out=`) nově vrátí
+  chybu „Volba --out vyžaduje cestu k adresáři." místo aby report tiše zapsal do
+  aktuálního adresáře. Chování je teď shodné s `--out` bez hodnoty.
+
 ## [0.3.0] - 2026-06-20
 
 ### Changed

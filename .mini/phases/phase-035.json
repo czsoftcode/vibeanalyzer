@@ -1,0 +1,35 @@
+{
+  "id": 35,
+  "title": "Odmítnout prázdné --out=",
+  "goal": "parseArgs u --out= s prázdnou hodnotou vrátí kind: error se stejnou hláškou jako dvouargumentová forma, místo tichého zápisu do CWD; pokryto testem se zuby.",
+  "status": "done",
+  "fromFinding": "1-6",
+  "steps": [
+    {
+      "title": "Opravit větev --out= v parseArgs",
+      "status": "done",
+      "detail": "V src/args.ts (řádek 53-56) po slice ošetřit prázdnou hodnotu: když val === \"\", vrátit { kind: \"error\", message: \"Volba --out vyžaduje cestu k adresáři.\" } – stejná hláška jako dvouargumentová forma."
+    },
+    {
+      "title": "Test se zuby: --out= je chyba",
+      "status": "done",
+      "detail": "Do src/args.test.ts přidat test, že parseArgs([\"x\", \"--out=\"], cwd) vrátí kind: error a ověřit i text hlášky. Test musí padnout, když opravu dočasně vrátím zpět."
+    },
+    {
+      "title": "Ověřit, že happy path --out=cesta dál funguje",
+      "status": "done",
+      "detail": "Existující test '--out= varianta funguje taky' (řádek 26) zůstává zelený – neplatná hodnota se odmítá, platná projde beze změny."
+    },
+    {
+      "title": "Doběh: tsc + ESLint + celá test suite zelené",
+      "status": "done",
+      "detail": "Spustit typovou kontrolu, lint a vitest; vše prochází."
+    }
+  ],
+  "startedAt": "2026-06-20T10:04:35.439Z",
+  "completedAt": "2026-06-20T11:18:55.441Z",
+  "autoCommit": {
+    "preSha": "075e4ac3f661e436d80658b3e8b67a1b88132cf3",
+    "subject": "Phase 35: Odmítnout prázdné --out="
+  }
+}

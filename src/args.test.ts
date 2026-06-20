@@ -28,6 +28,11 @@ describe("parseArgs", () => {
     expect(r).toEqual({ kind: "run", targetPath: path.resolve(cwd, "x"), outDir: "/tmp/out", audit: false, dev: false });
   });
 
+  it("--out= s prázdnou hodnotou je chyba (ne tichý zápis do CWD)", () => {
+    const r = parseArgs(["x", "--out="], cwd);
+    expect(r).toEqual({ kind: "error", message: "Volba --out vyžaduje cestu k adresáři." });
+  });
+
   it("--audit zapne audit, dev zůstává vypnuté", () => {
     const r = parseArgs(["--audit"], cwd);
     expect(r).toEqual({ kind: "run", targetPath: cwd, outDir: null, audit: true, dev: false });
