@@ -8,13 +8,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ErrnoException. Mock je per-soubor (vi.mock hoistuje na začátek modulu),
 // proto vlastní test soubor – jinak by rozbil integrační test v cli.test.ts,
 // který spoléhá na reálný zápis výstupů.
-vi.mock("./report/writeOutputs.js", () => ({
-  writeReportFiles: vi.fn(async () => {
-    const err = new Error("no space left on device") as NodeJS.ErrnoException;
-    err.code = "ENOSPC";
-    throw err;
-  }),
-}));
+// cli.ts používá z tohoto modulu i ReportPathCollisionError (instanceof v catch),
+// takže ho mock MUSÍ vystavit – re-export reálné třídy přes importOriginal, ať
+// instanceof v cli.ts funguje. Jen writeReportFiles podvrhneme (hodí ErrnoException).
+vi.mock("./report/writeOutputs.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./report/writeOutputs.js")>();
+  return {
+    ReportPathCollisionError: actual.ReportPathCollisionError,
+    writeReportFiles: vi.fn(async () => {
+      const err = new Error("no space left on device") as NodeJS.ErrnoException;
+      err.code = "ENOSPC";
+      throw err;
+    }),
+  };
+});
 
 import { run } from "./cli.js";
 

@@ -1,0 +1,34 @@
+{
+  "id": 38,
+  "title": "Kontraktní chyba nemaskovaná jako I/O",
+  "goal": "cli.ts při selhání writeReportFiles rozliší ReportPathCollisionError (programátorská chyba) od I/O chyb – nezploští ji na hlášku 'výstup nelze zapsat', nechá ji probublat se stackem; po sobě uklidí jen prázdný adresář vytvořený v tomto běhu; pokryto testem se zuby.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Rozlišit ReportPathCollisionError v catch bloku cli.ts",
+      "status": "done",
+      "detail": "V catch po writeReportFiles: když err instanceof ReportPathCollisionError, uklidit jen createdDir (vytvořený teď, kolize hází před zápisem → prázdný; nález 3-9) a chybu re-throw (probublá přes runCli → stack + exit 1). I/O větev (ErrnoException) beze změny. Import ReportPathCollisionError do cli.ts."
+    },
+    {
+      "title": "Test se zuby: kolize probublá, ne zploští",
+      "status": "done",
+      "detail": "Nový test soubor mockuje writeOutputs (reálná ReportPathCollisionError přes importActual), writeReportFiles ji vyhodí. Ověří: run() REJECTNE tou konkrétní třídou (ne return 1) a vytvořený outDir se uklidil (žádný osiřelý prázdný adresář). Bez opravy run() vrátí 1 → reject padne."
+    },
+    {
+      "title": "Regrese: I/O chyba dál vrací 1 + hláška",
+      "status": "done",
+      "detail": "Existující cli.writefail.test.ts (ErrnoException → exit 1 + 'výstup nelze zapsat' + úklid createdDir) zůstává zelený – I/O větev se nezměnila."
+    },
+    {
+      "title": "Doběh: tsc + celá suite zelené",
+      "status": "done",
+      "detail": "tsc --noEmit čistý, celá test suite zelená."
+    }
+  ],
+  "startedAt": "2026-06-20T12:04:07.555Z",
+  "completedAt": "2026-06-20T12:27:46.570Z",
+  "autoCommit": {
+    "preSha": "2a1dd4cc3ed8ed52755029fe5adccbfe0359e78b",
+    "subject": "Phase 38: Kontraktní chyba nemaskovaná jako I/O"
+  }
+}

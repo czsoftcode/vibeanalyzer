@@ -18,7 +18,7 @@ import { type AskFn, collectIntentDraft } from "./intentPrompt.js";
 import { renderProjectMd, writeIntentFile } from "./intentWriter.js";
 import { buildJsonIndex } from "./report/jsonIndex.js";
 import { buildMarkdown } from "./report/markdown.js";
-import { writeReportFiles } from "./report/writeOutputs.js";
+import { ReportPathCollisionError, writeReportFiles } from "./report/writeOutputs.js";
 import { type FileEntry, ROOT_UNREADABLE_MARKER, scanTree } from "./scan.js";
 import { scanSecrets, type SecretsResult } from "./secrets.js";
 import { fileTimestamp } from "./timestamp.js";
@@ -419,6 +419,19 @@ export async function run(
   try {
     await writeReportFiles(jsonPath, JSON.stringify(index, null, 2) + "\n", mdPath, md + "\n");
   } catch (err: unknown) {
+    // ReportPathCollisionError = porušení kontraktu volajícího (kolidující výstupní
+    // cesty), tedy PROGRAMÁTORSKÁ chyba, ne I/O. Nemaskovat ji na hlášku „výstup
+    // nelze zapsat" + return 1 (to by lhalo o příčině a zahodilo stack). Necháme ji
+    // probublat: runCli (cliMain.ts) ji zaloguje se stackem a vrátí exit 1 – žádný
+    // tichý exit 0. Úklid: kolize hází PŘED jakýmkoli zápisem, takže createdDir je
+    // prázdný; smažeme jen co jsme v tomhle běhu vytvořili (nález 3-9, prázdný cizí
+    // adresář necháme), pak re-throw.
+    if (err instanceof ReportPathCollisionError) {
+      if (createdDir !== undefined) {
+        await rm(createdDir, { recursive: true, force: true }).catch(() => {});
+      }
+      throw err;
+    }
     const e = err as NodeJS.ErrnoException;
     // writeReportFiles zapisuje přes dočasné soubory (temp+rename), takže po
     // selhání uklidí best-effort jen své vlastní .tmp soubory – cílové reporty

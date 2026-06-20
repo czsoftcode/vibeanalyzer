@@ -187,6 +187,11 @@
       "id": 37,
       "title": "Invariant kolidujících cest ve writeReportFiles",
       "status": "done"
+    },
+    {
+      "id": 38,
+      "title": "Kontraktní chyba nemaskovaná jako I/O",
+      "status": "done"
     }
   ]
 }
