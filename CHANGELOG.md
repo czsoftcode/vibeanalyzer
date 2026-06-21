@@ -7,6 +7,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Zmizelý nebo nečitelný soubor během AI analýzy už neshodí celý report.** Když se
+  některý zdrojový soubor smaže nebo mu během běhu zmizí práva (mezi naskenováním stromu
+  a čtením pro AI), AI vrstva se nově **čistě přeskočí** se srozumitelným důvodem – přesně
+  jako ostatní vrstvy (tsc, ESLint, …). Report se i tak vyrobí s výsledky strojových
+  vrstev (skončí úspěchem), místo dřívějšího pádu s `exit 1` a žádným reportem.
+
 ## [0.6.0] - 2026-06-21
 
 ### Added

@@ -302,6 +302,11 @@
       "id": 60,
       "title": "Napojit krájený AI běh do CLI",
       "status": "done"
+    },
+    {
+      "id": 61,
+      "title": "Ošetřit pád čtení AI vrstvy",
+      "status": "done"
     }
   ]
 }

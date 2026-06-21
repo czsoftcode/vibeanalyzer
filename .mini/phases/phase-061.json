@@ -1,0 +1,44 @@
+{
+  "id": 61,
+  "title": "Ošetřit pád čtení AI vrstvy",
+  "goal": "Selhání čtení souboru v splitAiPayload (TOCTOU mezi scanTree a AI během) degraduje AI vrstvu na skipped se srozumitelným důvodem místo pádu celého CLI, takže report s výsledky strojových vrstev vždy vznikne.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Obalit setup + čtení AI vrstvy do try/catch",
+      "status": "done",
+      "detail": "V runAiLayer (cli.ts) jeden try kolem resolvování analyze/classify, dynamických importů aiResult.js + aiChunkedRun.js a splitAiPayload (klidně až po úspěšný return). Struktura kompiluje."
+    },
+    {
+      "title": "Catch degraduje vyžádané režimy na skipped",
+      "status": "done",
+      "detail": "Catch vypíše stack (e.stack ?? e.message) na stderr a vrátí { nonGoal/code/logic: wantX ? skipped : pre } s poctivým reason (čtení souborů projektu / setup AI selhal – viz stderr), BEZ oversizedFiles. Vzor cli.ts:604-609 a 689-692."
+    },
+    {
+      "title": "Test se zuby: rejectující readFile → AI skipped, report žije",
+      "status": "done",
+      "detail": "Přes REÁLNÝ splitAiPayload + runAiLayer: readFile pro jeden soubor odmítne (ENOENT/EACCES) → vyžádané režimy skipped, nevyžádané pre, strojové vrstvy zůstanou v reportu, exit 0. Po dočasném odstranění catche test spadne."
+    },
+    {
+      "title": "Test se zuby: selhání dynamického importu degraduje",
+      "status": "done",
+      "detail": "Simulovat throw v setupu (vi.mock aiResult.js/aiChunkedRun.js házející při importu, nebo nejlevnější dosažitelná cesta) → skipped, ne pád CLI. Když to nejde čistě simulovat, do-krok to zdůvodní v reportu."
+    },
+    {
+      "title": "Ověřit beze změny tvaru AiReport + zelený typecheck a testy",
+      "status": "done",
+      "detail": "Potvrdit, že se tvar AiReport nemění → verze JSON indexu se NEzvedá (jsonIndex.test.ts zelený). npm typecheck + vitest celé zelené."
+    },
+    {
+      "title": "Nezávislý self-review sub-agentem",
+      "status": "done",
+      "detail": "Čerstvý kontext (sub-agent), checklist CLAUDE.md: exit kódy chybové cesty, rozsah catche (nemaskuje úspěšnou cestu / cizí chyby), dosažitelnost větve, žádný zbytkový stav."
+    }
+  ],
+  "startedAt": "2026-06-21T15:22:40.258Z",
+  "completedAt": "2026-06-21T15:48:42.847Z",
+  "autoCommit": {
+    "preSha": "f96dec1bc6ef8f5316be93cc783837c74cc3326d",
+    "subject": "Phase 61: Ošetřit pád čtení AI vrstvy"
+  }
+}

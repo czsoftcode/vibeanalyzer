@@ -559,85 +559,112 @@ async function runAiLayer(
       console.error(aiKeyHint(AI_PROVIDERS[parsed.aiModel].keyEnv));
       return { nonGoal: pre, code: pre, logic: pre };
     }
-    // analyze/classify injektujeme (testy bez sítě); SDK i orchestrátor se načtou
-    // dynamicky až tady, ať default běh nenahrává @anthropic-ai/sdk.
-    let analyze = deps.aiAnalyzeFn;
-    let classify = deps.aiClassifyFn;
-    if (!analyze || !classify) {
-      const [an, pg] = await Promise.all([import("./analyze/aiAnalyze.js"), import("./analyze/aiPing.js")]);
-      analyze ??= an.realAiAnalyze;
-      classify ??= pg.classifyAiError;
-    }
-    const analyzeFn = analyze;
-    const classifyFn = classify;
-    const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
-    const { runChunkedMode } = await import("./analyze/aiChunkedRun.js");
-    // Projekt se zkrájí JEDNOU na části (okno plněné na CHUNK_FILL_RATIO) a chunks se sdílí
-    // mezi všemi režimy (žádné dvojí čtení souborů). Nic se neuřezává – velký projekt se
-    // pošle celý, jen po částech.
-    const chunkWindow = Math.floor(AI_PAYLOAD_CHAR_BUDGET * CHUNK_FILL_RATIO);
-    const chunked = await splitAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"), chunkWindow);
+    // Celý setup AI vrstvy (dynamické importy SDK/orchestrátoru) i ČTENÍ souborů
+    // (splitAiPayload) běží v try. Na rozdíl od ostatních vrstev tu hrozí TOCTOU –
+    // soubor zmizí / změní práva mezi scanem stromu (scanTree) a čtením v splitAiPayload,
+    // `Promise.all` rejectne – i selhání dynamického importu. Bez tohoto catche by chyba
+    // probublala až do `runCli` → exit 1 a ŽÁDNÝ report (zahodily by se i hotové strojové
+    // vrstvy). Degradujeme jako každá jiná vrstva: stack na stderr (ne tiché spolknutí
+    // programové chyby) a vyžádané režimy → skipped; report se vyrobí, exit 0. Pozor:
+    // `runOneAiMode` má VLASTNÍ catch pro PROVOZNÍ chyby běhu částí – ten sem nepropadne.
+    try {
+      // analyze/classify injektujeme (testy bez sítě); SDK i orchestrátor se načtou
+      // dynamicky až tady, ať default běh nenahrává @anthropic-ai/sdk.
+      let analyze = deps.aiAnalyzeFn;
+      let classify = deps.aiClassifyFn;
+      if (!analyze || !classify) {
+        const [an, pg] = await Promise.all([import("./analyze/aiAnalyze.js"), import("./analyze/aiPing.js")]);
+        analyze ??= an.realAiAnalyze;
+        classify ??= pg.classifyAiError;
+      }
+      const analyzeFn = analyze;
+      const classifyFn = classify;
+      const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
+      const { runChunkedMode } = await import("./analyze/aiChunkedRun.js");
+      // Projekt se zkrájí JEDNOU na části (okno plněné na CHUNK_FILL_RATIO) a chunks se sdílí
+      // mezi všemi režimy (žádné dvojí čtení souborů). Nic se neuřezává – velký projekt se
+      // pošle celý, jen po částech.
+      const chunkWindow = Math.floor(AI_PAYLOAD_CHAR_BUDGET * CHUNK_FILL_RATIO);
+      const chunked = await splitAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"), chunkWindow);
 
-    // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů; každý poběží přes
-    // VŠECHNY části, takže výstup (a cena) škáluje počtem částí. Odhad VŽDY vypíšeme. Nad
-    // prahem a bez --ai-yes se zeptáme (TTY), jinak čistě přeskočíme.
-    const modeCount = (wantNonGoal ? 1 : 0) + (wantCode ? 1 : 0) + (wantLogic ? 1 : 0);
-    const estimate = estimateAiCost(chunked, parsed.aiModel, modeCount);
-    console.error(formatCostEstimate(estimate, parsed.aiModel));
+      // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů; každý poběží přes
+      // VŠECHNY části, takže výstup (a cena) škáluje počtem částí. Odhad VŽDY vypíšeme. Nad
+      // prahem a bez --ai-yes se zeptáme (TTY), jinak čistě přeskočíme.
+      const modeCount = (wantNonGoal ? 1 : 0) + (wantCode ? 1 : 0) + (wantLogic ? 1 : 0);
+      const estimate = estimateAiCost(chunked, parsed.aiModel, modeCount);
+      console.error(formatCostEstimate(estimate, parsed.aiModel));
 
-    if (estimate.costTypicalUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
-      let skipReason: string | null = null;
-      if (deps.isInteractive && deps.ask) {
-        const answer = await deps.ask(
-          `Realistický odhad ceny přesahuje $${AI_COST_CONFIRM_THRESHOLD_USD.toFixed(2)} (worst-case viz rozsah výše). Pustit AI analýzu? [a/N]`,
-        );
-        if (!isYes(answer)) {
-          skipReason = "AI běh nepotvrzen (odhadovaná cena nad práh) – přeskočeno";
+      if (estimate.costTypicalUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
+        let skipReason: string | null = null;
+        if (deps.isInteractive && deps.ask) {
+          const answer = await deps.ask(
+            `Realistický odhad ceny přesahuje $${AI_COST_CONFIRM_THRESHOLD_USD.toFixed(2)} (worst-case viz rozsah výše). Pustit AI analýzu? [a/N]`,
+          );
+          if (!isYes(answer)) {
+            skipReason = "AI běh nepotvrzen (odhadovaná cena nad práh) – přeskočeno";
+          }
+        } else {
+          skipReason = "odhadovaná cena nad práh a běh není interaktivní – přidej --ai-yes pro potvrzení";
         }
-      } else {
-        skipReason = "odhadovaná cena nad práh a běh není interaktivní – přidej --ai-yes pro potvrzení";
+        if (skipReason !== null) {
+          console.error(`AI analýza přeskočena: ${skipReason}`);
+          const skipped: AiStatus = { kind: "skipped", reason: skipReason };
+          // Jen VYŽÁDANÉ režimy → skipped; nevyžádané zůstávají `pre` (ready) jako jinde.
+          return {
+            nonGoal: wantNonGoal ? skipped : pre,
+            code: wantCode ? skipped : pre,
+            logic: wantLogic ? skipped : pre,
+            oversizedFiles: chunked.oversizedFiles,
+          };
+        }
       }
-      if (skipReason !== null) {
-        console.error(`AI analýza přeskočena: ${skipReason}`);
-        const skipped: AiStatus = { kind: "skipped", reason: skipReason };
-        // Jen VYŽÁDANÉ režimy → skipped; nevyžádané zůstávají `pre` (ready) jako jinde.
-        return {
-          nonGoal: wantNonGoal ? skipped : pre,
-          code: wantCode ? skipped : pre,
-          logic: wantLogic ? skipped : pre,
-          oversizedFiles: chunked.oversizedFiles,
-        };
-      }
+
+      // Každý vyžádaný režim běží přes části (runChunkedMode). Nevyžádaný zůstane `pre`
+      // (ready) – NE falešné „analyzováno". `runOne` je obal nad run*Analysis pro JEDNU část.
+      const ngRun = wantNonGoal
+        ? await runOneAiMode("non-goalů", parsed.aiModel, () =>
+            runChunkedMode(chunked.chunks, (chunk) => runAiAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
+          )
+        : null;
+      const codeRun = wantCode
+        ? await runOneAiMode("kódu", parsed.aiModel, () =>
+            runChunkedMode(chunked.chunks, (chunk) => runAiCodeAnalysis(process.env, chunk, parsed.aiModel, analyzeFn, classifyFn)),
+          )
+        : null;
+      const logicRun = wantLogic
+        ? await runOneAiMode("logiky", parsed.aiModel, () =>
+            runChunkedMode(chunked.chunks, (chunk) => runAiLogicAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
+          )
+        : null;
+
+      // Per-režim metadata krájení (jen u režimů, co reálně běžely) – report přizná počet
+      // částí i selhání. `undefined`, když žádný režim neběžel přes části.
+      const chunking = chunkingMeta(ngRun, codeRun, logicRun);
+      return {
+        nonGoal: ngRun ? ngRun.status : pre,
+        code: codeRun ? codeRun.status : pre,
+        logic: logicRun ? logicRun.status : pre,
+        oversizedFiles: chunked.oversizedFiles,
+        ...(chunking ? { chunking } : {}),
+      };
+    } catch (err: unknown) {
+      // Nečekané selhání setupu/čtení (TOCTOU readFile, selhání dynamického importu i
+      // jiná nečekaná – RangeError z splitAiPayload, throw z estimateAiCost/ask). Nemaskovat
+      // tiše: SKUTEČNOU příčinu i stack vypíšeme na stderr; v reportu důvod GENERICKY odkáže
+      // na stderr (netvrdí konkrétní I/O příčinu, ať nelže u programové chyby) – přesně vzor
+      // ostatních vrstev („… selhal (viz stderr)"). oversizedFiles NEznáme → vynechat.
+      const e = err as Error;
+      console.error(`Upozornění: AI vrstva selhala nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
+      const skipped: AiStatus = {
+        kind: "skipped",
+        reason: "AI vrstva (čtení souborů projektu / příprava běhu) selhala (viz stderr)",
+      };
+      return {
+        nonGoal: wantNonGoal ? skipped : pre,
+        code: wantCode ? skipped : pre,
+        logic: wantLogic ? skipped : pre,
+      };
     }
-
-    // Každý vyžádaný režim běží přes části (runChunkedMode). Nevyžádaný zůstane `pre`
-    // (ready) – NE falešné „analyzováno". `runOne` je obal nad run*Analysis pro JEDNU část.
-    const ngRun = wantNonGoal
-      ? await runOneAiMode("non-goalů", parsed.aiModel, () =>
-          runChunkedMode(chunked.chunks, (chunk) => runAiAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
-        )
-      : null;
-    const codeRun = wantCode
-      ? await runOneAiMode("kódu", parsed.aiModel, () =>
-          runChunkedMode(chunked.chunks, (chunk) => runAiCodeAnalysis(process.env, chunk, parsed.aiModel, analyzeFn, classifyFn)),
-        )
-      : null;
-    const logicRun = wantLogic
-      ? await runOneAiMode("logiky", parsed.aiModel, () =>
-          runChunkedMode(chunked.chunks, (chunk) => runAiLogicAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
-        )
-      : null;
-
-    // Per-režim metadata krájení (jen u režimů, co reálně běžely) – report přizná počet
-    // částí i selhání. `undefined`, když žádný režim neběžel přes části.
-    const chunking = chunkingMeta(ngRun, codeRun, logicRun);
-    return {
-      nonGoal: ngRun ? ngRun.status : pre,
-      code: codeRun ? codeRun.status : pre,
-      logic: logicRun ? logicRun.status : pre,
-      oversizedFiles: chunked.oversizedFiles,
-      ...(chunking ? { chunking } : {}),
-    };
   }
 
   if (parsed.aiCheck) {

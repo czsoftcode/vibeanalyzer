@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -318,6 +318,52 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     expect(index.ai.code.kind).toBe("analyzed");
     expect(md).toContain("Žádné porušení deklarovaných non-goalů nenalezeno");
     expect(md).toContain("Žádné závažné problémy kódu nenalezeny");
+  });
+
+  it("TOCTOU: zdrojový soubor nečitelný (chmod 000) → AI vrstva skipped, strojové vrstvy v reportu, exit 0", async () => {
+    // REGRESE (fáze 61): splitAiPayload čte soubory přes readFile bez vlastní obrany;
+    // když jeden zmizí / změní práva mezi scanem stromu a AI během (TOCTOU), Promise.all
+    // rejectne. Bez catche v runAiLayer by chyba probublala až do runCli → exit 1 a ŽÁDNÝ
+    // report (zahodily by se i hotové strojové vrstvy). Tady jede REÁLNÝ splitAiPayload
+    // (readFile není injektovatelný) – jeden .ts uzamkneme na 0o000, scanTree ho jen
+    // statuje (obsah nečte) → zůstane AI kandidátem → readFile pak hodí EACCES.
+    // Odebrání try/catch v cli.ts → run() rejectne a tenhle await spadne (test má zuby).
+    vi.stubEnv(AI_KEY_ENV, "sk-ant-key");
+    await writeFile(path.join(proj, "a.ts"), "export const x = 1;\n", "utf8");
+    const locked = path.join(proj, "b.ts");
+    await writeFile(locked, "export const y = 2;\n", "utf8");
+    await chmod(locked, 0o000); // nečitelný obsah, ale stat (z čitelné složky) projde
+
+    const analyze = vi.fn(async () => ({ rawText: "{}", usage: { inputTokens: 0, outputTokens: 0 }, stopReason: "end_turn" }));
+    const outDir = path.join(proj, "report");
+    let code: number;
+    try {
+      code = await run([proj, "--out", outDir, "--ai-non-goal"], proj, {
+        aiAnalyzeFn: analyze,
+        aiClassifyFn: () => null,
+      });
+    } finally {
+      await chmod(locked, 0o644).catch(() => {}); // úklid práv, ať jde tempdir smazat
+    }
+
+    expect(code).toBe(0); // selhání čtení AI vrstvy NESMÍ shodit běh – strojový report se vyrobí
+    expect(analyze).not.toHaveBeenCalled(); // pad nastal v splitAiPayload PŘED voláním API
+
+    const { md, index } = await readJson(outDir);
+    // Vyžádaný režim degradoval na skipped s poctivým důvodem; nevyžádané zůstaly ready (pre).
+    expect(index.ai.nonGoal.kind).toBe("skipped");
+    expect(index.ai.nonGoal.reason).toContain("viz stderr");
+    expect(index.ai.code).toEqual({ kind: "ready" });
+    expect(index.ai.logic).toEqual({ kind: "ready" });
+
+    // Strojové vrstvy v reportu PŘEŽILY (to je celý smysl degradace, ne pádu).
+    const full = JSON.parse(await readFile(path.join(outDir, (await readdir(outDir)).find((f) => f.endsWith(".json")) as string), "utf8"));
+    expect(full.files.some((f: { path: string }) => f.path === "a.ts")).toBe(true);
+    expect(full.tsc).toBeDefined();
+    expect(md).toContain("Přeskočeno:");
+
+    const errs = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
+    expect(errs).toContain("AI vrstva selhala nečekaně");
   });
 
   it("--ai-non-goal bez klíče → oba skipped, analyze se nezavolá, hláška na stderr, exit 0", async () => {
