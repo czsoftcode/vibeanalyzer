@@ -1,5 +1,5 @@
 import { AI_PROVIDERS, type AiModelChoice } from "./aiStatus.js";
-import type { AiPayload } from "./aiPayload.js";
+import type { ChunkedPayload } from "./aiPayload.js";
 
 /**
  * Hrubý poměr znaků na token pro odhad VSTUPU. Záměrně KONZERVATIVNÍ (spíš
@@ -42,10 +42,15 @@ export const OUTPUT_TYPICAL_TOKENS_PER_MODE = 16_000;
  * a posílá CELÝ payload znovu → vstup se násobí počtem režimů, ne jen výstup.
  */
 export interface AiCostEstimate {
-  /** Odhadnuté vstupní tokeny na JEDEN požadavek (payload → tokeny). */
+  /** Odhadnuté vstupní tokeny na JEDEN režim CELKEM (součet všech částí → tokeny).
+   *  Krájení vstup nezdvojuje – součet částí = celý projekt jednou, jen rozdělený do
+   *  `chunkCount` volání. Proto vstup škáluje s `modeCount`, NE s `chunkCount`. */
   inputTokensPerMode: number;
-  /** Počet vyžádaných režimů (kolikrát se payload pošle). */
+  /** Počet vyžádaných režimů (kolikrát se celý projekt pošle). */
   modeCount: number;
+  /** Na kolik částí se projekt rozkrájel – každá je samostatné API volání, takže VÝSTUP
+   *  (ne vstup) škáluje navíc tímto číslem. */
+  chunkCount: number;
   /** Spodní/horní mez výstupních tokenů CELKEM (součet přes režimy). */
   outputMinTokens: number;
   outputMaxTokens: number;
@@ -60,28 +65,33 @@ export interface AiCostEstimate {
 }
 
 /**
- * Spočítá přibližný rozsah ceny pro `modeCount` vyžádaných AI režimů na daném
- * modelu. Čistá funkce (žádné I/O ani stdin) – testovatelná izolovaně. Ceník
- * i výstupní strop bere z `AI_PROVIDERS` (žádný duplikát). `modeCount <= 0`
- * (teoreticky) → nulový odhad, bez pádu. Prázdný payload → vstup 0 tokenů
- * (dělíme délku konstantou, nikdy nulou), výstup stále počítá se stropem.
+ * Spočítá přibližný rozsah ceny pro `modeCount` vyžádaných AI režimů na daném modelu.
+ * Bere KRÁJENÝ payload: vstup = součet délek všech částí (celý projekt jednou per režim,
+ * krájení vstup nezdvojuje), výstup škáluje navíc počtem částí (`chunkCount`), protože
+ * každá část je samostatné API volání a může vyčerpat výstupní strop. Čistá funkce
+ * (žádné I/O) – testovatelná izolovaně. Ceník i výstupní strop z `AI_PROVIDERS`.
+ * `modeCount <= 0` (teoreticky) → nulový odhad. Prázdné `chunks` → vstup 0 tokenů
+ * i výstup 0 (×0 částí), bez pádu.
  */
-export function estimateAiCost(payload: AiPayload, model: AiModelChoice, modeCount: number): AiCostEstimate {
+export function estimateAiCost(chunked: ChunkedPayload, model: AiModelChoice, modeCount: number): AiCostEstimate {
   const provider = AI_PROVIDERS[model];
   const modes = Math.max(0, modeCount);
+  const chunkCount = chunked.chunks.length;
+  const totalChars = chunked.chunks.reduce((sum, c) => sum + c.text.length, 0);
 
-  const inputTokensPerMode = Math.ceil(payload.text.length / CHARS_PER_TOKEN);
+  const inputTokensPerMode = Math.ceil(totalChars / CHARS_PER_TOKEN);
   const totalInputTokens = inputTokensPerMode * modes;
-  const outputMinTokens = OUTPUT_MIN_TOKENS_PER_MODE * modes;
-  const outputMaxTokens = provider.maxTokens * modes;
-  const outputTypicalTokens = OUTPUT_TYPICAL_TOKENS_PER_MODE * modes;
+  // Výstup × modes × chunkCount: každý režim pošle KAŽDOU část zvlášť → tolik výstupů.
+  const outputMinTokens = OUTPUT_MIN_TOKENS_PER_MODE * modes * chunkCount;
+  const outputMaxTokens = provider.maxTokens * modes * chunkCount;
+  const outputTypicalTokens = OUTPUT_TYPICAL_TOKENS_PER_MODE * modes * chunkCount;
 
   const inputCostUsd = (totalInputTokens / 1_000_000) * provider.prices.input;
   const costMinUsd = inputCostUsd + (outputMinTokens / 1_000_000) * provider.prices.output;
   const costMaxUsd = inputCostUsd + (outputMaxTokens / 1_000_000) * provider.prices.output;
   const costTypicalUsd = inputCostUsd + (outputTypicalTokens / 1_000_000) * provider.prices.output;
 
-  return { inputTokensPerMode, modeCount: modes, outputMinTokens, outputMaxTokens, costMinUsd, costMaxUsd, costTypicalUsd };
+  return { inputTokensPerMode, modeCount: modes, chunkCount, outputMinTokens, outputMaxTokens, costMinUsd, costMaxUsd, costTypicalUsd };
 }
 
 /** Cenu naformátuje na 2 desetinná místa; nepatrné nenulové částky nezamlčí jako $0.00. */
@@ -96,10 +106,11 @@ function fmtUsd(usd: number): string {
  * nejvýš Y" – horní mez je worst-case (model zapíše až po strop), proto „nejvýš".
  */
 export function formatCostEstimate(estimate: AiCostEstimate, model: AiModelChoice): string {
+  const chunkNote = estimate.chunkCount === 1 ? "1 část" : `${estimate.chunkCount} částí`;
   return [
-    `Odhad ceny AI (model ${model}, ${estimate.modeCount}× režim) – PŘIBLIŽNÝ odhad podle heuristiky, NE fakturace:`,
-    `  vstup:  ~${estimate.inputTokensPerMode} tokenů/režim (posílá se ${estimate.modeCount}×)`,
-    `  výstup: předem neznámý, ${estimate.outputMinTokens}–${estimate.outputMaxTokens} tokenů celkem (horní = strop modelu)`,
+    `Odhad ceny AI (model ${model}, ${estimate.modeCount}× režim, projekt rozdělen na ${chunkNote}) – PŘIBLIŽNÝ odhad podle heuristiky, NE fakturace:`,
+    `  vstup:  ~${estimate.inputTokensPerMode} tokenů/režim (celý projekt; posílá se ${estimate.modeCount}×)`,
+    `  výstup: předem neznámý, ${estimate.outputMinTokens}–${estimate.outputMaxTokens} tokenů celkem (každá část = vlastní volání; horní = strop modelu × části)`,
     `  celkem: řádově ${fmtUsd(estimate.costMinUsd)} až nejvýš ${fmtUsd(estimate.costMaxUsd)}`,
     `  realistický odhad: ~${fmtUsd(estimate.costTypicalUsd)} (na tohle se dívá práh potvrzení; horní mez je worst-case)`,
   ].join("\n");

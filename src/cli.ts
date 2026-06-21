@@ -3,9 +3,10 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, type TruncationInfo, describeTruncation, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
 import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
-import { collectAiPayload } from "./analyze/aiPayload.js";
+import { AI_PAYLOAD_CHAR_BUDGET, CHUNK_FILL_RATIO, splitAiPayload } from "./analyze/aiPayload.js";
+import type { ChunkedRunResult } from "./analyze/aiChunkedRun.js";
 import { estimateAiCost, formatCostEstimate } from "./analyze/aiEstimate.js";
 import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
@@ -570,20 +571,18 @@ async function runAiLayer(
     const analyzeFn = analyze;
     const classifyFn = classify;
     const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
-    // payload se sbírá JEDNOU a sdílí mezi všemi režimy (žádné dvojí čtení souborů).
-    const payload = await collectAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
-    // Payload-metadata o uříznutí pro report/stderr: přítomné jen když se reálně uřízlo
-    // (truncated). `includedFiles` z délky pole zahrnutých souborů, zbytek z payloadu.
-    const truncation: TruncationInfo | undefined = payload.truncated
-      ? { includedFiles: payload.includedFiles.length, omittedFiles: payload.omittedFiles, omittedBytes: payload.omittedBytes }
-      : undefined;
+    const { runChunkedMode } = await import("./analyze/aiChunkedRun.js");
+    // Projekt se zkrájí JEDNOU na části (okno plněné na CHUNK_FILL_RATIO) a chunks se sdílí
+    // mezi všemi režimy (žádné dvojí čtení souborů). Nic se neuřezává – velký projekt se
+    // pošle celý, jen po částech.
+    const chunkWindow = Math.floor(AI_PAYLOAD_CHAR_BUDGET * CHUNK_FILL_RATIO);
+    const chunked = await splitAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"), chunkWindow);
 
-    // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů (každý je samostatné
-    // API volání → vstup se posílá tolikrát). Odhad VŽDY vypíšeme (ať uživatel cenu vidí
-    // i s --ai-yes / pod prahem). Nad prahem a bez --ai-yes se zeptáme (TTY), jinak čistě
-    // přeskočíme – paušál „AI vrstva se v takovém případě jen označí jako přeskočená".
+    // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů; každý poběží přes
+    // VŠECHNY části, takže výstup (a cena) škáluje počtem částí. Odhad VŽDY vypíšeme. Nad
+    // prahem a bez --ai-yes se zeptáme (TTY), jinak čistě přeskočíme.
     const modeCount = (wantNonGoal ? 1 : 0) + (wantCode ? 1 : 0) + (wantLogic ? 1 : 0);
-    const estimate = estimateAiCost(payload, parsed.aiModel, modeCount);
+    const estimate = estimateAiCost(chunked, parsed.aiModel, modeCount);
     console.error(formatCostEstimate(estimate, parsed.aiModel));
 
     if (estimate.costTypicalUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
@@ -606,34 +605,39 @@ async function runAiLayer(
           nonGoal: wantNonGoal ? skipped : pre,
           code: wantCode ? skipped : pre,
           logic: wantLogic ? skipped : pre,
-          oversizedFiles: payload.oversizedFiles,
-          truncation,
+          oversizedFiles: chunked.oversizedFiles,
         };
       }
     }
 
-    // Když je klíč, ale daný režim není vyžádán, zůstane `ready` (klíč nalezen, dotaz
-    // neproběhl) – NE falešné „analyzováno".
-    const nonGoal = wantNonGoal
-      ? await runOneAiMode("non-goalů", parsed.aiModel, truncation, () =>
-          runAiAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
+    // Každý vyžádaný režim běží přes části (runChunkedMode). Nevyžádaný zůstane `pre`
+    // (ready) – NE falešné „analyzováno". `runOne` je obal nad run*Analysis pro JEDNU část.
+    const ngRun = wantNonGoal
+      ? await runOneAiMode("non-goalů", parsed.aiModel, () =>
+          runChunkedMode(chunked.chunks, (chunk) => runAiAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
         )
-      : pre;
-    const code = wantCode
-      ? await runOneAiMode("kódu", parsed.aiModel, truncation, () =>
-          runAiCodeAnalysis(process.env, payload, parsed.aiModel, analyzeFn, classifyFn),
+      : null;
+    const codeRun = wantCode
+      ? await runOneAiMode("kódu", parsed.aiModel, () =>
+          runChunkedMode(chunked.chunks, (chunk) => runAiCodeAnalysis(process.env, chunk, parsed.aiModel, analyzeFn, classifyFn)),
         )
-      : pre;
-    const logic = wantLogic
-      ? await runOneAiMode("logiky", parsed.aiModel, truncation, () =>
-          runAiLogicAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
+      : null;
+    const logicRun = wantLogic
+      ? await runOneAiMode("logiky", parsed.aiModel, () =>
+          runChunkedMode(chunked.chunks, (chunk) => runAiLogicAnalysis(process.env, intent, chunk, parsed.aiModel, analyzeFn, classifyFn)),
         )
-      : pre;
-    // `oversizedFiles` a `truncation` přidáme jen tady (payload se reálně stavěl): report
-    // tak přizná zdrojové soubory, které AI nevidělo kvůli per-file stropu, i to, KOLIK kódu
-    // se uřízlo nad celkovým stropem. Ostatní větve níže payload nestaví → pole vynechají
-    // (žádná poznámka v reportu).
-    return { nonGoal, code, logic, oversizedFiles: payload.oversizedFiles, truncation };
+      : null;
+
+    // Per-režim metadata krájení (jen u režimů, co reálně běžely) – report přizná počet
+    // částí i selhání. `undefined`, když žádný režim neběžel přes části.
+    const chunking = chunkingMeta(ngRun, codeRun, logicRun);
+    return {
+      nonGoal: ngRun ? ngRun.status : pre,
+      code: codeRun ? codeRun.status : pre,
+      logic: logicRun ? logicRun.status : pre,
+      oversizedFiles: chunked.oversizedFiles,
+      ...(chunking ? { chunking } : {}),
+    };
   }
 
   if (parsed.aiCheck) {
@@ -667,36 +671,54 @@ async function runAiLayer(
 }
 
 /**
- * Spustí jeden AI režim s ohlášením běhu a DEGRADACÍ na hranici CLI: nečekaná chyba
- * (orchestrátor ji nezatřídil jako známou) se NEmaskuje tiše – vypíše se stack a režim
- * degraduje na `skipped` (report se stejně vyrobí, exit 0). Při `analyzed` ohlásí na
- * stderr nálezy, tokeny a cenu (transparentně) + případné uříznutí payloadu.
+ * Spustí jeden AI režim přes části (`runChunkedMode`) s ohlášením běhu a DEGRADACÍ na
+ * hranici CLI: nečekaná chyba (orchestrátor ji nezatřídil jako známou a probublal) se
+ * NEmaskuje tiše – vypíše se stack a režim degraduje na `skipped` (report se stejně
+ * vyrobí, exit 0). Při `analyzed` ohlásí na stderr nálezy, tokeny a cenu; vždy zmíní
+ * počet částí a kolik jich provozně selhalo (transparentně, detail v reportu).
  */
 async function runOneAiMode(
   label: string,
   model: AiModelChoice,
-  truncation: TruncationInfo | undefined,
-  call: () => Promise<AiStatus>,
-): Promise<AiStatus> {
+  call: () => Promise<ChunkedRunResult>,
+): Promise<ChunkedRunResult> {
   console.error(`AI analýza ${label} (model ${model}) běží – u velkého projektu může trvat minuty, neukončuj…`);
-  let status: AiStatus;
+  let result: ChunkedRunResult;
   try {
-    status = await call();
+    result = await call();
   } catch (err: unknown) {
     const e = err as Error;
     console.error(`Upozornění: AI analýza ${label} selhala nečekaně a přeskočí se: ${e?.stack ?? e?.message ?? "neznámá chyba"}`);
-    return { kind: "skipped", reason: `AI analýza ${label} selhala nečekaně (viz stderr)` };
+    return { status: { kind: "skipped", reason: `AI analýza ${label} selhala nečekaně (viz stderr)` }, chunkTotal: 0, chunkFailed: 0, failureReasons: [] };
   }
+  const status = result.status;
   if (status.kind === "analyzed") {
     console.error(
       `AI analýza ${label} (${status.model}): ${status.findings.length} nálezů, ` +
         `tokeny ${status.usage.inputTokens} vstup + ${status.usage.outputTokens} výstup, odhad ceny ~$${status.costUsd.toFixed(4)}.`,
     );
-    if (truncation) {
-      console.error(`Pozn.: ${describeTruncation(truncation)} (viz report)`);
-    }
   }
-  return status;
+  if (result.chunkTotal > 1 || result.chunkFailed > 0) {
+    const failNote = result.chunkFailed > 0 ? `, ${result.chunkFailed} selhalo: ${result.failureReasons.join("; ")}` : "";
+    console.error(`Pozn.: ${label} – projekt rozdělen na ${result.chunkTotal} částí${failNote} (viz report).`);
+  }
+  return result;
+}
+
+/** Poskládá per-režim metadata krájení do `AiReport.chunking`; `undefined`, když žádný
+ *  režim neběžel přes části (pak report poznámku o krájení vynechá). */
+function chunkingMeta(
+  ng: ChunkedRunResult | null,
+  code: ChunkedRunResult | null,
+  logic: ChunkedRunResult | null,
+): AiReport["chunking"] {
+  const meta = (r: ChunkedRunResult) => ({ total: r.chunkTotal, failed: r.chunkFailed, reasons: r.failureReasons });
+  if (!ng && !code && !logic) return undefined;
+  return {
+    ...(ng ? { nonGoal: meta(ng) } : {}),
+    ...(code ? { code: meta(code) } : {}),
+    ...(logic ? { logic: meta(logic) } : {}),
+  };
 }
 
 /** Odpověď na [a/N]: ano jen explicitní 'a/ano/y/yes'; null (EOF), prázdné i cokoli jiného = ne. */

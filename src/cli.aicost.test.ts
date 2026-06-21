@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_KEY_ENV, AI_PROVIDERS } from "./analyze/aiStatus.js";
 import { estimateAiCost } from "./analyze/aiEstimate.js";
-import type { AiPayload } from "./analyze/aiPayload.js";
+import type { ChunkedPayload } from "./analyze/aiPayload.js";
 import { AI_COST_CONFIRM_THRESHOLD_USD, run } from "./cli.js";
 
 // Brána odhadu ceny PŘED AI během: nad prahem ($0.50, porovnává se REALISTICKÝ odhad
@@ -57,7 +57,7 @@ const okAnalyze = () =>
 // které čte brána (costTypicalUsd), ne worst-case – jinak by se kontrakt rozešel s realitou.
 // Bez toho by refaktor ceníku/stropu/prahu mohl hranici tiše posunout a e2e testy zmást.
 describe("hranice prahu vs reálný odhad (kontrakt mezi estimateAiCost a prahem)", () => {
-  const tiny: AiPayload = { text: "export const x = 1;\n", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] };
+  const tiny: ChunkedPayload = { chunks: [{ text: "export const x = 1;\n", includedFiles: [] }], oversizedFiles: [] };
 
   it("1 režim opus na malém vstupu je POD prahem (běh bez dotazu)", () => {
     expect(estimateAiCost(tiny, "opus", 1).costTypicalUsd).toBeLessThanOrEqual(AI_COST_CONFIRM_THRESHOLD_USD);
@@ -247,19 +247,19 @@ describe("run – glm brána na realistickém odhadu (todo 20)", () => {
     });
     expect(code).toBe(0);
     expect(ask).toHaveBeenCalledOnce(); // velký vstup = realistický odhad nad prahem i bez worst-case
-    expect(analyze).toHaveBeenCalledOnce();
+    expect(analyze.mock.calls.length).toBeGreaterThan(1); // velký projekt = víc částí = víc volání
     expect((await readAi(outDir)).code.kind).toBe("analyzed");
   });
 });
 
-interface TruncationShape {
-  includedFiles: number;
-  omittedFiles: number;
-  omittedBytes: number;
+interface ChunkMetaShape {
+  total: number;
+  failed: number;
+  reasons: string[];
 }
 
-/** Plný `ai` objekt z JSON reportu (včetně payload-metadat truncation/oversizedFiles). */
-async function readAiRaw(outDir: string): Promise<{ truncation?: TruncationShape; code: AiStatusShape }> {
+/** Plný `ai` objekt z JSON reportu (včetně metadat krájení/oversizedFiles). */
+async function readAiRaw(outDir: string): Promise<{ chunking?: { code?: ChunkMetaShape }; oversizedFiles?: string[]; code: AiStatusShape }> {
   const files = await readdir(outDir);
   const jsonName = files.find((f) => f.endsWith(".json"));
   expect(jsonName).toBeDefined();
@@ -268,27 +268,71 @@ async function readAiRaw(outDir: string): Promise<{ truncation?: TruncationShape
 }
 
 /**
- * Projekt, který reálně PŘEteče AI_PAYLOAD_CHAR_BUDGET (1,65M znaků) → collectAiPayload
- * vrátí truncated=true. 20 souborů po ~90 kB (pod per-file stropem 100 kB) = ~1,8M znaků.
+ * Projekt, který reálně PŘETÉKÁ jednu část (okno 0,75×1,65M ≈ 1,24M znaků) → krájí se na
+ * víc částí. 20 souborů po ~90 kB (pod per-file stropem 100 kB) = ~1,8M znaků → ≥2 části.
  * Bez tsconfig (tsc se přeskočí, ať test netrvá věčnost). Obsah je validní TS.
  */
-async function writeLargeProject(): Promise<void> {
+async function writeSizedProject(fileCount: number): Promise<void> {
   const line = "export const padding_value_for_size = 1234567890;\n"; // ~50 B
   const big = line.repeat(1800); // ~90 kB, pod per-file stropem 100 kB
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < fileCount; i++) {
     await writeFile(path.join(proj, `big${i}.ts`), big, "utf8");
   }
   await writeFile(path.join(proj, "project.md"), "## What I'm building\nCLI.\n\n## Non-goals\n- Do not run code.\n", "utf8");
 }
 
-describe("run – propsání payload.truncation do reportu (obě větve)", () => {
-  it("běh nad strop + --ai-yes → JSON nese ai.truncation s počty (běhová větev)", async () => {
+/** ~1,8M znaků (20 × ~90 kB) → spolehlivě víc částí (i s plným oknem ≥2). */
+async function writeLargeProject(): Promise<void> {
+  await writeSizedProject(20);
+}
+
+describe("run – krájený AI běh: chunking do reportu", () => {
+  it("velký projekt → rozkrájí se na víc částí, analyze běží per část, JSON nese ai.chunking", async () => {
     await writeLargeProject();
     const analyze = okAnalyze();
     const outDir = path.join(proj, "report");
-    // --ai-yes obejde cenovou bránu (velký vstup = jistě nad prahem), takže projde
-    // do běhové větve, kde se vrací truncation z payloadu.
+    // --ai-yes obejde cenovou bránu (velký vstup = jistě nad prahem) → běhová větev.
     const code = await run([proj, "--out", outDir, "--ai-code", "--ai-yes"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+      isInteractive: true,
+      ask: vi.fn(async () => "ano"),
+    });
+    expect(code).toBe(0);
+    // ~1,8M znaků / okno ~1,24M = ≥2 části → analyze volán per část (ne jednou).
+    expect(analyze.mock.calls.length).toBeGreaterThan(1);
+    const ai = await readAiRaw(outDir);
+    expect(ai.code.kind).toBe("analyzed"); // sloučeno z částí
+    expect(ai.chunking?.code?.total).toBeGreaterThan(1); // přiznán počet částí
+    expect(ai.chunking?.code?.failed).toBe(0); // všechny části prošly (okAnalyze)
+    // počet volání analyze == počet částí (každá část = jedno volání)
+    expect(analyze.mock.calls.length).toBe(ai.chunking?.code?.total);
+  });
+
+  it("okno se reálně plní jen na 75 %: projekt mezi 75% a 100% okna → 2 části (s plným oknem by byl 1)", async () => {
+    // ~1,37M znaků: NAD 75% oknem (floor(1,65M×0,75)=1,2375M → 2 části), ale POD plným
+    // oknem (1,65M → 1 část). Zub na CHUNK_FILL_RATIO: kdyby cli použilo plné okno místo
+    // 75 %, vyšla by 1 část a total by nebyl 2.
+    await writeSizedProject(15);
+    const analyze = okAnalyze();
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-code", "--ai-yes"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+      isInteractive: true,
+      ask: vi.fn(async () => "ano"),
+    });
+    expect(code).toBe(0);
+    const ai = await readAiRaw(outDir);
+    expect(ai.chunking?.code?.total).toBe(2); // s plným oknem (mutace bez ratio) by bylo 1
+    expect(analyze).toHaveBeenCalledTimes(2);
+  });
+
+  it("malý projekt → 1 část, analyze 1×, chunking total=1, failed=0", async () => {
+    await writeProject();
+    const analyze = okAnalyze();
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-code"], proj, {
       aiAnalyzeFn: analyze,
       aiClassifyFn: () => null,
       isInteractive: true,
@@ -297,33 +341,27 @@ describe("run – propsání payload.truncation do reportu (obě větve)", () =>
     expect(code).toBe(0);
     expect(analyze).toHaveBeenCalledOnce();
     const ai = await readAiRaw(outDir);
-    expect(ai.code.kind).toBe("analyzed");
-    // 20 souborů po ~90 kB přeteklo strop → část se nevešla. Počty musí sedět: něco viděla,
-    // něco vynechala, a vynechané bajty jsou nenulové (reálná informace „o kolik jsem přišel").
-    expect(ai.truncation).toBeDefined();
-    expect(ai.truncation?.includedFiles).toBeGreaterThan(0);
-    expect(ai.truncation?.omittedFiles).toBeGreaterThan(0);
-    expect(ai.truncation?.omittedBytes).toBeGreaterThan(0);
-    // dohromady všech 20 zdrojových kandidátů (žádný nad per-file stropem 100 kB)
-    expect((ai.truncation?.includedFiles ?? 0) + (ai.truncation?.omittedFiles ?? 0)).toBe(20);
+    expect(ai.chunking?.code).toEqual({ total: 1, failed: 0, reasons: [] });
   });
 
-  it("nad strop + ne-TTY bez --ai-yes → cenový skip, ale JSON přesto nese ai.truncation", async () => {
+  it("část selže provozně (analyze hodí známou chybu) → report přizná chunkFailed + důvod, exit 0", async () => {
     await writeLargeProject();
-    const analyze = okAnalyze();
-    const outDir = path.join(proj, "report");
-    // isInteractive vynecháno (=false) + bez --ai-yes → cenová brána přeskočí běh.
-    // truncation se MUSÍ promítnout i tady (skip-větev vrací truncation), jinak by report
-    // nepřiznal, že payload byl velký/uříznutý.
-    const code = await run([proj, "--out", outDir, "--ai-code"], proj, {
-      aiAnalyzeFn: analyze,
-      aiClassifyFn: () => null,
+    // analyze vždy hodí síťovou chybu, classify ji ZNÁ → každá část skipped (provozní).
+    const analyze = vi.fn(async () => {
+      throw new Error("ECONNRESET");
     });
-    expect(code).toBe(0);
-    expect(analyze).not.toHaveBeenCalled();
+    const outDir = path.join(proj, "report");
+    const code = await run([proj, "--out", outDir, "--ai-code", "--ai-yes"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => "síťová chyba (zkus později)",
+      isInteractive: true,
+      ask: vi.fn(async () => "ano"),
+    });
+    expect(code).toBe(0); // čistá degradace, ne pád
     const ai = await readAiRaw(outDir);
-    expect(ai.code.kind).toBe("skipped");
-    expect(ai.truncation).toBeDefined();
-    expect(ai.truncation?.omittedFiles).toBeGreaterThan(0);
+    expect(ai.code.kind).toBe("skipped"); // 0 částí analyzed → skipped
+    expect(ai.chunking?.code?.failed).toBeGreaterThan(0); // přiznán počet selhaných
+    expect(ai.chunking?.code?.failed).toBe(ai.chunking?.code?.total); // všechny selhaly
+    expect(ai.chunking?.code?.reasons.join(" ")).toContain("síťová");
   });
 });

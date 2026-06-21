@@ -1,0 +1,52 @@
+{
+  "id": 60,
+  "title": "Napojit krájený AI běh do CLI",
+  "goal": "V cli.ts spustit AI vrstvu přes části (splitAiPayload s oknem plněným na 75 %) a runChunkedMode per režim místo jednorázového run*Analysis, sloučit do AiReport a přepočítat odhad ceny na N částí (výstup škáluje s počtem částí, gate se ptá na reálné N); report truncation logika nesmí padat. Přiznání rozdělení v reportu (počet částí, chunkFailed/failureReasons, cross-chunk slepota) řeší navazující fáze.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "run*Analysis a build*Prompt na AiChunk",
+      "status": "done",
+      "detail": "3x run*Analysis + 3x build*Prompt: AiPayload → AiChunk (text+includedFiles); zahodit větev if(payload.truncated) v promptech (u krájení se neuřezává); buildLogicPrompt ponechat context: string povinný. Upravit aiResult.test.ts (předávat AiChunk)."
+    },
+    {
+      "title": "estimateAiCost a odhad pro N částí",
+      "status": "done",
+      "detail": "Signatura na části (ChunkedPayload): total = součet chunk.text.length, N = chunks.length; výstup min/typical/max × N (každá část = samostatné volání); formatCostEstimate zmíní počet částí. Testy aiEstimate.test.ts."
+    },
+    {
+      "title": "Napojit splitAiPayload + runChunkedMode v cli",
+      "status": "done",
+      "detail": "cli.ts: splitAiPayload(files, readFile, floor(0.75*AI_PAYLOAD_CHAR_BUDGET)) jednou → ChunkedPayload; per vyžádaný režim runChunkedMode(chunks, runOne); ChunkedRunResult.status → AiReport.nonGoal/code/logic; oversizedFiles z ChunkedPayload; odhad z chunků; runOneAiMode degradace (rethrow→skipped) zachována; --ai-yes/gate funguje."
+    },
+    {
+      "title": "Report: truncation pryč, info o krájení dovnitř",
+      "status": "done",
+      "detail": "Smazat AiReport.truncation + TruncationInfo/describeTruncation/formatBytes (aiStatus.ts); rozšířit AiReport o per-režim chunked info (total/failed/reasons); render v markdown.ts + jsonIndex.ts (truncation pryč, krájení dovnitř + cross-chunk slepota přiznána); bump verze JSON indexu; upravit testy reportu (markdown.ai.test.ts, markdown.test.ts, markdown.moduleGraph.test.ts, jsonIndex.test.ts)."
+    },
+    {
+      "title": "Smazat collectAiPayload + AiPayload",
+      "status": "done",
+      "detail": "Odstranit collectAiPayload + interface AiPayload z aiPayload.ts + jejich testy (relevantní v aiPayload.test.ts, cli.aicost.test.ts). Ponechat PayloadFile/selectAiCandidates/splitAiPayload/AI_PAYLOAD_*."
+    },
+    {
+      "title": "Zelený typecheck a testy se zuby pro krájený běh",
+      "status": "done",
+      "detail": "npm typecheck + vitest celá sada zelené. Nové/upravené testy se zuby end-to-end: víc částí → sloučené nálezy v reportu; část selže → report přizná počet+důvod; prázdný projekt; odhad pro N>1; gate nad prahem se ptá; --ai-yes projde. Přes reálné splitAiPayload+runChunkedMode, ne mock literál."
+    },
+    {
+      "title": "Nezávislý self-review sub-agentem",
+      "status": "done",
+      "detail": "Čerstvý kontext. Checklist: cross-module kontrakty (reálné split+runChunkedMode), degradace (rethrow vs skipped), JSON verze bump, gate ceny, žádný mrtvý kód po mazání, per-režim chunked počty správné, testy mají zuby."
+    }
+  ],
+  "startedAt": "2026-06-21T13:33:00.120Z",
+  "resolvedVerify": [
+    "Reálný krájený AI běh na velkém projektu (s API klíčem)"
+  ],
+  "completedAt": "2026-06-21T14:34:39.195Z",
+  "autoCommit": {
+    "preSha": "92fd8f982d4887dfe04cfaee013fa8327dd425ac",
+    "subject": "Phase 60: Napojit krájený AI běh do CLI"
+  }
+}

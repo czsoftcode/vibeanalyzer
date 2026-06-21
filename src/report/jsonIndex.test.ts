@@ -33,8 +33,8 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 17 (`ai` nese i truncation)", () => {
-    expect(INDEX_VERSION).toBe(17);
+  it("verze indexu je 18 (`ai` nese chunking místo truncation)", () => {
+    expect(INDEX_VERSION).toBe(18);
   });
 
   it("nese ai.oversizedFiles 1:1 (přiznání souborů vynechaných z AI)", () => {
@@ -46,16 +46,16 @@ describe("buildJsonIndex", () => {
     expect(withOversized.ai.oversizedFiles).toEqual(["src/huge.ts"]);
   });
 
-  it("nese ai.truncation 1:1 (přiznání uříznutého payloadu s počty)", () => {
+  it("nese ai.chunking 1:1 (per-režim metadata krájení)", () => {
     const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
-    const withTruncation = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, {
+    const withChunking = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, {
       ...noAiReport,
-      truncation: { includedFiles: 18, omittedFiles: 7, omittedBytes: 635_000 },
+      chunking: { code: { total: 3, failed: 1, reasons: ["timeout"] } },
     });
-    expect(withTruncation.ai.truncation).toEqual({ includedFiles: 18, omittedFiles: 7, omittedBytes: 635_000 });
-    // bez příznaku se pole nevynucuje (větve bez payloadu ho vynechají)
+    expect(withChunking.ai.chunking).toEqual({ code: { total: 3, failed: 1, reasons: ["timeout"] } });
+    // bez krájení se pole nevynucuje (větve bez běhu ho vynechají)
     const without = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, noAiReport);
-    expect(without.ai.truncation).toBeUndefined();
+    expect(without.ai.chunking).toBeUndefined();
   });
 
   it("nese tsc výsledek 1:1 (i přeskočeno, ne jen nálezy)", () => {

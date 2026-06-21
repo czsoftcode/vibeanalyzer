@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../scan.js";
-import { selectAiCandidates, splitAiPayload } from "./aiPayload.js";
+import { AI_PAYLOAD_CHAR_BUDGET, CHUNK_FILL_RATIO, selectAiCandidates, splitAiPayload } from "./aiPayload.js";
+
+describe("konstanty AI okna (regrese: dohodnuté hodnoty)", () => {
+  it("AI_PAYLOAD_CHAR_BUDGET je 1_650_000 znaků ≈ ~500k tokenů", () => {
+    expect(AI_PAYLOAD_CHAR_BUDGET).toBe(1_650_000);
+  });
+  it("CHUNK_FILL_RATIO je 0.75 (plnit okno na max 75 %)", () => {
+    expect(CHUNK_FILL_RATIO).toBe(0.75);
+  });
+});
 
 function file(path: string, ext: string, size = 100, minified = false): FileEntry {
   return { path, type: "file", ext, size, depth: 1, minified };

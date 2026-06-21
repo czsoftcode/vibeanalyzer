@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AiPayload } from "./aiPayload.js";
+import type { ChunkedPayload } from "./aiPayload.js";
 import {
   CHARS_PER_TOKEN,
   OUTPUT_MIN_TOKENS_PER_MODE,
@@ -8,9 +8,14 @@ import {
   formatCostEstimate,
 } from "./aiEstimate.js";
 
-/** Payload jen s textem – ostatní pole odhad nepoužívá. */
-function payload(text: string): AiPayload {
-  return { text, includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] };
+/** Krájený payload o JEDNÉ části daného textu (chunkCount=1 → odhad jako dřív single-shot). */
+function payload(text: string): ChunkedPayload {
+  return { chunks: [{ text, includedFiles: [] }], oversizedFiles: [] };
+}
+
+/** Krájený payload o `n` částech, každá s textem `text` (pro test škálování výstupu počtem částí). */
+function chunkedN(text: string, n: number): ChunkedPayload {
+  return { chunks: Array.from({ length: n }, () => ({ text, includedFiles: [] })), oversizedFiles: [] };
 }
 
 /** Text dlouhý přesně tolik, aby dal `tokens` vstupních tokenů (ceil(len/poměr)). */
@@ -32,6 +37,33 @@ describe("estimateAiCost – rozsah ceny per model a per počet režimů", () =>
     expect(three.outputMaxTokens).toBe(one.outputMaxTokens * 3);
     expect(three.outputMinTokens).toBe(one.outputMinTokens * 3);
     expect(three.costMaxUsd).toBeCloseTo(one.costMaxUsd * 3, 6);
+  });
+
+  it("VÝSTUP se násobí počtem částí, VSTUP ne (krájení vstup nezdvojuje)", () => {
+    // 3 části po 1000 tok = celý projekt 3000 tok vstupu (součet), ale 3 samostatná volání
+    // na výstup. Vstup tedy NEškáluje počtem částí, výstup ano.
+    const three = chunkedN(textForTokens(1000), 3);
+    const e = estimateAiCost(three, "opus", 1);
+    expect(e.chunkCount).toBe(3);
+    expect(e.inputTokensPerMode).toBe(3000); // součet všech částí, ne ×3 na volání
+    expect(e.outputMaxTokens).toBe(16000 * 3); // strop × části
+    expect(e.outputMinTokens).toBe(OUTPUT_MIN_TOKENS_PER_MODE * 3);
+  });
+
+  it("výstup škáluje SOUČINEM režimů × částí", () => {
+    const two = chunkedN(textForTokens(500), 2);
+    const e = estimateAiCost(two, "opus", 3); // 3 režimy × 2 části = 6 volání
+    expect(e.outputMaxTokens).toBe(16000 * 6);
+    expect(e.outputMinTokens).toBe(OUTPUT_MIN_TOKENS_PER_MODE * 6);
+  });
+
+  it("prázdné chunks (0 částí) → vstup 0, výstup 0, cena 0 (bez NaN/pádu)", () => {
+    const e = estimateAiCost({ chunks: [], oversizedFiles: [] }, "opus", 3);
+    expect(e.chunkCount).toBe(0);
+    expect(e.inputTokensPerMode).toBe(0);
+    expect(e.outputMaxTokens).toBe(0);
+    expect(e.costMaxUsd).toBe(0);
+    expect(Number.isNaN(e.costMaxUsd)).toBe(false);
   });
 
   it("opus: konkrétní meze (ceník 5/25 za M, strop 16000)", () => {
@@ -118,6 +150,13 @@ describe("formatCostEstimate – rozsah, ne jedno číslo", () => {
     expect(out).toContain("až nejvýš");
     expect(out).toContain("glm");
     expect(out).toContain("3×");
+  });
+
+  it("zmíní, na kolik částí je projekt rozdělen", () => {
+    const e = estimateAiCost(chunkedN(textForTokens(1000), 4), "glm", 2);
+    expect(formatCostEstimate(e, "glm")).toContain("4 částí");
+    const one = estimateAiCost(payload(textForTokens(1000)), "glm", 1);
+    expect(formatCostEstimate(one, "glm")).toContain("1 část");
   });
 
   it("vypíše i řádek s realistickým odhadem (na co se dívá práh)", () => {

@@ -7,6 +7,28 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-21
+
+### Added
+
+- **Velké projekty se pro AI vrstvu krájí na části.** Co se dřív kvůli velikosti do
+  jednoho dotazu nevešlo a uřízlo se, se teď rozdělí na víc částí a pošle celé – AI tak
+  posoudí celý projekt, ne jen jeho začátek. Okno se plní jen na 75 % (rezerva proti
+  přetečení a pro přesnější míření nálezů). Report u rozděleného běhu uvede, **na kolik
+  částí se projekt rozdělil**, a poctivě přizná, že rozdělený běh **nevidí souvislosti
+  napříč částmi** (logika/non-goaly mezi moduly jsou tak slabší). Když některá část
+  provozně selže (např. přetížené API), ostatní se posbírají a report přizná, kolik
+  částí a proč selhalo – běh nespadne.
+
+### Changed
+
+- **Odhad ceny AI počítá s počtem částí.** U velkého (rozkrájeného) projektu odhad i práh
+  potvrzení zohlední, že každá část je samostatné volání (výstup roste s počtem částí),
+  takže cena nepřekvapí.
+- Report **už nehlásí „kód uříznut"** (to konceptem krájení zaniklo) – místo toho hlásí
+  rozdělení na části. Pole `truncation` v JSON reportu je nahrazeno polem `chunking`
+  (verze indexu 18); konzumenti JSON musí počítat se změnou tvaru.
+
 ## [0.5.0] - 2026-06-21
 
 ### Added

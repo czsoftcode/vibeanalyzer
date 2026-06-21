@@ -4,37 +4,9 @@ import {
   AI_MISSING_KEY_REASON,
   AI_PROVIDERS,
   type AiStatus,
-  describeTruncation,
   detectAiStatus,
-  formatBytes,
   verifyAiAccess,
 } from "./aiStatus.js";
-
-describe("formatBytes – lidská velikost (B/kB/MB)", () => {
-  it("pod 1 kB → bajty", () => {
-    expect(formatBytes(0)).toBe("0 B");
-    expect(formatBytes(512)).toBe("512 B");
-    expect(formatBytes(1023)).toBe("1023 B");
-  });
-  it("kB se zaokrouhlí na celé", () => {
-    expect(formatBytes(1024)).toBe("1 kB");
-    expect(formatBytes(635_000)).toBe("620 kB"); // 620,1 → 620
-  });
-  it("od 1 MB výš na jedno desetinné", () => {
-    expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
-    expect(formatBytes(1_650_000)).toBe("1.6 MB");
-  });
-});
-
-describe("describeTruncation – sdílená věta (report i stderr)", () => {
-  it("nese počet viděných z celku, vynechané soubory i velikost", () => {
-    const s = describeTruncation({ includedFiles: 18, omittedFiles: 7, omittedBytes: 635_000 });
-    expect(s).toContain("AI viděla 18 z 25 zdrojových souborů");
-    expect(s).toContain("7 souborů");
-    expect(s).toContain("620 kB");
-    expect(s).toContain("posouzení je neúplné");
-  });
-});
 
 describe("detectAiStatus – brána AI vrstvy", () => {
   it("chybějící klíč → skipped s důvodem 'chybí ANTHROPIC_API_KEY'", () => {

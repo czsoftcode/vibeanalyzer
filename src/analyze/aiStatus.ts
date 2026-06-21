@@ -118,53 +118,28 @@ export type AiStatus =
  * per-file stropu) – vědomě jede tudy, protože `AiReport` je jediný kanál AI dat do
  * reportu; nepovinné, plní se jen když se reálně stavěl payload (běžel analytický režim).
  *
- * `truncation` je rovněž payload-metadata (sdílená VŠEMI režimy): payload nasbíral kód až
- * na strop `AI_PAYLOAD_CHAR_BUDGET` a zbytek uřízl → AI posuzovala NEÚPLNÝ projekt. Report
- * to musí přiznat stejně jako `oversizedFiles` (jinak nález vypadá jako kompletní posouzení).
- * Přítomnost pole = uříznuto (jinak chybí). Nese KOLIK (soubory/bajty), ne jen ŽE.
- * Nepovinné a plní se JEN když se reálně stavěl payload; větve bez payloadu (`--ai-check`,
- * pouhá detekce klíče) ho vynechají.
+ * `chunking` je per-režim metadata krájeného běhu: na kolik částí se projekt rozdělil a
+ * kolik jich v daném režimu selhalo. Report to přizná (kolik částí + že krájený běh nevidí
+ * souvislosti napříč částmi). Plní se JEN u režimů, co reálně běžely přes části; větve bez
+ * běhu (`--ai-check`, pouhá detekce klíče, gate ceny) ho vynechají.
  */
 export interface AiReport {
   nonGoal: AiStatus;
   code: AiStatus;
   logic: AiStatus;
   oversizedFiles?: string[];
-  truncation?: TruncationInfo;
+  chunking?: { nonGoal?: ChunkRunMeta; code?: ChunkRunMeta; logic?: ChunkRunMeta };
 }
 
 /**
- * Kolik kódu AI NEvidělo kvůli uříznutí na celkovém stropu (`AI_PAYLOAD_CHAR_BUDGET`).
- * `includedFiles` + `omittedFiles` = celkový počet zdrojových kandidátů (bez `oversizedFiles`,
- * to je oddělená kategorie). `omittedBytes` je z `FileEntry.size` (bajty, ne znaky – řádová
- * míra, viz `AiPayload.omittedBytes`).
+ * Metadata krájeného běhu JEDNOHO režimu pro report: na kolik částí se projekt rozdělil
+ * (`total`) a kolik jich v tomto režimu provozně selhalo (`failed`, s `reasons`). Počty
+ * jsou PER REŽIM – každý režim běží přes části zvlášť, takže selhání se může lišit.
  */
-export interface TruncationInfo {
-  includedFiles: number;
-  omittedFiles: number;
-  omittedBytes: number;
-}
-
-/** Lidsky čitelná velikost v bajtech (B/kB/MB). Sjednocené formátování `omittedBytes`
- *  pro report i stderr (ať se znění nerozejde). Bajty, ne znaky (UTF-8 – viz `TruncationInfo`). */
-export function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} kB`;
-  return `${bytes} B`;
-}
-
-/**
- * JEDNA věta o uříznutí, sdílená reportem (.md poznámka) i stderr hláškou – aby se znění
- * nerozcházelo (cross-module kontrakt: stejný text, jeden zdroj). „~" u velikosti je
- * záměrné: bajty jsou jen řádová míra, ne přesný objem promptu.
- */
-export function describeTruncation(info: TruncationInfo): string {
-  const total = info.includedFiles + info.omittedFiles;
-  return (
-    `AI viděla ${info.includedFiles} z ${total} zdrojových souborů; ` +
-    `~${formatBytes(info.omittedBytes)} kódu (${info.omittedFiles} souborů) se kvůli celkové velikosti ` +
-    `do dotazu nevešlo – posouzení je neúplné.`
-  );
+export interface ChunkRunMeta {
+  total: number;
+  failed: number;
+  reasons: string[];
 }
 
 /** Jméno env proměnné s klíčem k Anthropic API. Default provider (opus/sonnet) i

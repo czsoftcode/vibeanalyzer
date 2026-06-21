@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { type AiReport, type AiStatus, type TruncationInfo, describeTruncation } from "../analyze/aiStatus.js";
+import { type AiReport, type AiStatus, type ChunkRunMeta } from "../analyze/aiStatus.js";
 import type { ModuleEdge, ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
@@ -345,12 +345,13 @@ function auditSummaryLine(audit: AuditResult | undefined): string {
  * hned pod hlavičkou (logika ji používá na přiznání aproximace). Stavy: skipped /
  * verified / analyzed / ready – každý schválně rozlišitelný (ne falešné "hotovo").
  */
-function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string, note?: string): string[] {
+function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string, chunk?: ChunkRunMeta, note?: string): string[] {
   const out: string[] = [`### ${label}`, ""];
   if (note) {
     out.push(`> ${sanitizeInline(note)}`);
     out.push("");
   }
+  out.push(...aiChunkingNote(chunk));
 
   if (!ai || ai.kind === "skipped") {
     const reason = ai?.reason ?? "AI vrstva zatím neproběhla";
@@ -398,12 +399,25 @@ function aiOversizedNote(oversized: string[] | undefined): string[] {
   return out;
 }
 
-/** Poznámka (jednou, sdílená všemi režimy): kód byl nad celkovým stropem uříznut, takže AI
- *  posuzovala neúplný projekt – s počtem souborů/velikostí, co uniklo. Jen když `truncation`
- *  je přítomné – jinak se nic nevypisuje. Znění sdílené se stderr (`describeTruncation`). */
-function aiTruncatedNote(truncation: TruncationInfo | undefined): string[] {
-  if (!truncation) return [];
-  return [`> Pozor: ${describeTruncation(truncation)}`, ""];
+/** Poznámka PER REŽIM o krájení: na kolik částí se projekt rozdělil (jen když >1 – jedna
+ *  část = celý projekt naráz, není co přiznávat) a kolik jich provozně selhalo. U více
+ *  částí přizná i cross-chunk slepotu (krájený běh nevidí souvislosti napříč částmi). */
+function aiChunkingNote(chunk: ChunkRunMeta | undefined): string[] {
+  if (!chunk || chunk.total <= 1) {
+    // 1 část a žádné selhání → nic. (Když total===1 a failed===1, řeší to stav skipped.)
+    if (chunk && chunk.failed > 0 && chunk.total <= 1) {
+      return [`> Pozor: část projektu se nepodařilo zpracovat: ${sanitizeInline(chunk.reasons.join("; "))}`, ""];
+    }
+    return [];
+  }
+  const out: string[] = [
+    `> Projekt rozdělen na ${chunk.total} částí – posuzováno po částech, takže AI nevidí souvislosti NAPŘÍČ částmi (slabší pro logiku/non-goaly mezi moduly).`,
+  ];
+  if (chunk.failed > 0) {
+    out.push(`> ${chunk.failed} z ${chunk.total} částí se nepodařilo zpracovat: ${sanitizeInline(chunk.reasons.join("; "))}`);
+  }
+  out.push("");
+  return out;
 }
 
 /**
@@ -416,11 +430,10 @@ function aiSection(ai: AiReport | undefined): string[] {
   return [
     "## AI analýza",
     "",
-    ...aiTruncatedNote(ai?.truncation),
     ...aiOversizedNote(ai?.oversizedFiles),
-    ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno."),
-    ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny."),
-    ...aiModeBlock("Logika vs záměr (--ai-logic)", ai?.logic, "Žádný rozpor funkčnosti se záměrem nenalezen.", AI_LOGIC_APPROX_NOTE),
+    ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno.", ai?.chunking?.nonGoal),
+    ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny.", ai?.chunking?.code),
+    ...aiModeBlock("Logika vs záměr (--ai-logic)", ai?.logic, "Žádný rozpor funkčnosti se záměrem nenalezen.", ai?.chunking?.logic, AI_LOGIC_APPROX_NOTE),
   ];
 }
 

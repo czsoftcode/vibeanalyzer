@@ -1,7 +1,7 @@
 import type { Finding, Severity } from "../findings.js";
 import type { Intent } from "../intent.js";
 import { AI_PROVIDERS, type AiModelChoice, type AiStatus, type AiUsage, detectAiStatus } from "./aiStatus.js";
-import type { AiPayload, PayloadFile } from "./aiPayload.js";
+import type { AiChunk, PayloadFile } from "./aiPayload.js";
 
 /**
  * JSON schéma pro strukturovaný výstup (output_config.format). Garantuje
@@ -60,7 +60,7 @@ export const SYSTEM_PROMPT = [
  *  (adresování `nonGoalIndex`) + (případně přiznané uříznutí) + slepený kód. Kontext
  *  je null/prázdný → blok se VYNECHÁ (žádný prázdný nadpis = šum pro model). Čisté,
  *  testovatelné. */
-export function buildAnalyzePrompt(context: string | null, nonGoals: string[], payload: AiPayload): string {
+export function buildAnalyzePrompt(context: string | null, nonGoals: string[], chunk: AiChunk): string {
   const parts: string[] = [];
   if (context && context.trim() !== "") {
     parts.push("# Deklarovaný kontext projektu (z project.md)");
@@ -70,12 +70,8 @@ export function buildAnalyzePrompt(context: string | null, nonGoals: string[], p
   parts.push("# Deklarované non-goaly (index: text)");
   parts.push(nonGoals.map((g, i) => `${i}: ${g}`).join("\n"));
   parts.push("");
-  if (payload.truncated) {
-    parts.push("> Pozor: kód byl kvůli velikosti uříznut – posouzení je neúplné.");
-    parts.push("");
-  }
   parts.push("# Zdrojový kód (s hlavičkami cest)");
-  parts.push(payload.text);
+  parts.push(chunk.text);
   return parts.join("\n");
 }
 
@@ -219,7 +215,7 @@ export type AnalyzeFn = (
 export async function runAiAnalysis(
   env: Record<string, string | undefined>,
   intent: Intent | null,
-  payload: AiPayload,
+  chunk: AiChunk,
   model: AiModelChoice,
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
@@ -231,12 +227,12 @@ export async function runAiAnalysis(
   if (!nonGoals || nonGoals.length === 0) {
     return { kind: "skipped", reason: "žádné deklarované non-goaly (není co posuzovat)" };
   }
-  if (payload.includedFiles.length === 0) {
+  if (chunk.includedFiles.length === 0) {
     return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
   }
 
   const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
-  const prompt = buildAnalyzePrompt(intent?.context ?? null, nonGoals, payload);
+  const prompt = buildAnalyzePrompt(intent?.context ?? null, nonGoals, chunk);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT, prompt, FINDINGS_SCHEMA);
     // Uříznutý/prázdný výstup je PROVOZNÍ stav (thinking sežral max_tokens, model
@@ -250,7 +246,7 @@ export async function runAiAnalysis(
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
       };
     }
-    const findings = toFindings(parseFindings(rawText), nonGoals, payload.includedFiles);
+    const findings = toFindings(parseFindings(rawText), nonGoals, chunk.includedFiles);
     return { kind: "analyzed", model, findings, usage, costUsd: computeCostUsd(usage, model) };
   } catch (err: unknown) {
     const reason = classify(err);
@@ -327,14 +323,10 @@ export const SYSTEM_PROMPT_CODE = [
 
 /** Sestaví uživatelský prompt pro analýzu kódu: (případně přiznané uříznutí) + slepený
  *  kód s hlavičkami cest. Bez záměru/non-goalů — code vrstva je posuzuje nezávisle. */
-export function buildCodePrompt(payload: AiPayload): string {
+export function buildCodePrompt(chunk: AiChunk): string {
   const parts: string[] = [];
-  if (payload.truncated) {
-    parts.push("> Pozor: kód byl kvůli velikosti uříznut – posouzení je neúplné.");
-    parts.push("");
-  }
   parts.push("# Zdrojový kód (s hlavičkami cest)");
-  parts.push(payload.text);
+  parts.push(chunk.text);
   return parts.join("\n");
 }
 
@@ -414,7 +406,7 @@ export function toCodeFindings(raw: RawCodeFinding[], includedFiles: PayloadFile
  */
 export async function runAiCodeAnalysis(
   env: Record<string, string | undefined>,
-  payload: AiPayload,
+  chunk: AiChunk,
   model: AiModelChoice,
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
@@ -422,12 +414,12 @@ export async function runAiCodeAnalysis(
   const gate = detectAiStatus(env, model);
   if (gate.kind === "skipped") return gate;
 
-  if (payload.includedFiles.length === 0) {
+  if (chunk.includedFiles.length === 0) {
     return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
   }
 
   const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
-  const prompt = buildCodePrompt(payload);
+  const prompt = buildCodePrompt(chunk);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_CODE, prompt, CODE_FINDINGS_SCHEMA);
     if (stopReason === "max_tokens" || rawText.trim() === "") {
@@ -437,7 +429,7 @@ export async function runAiCodeAnalysis(
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
       };
     }
-    const findings = toCodeFindings(parseCodeFindings(rawText), payload.includedFiles);
+    const findings = toCodeFindings(parseCodeFindings(rawText), chunk.includedFiles);
     return { kind: "analyzed", model, findings, usage, costUsd: computeCostUsd(usage, model) };
   } catch (err: unknown) {
     const reason = classify(err);
@@ -523,7 +515,7 @@ export const SYSTEM_PROMPT_LOGIC = [
  *  slepený kód s hlavičkami cest. Non-goaly se NEposílají – ty řeší `--ai-non-goal`.
  *  Kontext prázdný → blok se VYNECHÁ (žádný prázdný nadpis). Uříznutý kód sem nedoteče
  *  (orchestrátor na `payload.truncated` přeskočí), proto bez poznámky o uříznutí. */
-export function buildLogicPrompt(context: string, payload: AiPayload): string {
+export function buildLogicPrompt(context: string, chunk: AiChunk): string {
   const parts: string[] = [];
   if (context.trim() !== "") {
     parts.push("# Deklarovaný kontext projektu (z project.md)");
@@ -531,7 +523,7 @@ export function buildLogicPrompt(context: string, payload: AiPayload): string {
     parts.push("");
   }
   parts.push("# Zdrojový kód (s hlavičkami cest)");
-  parts.push(payload.text);
+  parts.push(chunk.text);
   return parts.join("\n");
 }
 
@@ -630,7 +622,7 @@ export function toLogicFindings(raw: RawLogicFinding[], includedFiles: PayloadFi
 export async function runAiLogicAnalysis(
   env: Record<string, string | undefined>,
   intent: Intent | null,
-  payload: AiPayload,
+  chunk: AiChunk,
   model: AiModelChoice,
   analyze: AnalyzeFn,
   classify: (err: unknown) => string | null,
@@ -646,23 +638,15 @@ export async function runAiLogicAnalysis(
     };
   }
 
-  if (payload.includedFiles.length === 0) {
+  if (chunk.includedFiles.length === 0) {
     return { kind: "skipped", reason: "žádné zdrojové soubory k analýze" };
-  }
-  // Useknutý kód: soud o CELKU z neúplného vstupu by byl nespolehlivý → čistě přeskočit.
-  // Krájení projektu na logické části a kontrola po částech je samostatná budoucí fáze.
-  if (payload.truncated) {
-    return {
-      kind: "skipped",
-      reason: "kód se kvůli velikosti nevešel celý – soud o celku by byl nespolehlivý (krájení na části přijde v další fázi)",
-    };
   }
 
   const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
   // Kontext (syrový project.md bez non-goalů) v sobě záměr OBSAHUJE – brána výš už
   // ověřila, že záměr není prázdný, takže context tu je vždy neprázdný (záměr se z
   // něj nevyřezává). `?? ""` je jen null-safety optional chainu, ne reálná větev.
-  const prompt = buildLogicPrompt(intent?.context ?? "", payload);
+  const prompt = buildLogicPrompt(intent?.context ?? "", chunk);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_LOGIC, prompt, LOGIC_FINDINGS_SCHEMA);
     if (stopReason === "max_tokens" || rawText.trim() === "") {
@@ -672,7 +656,7 @@ export async function runAiLogicAnalysis(
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
       };
     }
-    const findings = toLogicFindings(parseLogicFindings(rawText), payload.includedFiles);
+    const findings = toLogicFindings(parseLogicFindings(rawText), chunk.includedFiles);
     return { kind: "analyzed", model, findings, usage, costUsd: computeCostUsd(usage, model) };
   } catch (err: unknown) {
     const reason = classify(err);

@@ -143,38 +143,36 @@ describe("buildMarkdown – AI sekce: tři nezávislé režimy (non-goal + code 
     expect(mdUndef).not.toContain("AI NEvidělo");
   });
 
-  it("truncation → poznámka pod ## AI analýza přizná neúplný projekt s počty (jednou)", () => {
-    const skip = detectAiStatus({});
-    const md = buildMarkdown({ ...base, ai: { ...report(skip, skip), truncation: { includedFiles: 18, omittedFiles: 7, omittedBytes: 635_000 } } });
-    expect(md).toContain("AI viděla 18 z 25 zdrojových souborů");
-    expect(md).toContain("7 souborů");
-    expect(md).toContain("posouzení je neúplné");
-    // velikost v lidské podobě (kB), ne syrové bajty
-    expect(md).toContain("620 kB");
-    // poznámka jen JEDNOU (sdílená), ne v každém ze tří mode-bloků
-    expect(md.match(/AI viděla 18 z 25/g)).toHaveLength(1);
-  });
-
-  it("bez truncation (undefined) → žádná poznámka o uříznutí", () => {
-    const skip = detectAiStatus({});
-    const mdUndef = buildMarkdown({ ...base, ai: report(skip, skip) });
-    expect(mdUndef).not.toContain("posouzení je neúplné");
-    expect(mdUndef).not.toContain("zdrojových souborů");
-  });
-
-  it("truncation + oversizedFiles současně → obě poznámky, truncation první, sekce zůstane validní", () => {
+  it("chunking >1 část → v bloku režimu přizná počet částí, cross-chunk slepotu i selhání", () => {
     const skip = detectAiStatus({});
     const md = buildMarkdown({
       ...base,
-      ai: { ...report(skip, skip), truncation: { includedFiles: 3, omittedFiles: 5, omittedBytes: 500_000 }, oversizedFiles: ["src/huge.ts"] },
+      ai: { ...report(skip, analyzedCode), chunking: { code: { total: 3, failed: 1, reasons: ["timeout"] } } },
     });
-    expect(md).toContain("AI viděla 3 z 8 zdrojových souborů");
-    expect(md).toContain("AI NEvidělo");
-    // pořadí: poznámka o uříznutí je nad poznámkou o oversized souborech
-    expect(md.indexOf("AI viděla 3 z 8")).toBeLessThan(md.indexOf("AI NEvidělo"));
-    // obě jen jednou (sdílené, ne v mode-blocích)
-    expect(md.match(/AI viděla 3 z 8/g)).toHaveLength(1);
-    expect(md.match(/AI NEvidělo/g)).toHaveLength(1);
+    expect(md).toContain("rozdělen na 3 částí");
+    expect(md).toContain("NAPŘÍČ částmi"); // přiznání cross-chunk slepoty
+    expect(md).toContain("1 z 3 částí"); // přiznán počet selhaných
+    expect(md).toContain("timeout"); // důvod selhání
+  });
+
+  it("chunking total=1 a bez selhání → žádná poznámka o krájení (jedna část = celý projekt)", () => {
+    const md = buildMarkdown({
+      ...base,
+      ai: { ...report(detectAiStatus({}), analyzedCode), chunking: { code: { total: 1, failed: 0, reasons: [] } } },
+    });
+    expect(md).not.toContain("rozdělen na");
+    expect(md).not.toContain("NAPŘÍČ částmi");
+  });
+
+  it("chunking + oversizedFiles současně → obě poznámky, sekce zůstane validní", () => {
+    const skip = detectAiStatus({});
+    const md = buildMarkdown({
+      ...base,
+      ai: { ...report(skip, analyzedCode), chunking: { code: { total: 2, failed: 0, reasons: [] } }, oversizedFiles: ["src/huge.ts"] },
+    });
+    expect(md).toContain("rozdělen na 2 částí"); // per-blok poznámka o krájení
+    expect(md).toContain("AI NEvidělo"); // sdílená poznámka o oversized souborech
+    expect(md.match(/AI NEvidělo/g)).toHaveLength(1); // oversized jen jednou (sdílené)
   });
 
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {

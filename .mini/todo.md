@@ -13,6 +13,6 @@
 - [ ] Dát pryč sonnet
 - [ ] dat vibeanalyzer jako skills do claude code
 - [ ] nechat okno jak je, ale casti projektu pocitat mezi 50 - 75% okna
-- [ ] zapojeni rozdeleni do CLI
+- [x] zapojeni rozdeleni do CLI
 - [ ] Cross-chunk kontext přes strojovou mapu: ke každé části (při krájeném AI běhu) přiložit levný strojový přehled projektu – graf modulů z importů (fáze 24) + strom souborů – aby AI věděla 'tohle je celý projekt, ty vidíš jen tyhle soubory', bez LLM carry-over. POZOR: NE předávat kód/shrnutí předchozích částí (kvadratická cena, sekvenčnost, halucinace na neviděné řádky). Mapa je malá, lineární, paralelizovatelná, drží obranu proti halucinaci. Předpoklad: napojený dělič + orchestrátor slučování.
 - [ ] Strukturovaná cena/usage u přeskočených (provozních) částí: dnes run*Analysis při max_tokens/prázdném výstupu vrací skipped s cenou jen v TEXTU reason (ne strukturovaně) → orchestrátor slučování (fáze 59) ji nezapočítá do sloučené costUsd = mírné PODHODNOCENÍ ceny krájeného běhu. Řešení: run*Analysis ať i u skipnuté provozní části vrací usage+costUsd strukturovaně (nová varianta AiStatus nebo skipped s usage), orchestrátor je pak sečte. Zásah do 3 funkcí + jejich testů. Předpoklad pro PŘESNOU cenu krájeného běhu.

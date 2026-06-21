@@ -297,6 +297,11 @@
       "id": 59,
       "title": "Orchestrátor slučování běhu částí",
       "status": "done"
+    },
+    {
+      "id": 60,
+      "title": "Napojit krájený AI běh do CLI",
+      "status": "done"
     }
   ]
 }
