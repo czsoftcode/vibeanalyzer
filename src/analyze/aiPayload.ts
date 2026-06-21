@@ -17,6 +17,15 @@ export interface AiPayload {
   text: string;
   includedFiles: PayloadFile[];
   truncated: boolean;
+  /** Počet souborů, které se kvůli celkovému stropu (`AI_PAYLOAD_CHAR_BUDGET`) do dotazu
+   *  NEvešly (na rozdíl od `oversizedFiles` to jsou jinak validní kandidáti pod per-file
+   *  stropem, jen došel celkový rozpočet). 0 když `truncated === false`. Slouží reportu,
+   *  ať uživatel ví, KOLIK kódu AI nevidělo, ne jen ŽE něco. */
+  omittedFiles: number;
+  /** Přibližná velikost (v bajtech, z `FileEntry.size` – bez čtení) souborů spadajících do
+   *  `omittedFiles`. POZOR: bajty ≠ znaky u UTF-8 (diakritika/emoji), je to řádová míra
+   *  „o kolik kódu jsem přišel", ne bajt-přesný objem promptu. 0 když nic neuříznuto. */
+  omittedBytes: number;
   /** Cesty ZDROJOVÝCH souborů (správná přípona, ne minifikát), které by jinak byly AI
    *  kandidáti, ale překročily per-file strop (`AI_PAYLOAD_PER_FILE_MAX_BYTES`) → AI je
    *  nevidělo. Přiznává se v reportu (ne tiché vynechání). NEzahrnuje minifikáty ani
@@ -97,5 +106,12 @@ export async function collectAiPayload(
     includedFiles.push({ path: f.path, lineCount: countLines(content) });
   }
 
-  return { text, includedFiles, truncated, oversizedFiles };
+  // `includedFiles` je VŽDY prefix `selected` (přidáváme v pořadí, jen `break` při přetečení),
+  // takže vynechané = zbytek za prefixem. Velikost z `f.size` (scan), bez čtení uříznutých
+  // souborů – to je přesně to, čemu se strop vyhýbá. truncated ⟺ omittedFiles > 0.
+  const omitted = selected.slice(includedFiles.length);
+  const omittedFiles = omitted.length;
+  const omittedBytes = omitted.reduce((sum, f) => sum + f.size, 0);
+
+  return { text, includedFiles, truncated, omittedFiles, omittedBytes, oversizedFiles };
 }

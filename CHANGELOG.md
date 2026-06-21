@@ -9,6 +9,13 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- Report nově **přiznává, když AI posuzovala neúplný projekt**, protože se zdrojový kód
+  kvůli celkovému stropu uřízl. Uvede, **kolik souborů AI vidělo z celku** a **kolik kódu**
+  (řádově v kB) se do dotazu nevešlo – v sekci „AI analýza" v `.md` i v poli `ai.truncation`
+  v JSON (verze indexu 17). Stejné znění na stderr i v reportu, žádné tiché zatajení
+  neúplnosti. Doplňuje dřívější přiznání per-file vynechaných souborů (`ai.oversizedFiles`).
+  Počet souborů je přesný; velikost je přibližná (bajty ≠ znaky u UTF-8), tokeny se vědomě
+  nevykazují.
 - **Odhad ceny AI před během.** Před každým reálným AI dotazem se teď vypíše přibližný
   odhad ceny jako rozsah („řádově $X až nejvýš $Y", explicitně označený jako odhad, ne
   fakturace). Počítá se z reálné délky posílaného kódu × ceník zvoleného modelu; vstup

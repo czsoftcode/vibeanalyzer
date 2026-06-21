@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import * as path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
+import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, type TruncationInfo, describeTruncation, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
 import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
 import { collectAiPayload } from "./analyze/aiPayload.js";
 import { estimateAiCost, formatCostEstimate } from "./analyze/aiEstimate.js";
@@ -567,6 +567,11 @@ async function runAiLayer(
     const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
     // payload se sbírá JEDNOU a sdílí mezi všemi režimy (žádné dvojí čtení souborů).
     const payload = await collectAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
+    // Payload-metadata o uříznutí pro report/stderr: přítomné jen když se reálně uřízlo
+    // (truncated). `includedFiles` z délky pole zahrnutých souborů, zbytek z payloadu.
+    const truncation: TruncationInfo | undefined = payload.truncated
+      ? { includedFiles: payload.includedFiles.length, omittedFiles: payload.omittedFiles, omittedBytes: payload.omittedBytes }
+      : undefined;
 
     // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů (každý je samostatné
     // API volání → vstup se posílá tolikrát). Odhad VŽDY vypíšeme (ať uživatel cenu vidí
@@ -597,6 +602,7 @@ async function runAiLayer(
           code: wantCode ? skipped : pre,
           logic: wantLogic ? skipped : pre,
           oversizedFiles: payload.oversizedFiles,
+          truncation,
         };
       }
     }
@@ -604,24 +610,25 @@ async function runAiLayer(
     // Když je klíč, ale daný režim není vyžádán, zůstane `ready` (klíč nalezen, dotaz
     // neproběhl) – NE falešné „analyzováno".
     const nonGoal = wantNonGoal
-      ? await runOneAiMode("non-goalů", parsed.aiModel, payload.truncated, () =>
+      ? await runOneAiMode("non-goalů", parsed.aiModel, truncation, () =>
           runAiAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
         )
       : pre;
     const code = wantCode
-      ? await runOneAiMode("kódu", parsed.aiModel, payload.truncated, () =>
+      ? await runOneAiMode("kódu", parsed.aiModel, truncation, () =>
           runAiCodeAnalysis(process.env, payload, parsed.aiModel, analyzeFn, classifyFn),
         )
       : pre;
     const logic = wantLogic
-      ? await runOneAiMode("logiky", parsed.aiModel, payload.truncated, () =>
+      ? await runOneAiMode("logiky", parsed.aiModel, truncation, () =>
           runAiLogicAnalysis(process.env, intent, payload, parsed.aiModel, analyzeFn, classifyFn),
         )
       : pre;
-    // `oversizedFiles` přidáme jen tady (payload se reálně stavěl): report tak přizná
-    // zdrojové soubory, které AI nevidělo kvůli per-file stropu. Ostatní větve níže
-    // payload nestaví → pole vynechají (žádná poznámka v reportu).
-    return { nonGoal, code, logic, oversizedFiles: payload.oversizedFiles };
+    // `oversizedFiles` a `truncation` přidáme jen tady (payload se reálně stavěl): report
+    // tak přizná zdrojové soubory, které AI nevidělo kvůli per-file stropu, i to, KOLIK kódu
+    // se uřízlo nad celkovým stropem. Ostatní větve níže payload nestaví → pole vynechají
+    // (žádná poznámka v reportu).
+    return { nonGoal, code, logic, oversizedFiles: payload.oversizedFiles, truncation };
   }
 
   if (parsed.aiCheck) {
@@ -663,7 +670,7 @@ async function runAiLayer(
 async function runOneAiMode(
   label: string,
   model: AiModelChoice,
-  truncated: boolean,
+  truncation: TruncationInfo | undefined,
   call: () => Promise<AiStatus>,
 ): Promise<AiStatus> {
   console.error(`AI analýza ${label} (model ${model}) běží – u velkého projektu může trvat minuty, neukončuj…`);
@@ -680,8 +687,8 @@ async function runOneAiMode(
       `AI analýza ${label} (${status.model}): ${status.findings.length} nálezů, ` +
         `tokeny ${status.usage.inputTokens} vstup + ${status.usage.outputTokens} výstup, odhad ceny ~$${status.costUsd.toFixed(4)}.`,
     );
-    if (truncated) {
-      console.error(`Pozn.: kód byl kvůli velikosti uříznut – analýza ${label} je neúplná (viz report).`);
+    if (truncation) {
+      console.error(`Pozn.: ${describeTruncation(truncation)} (viz report)`);
     }
   }
   return status;

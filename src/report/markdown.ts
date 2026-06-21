@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type { AiReport, AiStatus } from "../analyze/aiStatus.js";
+import { type AiReport, type AiStatus, type TruncationInfo, describeTruncation } from "../analyze/aiStatus.js";
 import type { ModuleEdge, ModuleGraphResult } from "../analyze/moduleGraph.js";
 import type { AuditResult } from "../audit.js";
 import { type EslintResult, type Finding, formatLocation, type TscResult } from "../findings.js";
@@ -398,6 +398,14 @@ function aiOversizedNote(oversized: string[] | undefined): string[] {
   return out;
 }
 
+/** Poznámka (jednou, sdílená všemi režimy): kód byl nad celkovým stropem uříznut, takže AI
+ *  posuzovala neúplný projekt – s počtem souborů/velikostí, co uniklo. Jen když `truncation`
+ *  je přítomné – jinak se nic nevypisuje. Znění sdílené se stderr (`describeTruncation`). */
+function aiTruncatedNote(truncation: TruncationInfo | undefined): string[] {
+  if (!truncation) return [];
+  return [`> Pozor: ${describeTruncation(truncation)}`, ""];
+}
+
 /**
  * Sekce "## AI analýza". Tři NEZÁVISLÉ pod-bloky (non-goaly, kód, logika) – každý běží
  * na vlastní přepínač a má vlastní stav/cenu. Logika má navíc přiznání aproximace.
@@ -408,6 +416,7 @@ function aiSection(ai: AiReport | undefined): string[] {
   return [
     "## AI analýza",
     "",
+    ...aiTruncatedNote(ai?.truncation),
     ...aiOversizedNote(ai?.oversizedFiles),
     ...aiModeBlock("Porušení non-goalů (--ai-non-goal)", ai?.nonGoal, "Žádné porušení deklarovaných non-goalů nenalezeno."),
     ...aiModeBlock("Kvalita a rizika kódu (--ai-code)", ai?.code, "Žádné závažné problémy kódu nenalezeny."),

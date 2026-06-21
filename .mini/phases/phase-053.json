@@ -1,0 +1,6 @@
+{
+  "id": 53,
+  "title": "Zvednout strop glm na 128k",
+  "goal": "Zvednout glm maxTokens z 65536 na 131072 (128k, reálný strop výstupu GLM-5.2), aby velké projekty nepadaly na stop_reason=max_tokens a nezahazovaly zaplacený výsledek; ponechat reasoning_effort na high (kvalita uvažování) a opravit zavádějící komentář v AI_PROVIDERS (GLM-5.2 zná jen high/max, ne low/medium/minimal/xhigh); ověřit, že se worst-case odhad ceny (aiEstimate) správně přepočítá a zdokumentovat, že tím vzroste a víc spouští cenovou bránu (souvisí s todo 20).",
+  "status": "proposed"
+}

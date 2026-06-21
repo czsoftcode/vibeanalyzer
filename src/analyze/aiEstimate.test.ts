@@ -9,7 +9,7 @@ import {
 
 /** Payload jen s textem – ostatní pole odhad nepoužívá. */
 function payload(text: string): AiPayload {
-  return { text, includedFiles: [], truncated: false, oversizedFiles: [] };
+  return { text, includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] };
 }
 
 /** Text dlouhý přesně tolik, aby dal `tokens` vstupních tokenů (ceil(len/poměr)). */

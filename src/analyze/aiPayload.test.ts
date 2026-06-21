@@ -72,14 +72,25 @@ describe("collectAiPayload – výběr a ohraničení payloadu", () => {
     expect(out.includedFiles[0].lineCount).toBe(0);
   });
 
-  it("nad stropem uřízne a PŘIZNÁ to (truncated:true), ne tiché vynechání", async () => {
-    // dva soubory, každý ~70 % stropu → druhý se nevejde
+  it("nad stropem uřízne a PŘIZNÁ to (truncated:true + počty), ne tiché vynechání", async () => {
+    // dva soubory, každý ~70 % stropu → druhý se nevejde. b.ts má známou velikost (size),
+    // ať se dá ověřit omittedBytes (počítá se z FileEntry.size, ne z přečteného obsahu).
     const half = "x".repeat(Math.floor(AI_PAYLOAD_CHAR_BUDGET * 0.7));
-    const files: FileEntry[] = [file("a.ts", ".ts"), file("b.ts", ".ts")];
+    const files: FileEntry[] = [file("a.ts", ".ts", 12_345), file("b.ts", ".ts", 99_999)];
     const read = vi.fn(async () => half);
     const out = await collectAiPayload(files, read);
     expect(out.includedFiles.map((f) => f.path)).toEqual(["a.ts"]); // b se nevešlo
     expect(out.truncated).toBe(true);
+    expect(out.omittedFiles).toBe(1); // jen b.ts
+    expect(out.omittedBytes).toBe(99_999); // velikost b.ts ze scanu, ne délka uříznutého textu
+  });
+
+  it("bez uříznutí jsou počty nulové (truncated=false → omittedFiles/omittedBytes = 0)", async () => {
+    const files: FileEntry[] = [file("a.ts", ".ts", 50), file("b.ts", ".ts", 60)];
+    const out = await collectAiPayload(files, async (p) => `${p}\n`);
+    expect(out.truncated).toBe(false);
+    expect(out.omittedFiles).toBe(0);
+    expect(out.omittedBytes).toBe(0);
   });
 
   it("výběr je deterministický (seřazený podle cesty)", async () => {

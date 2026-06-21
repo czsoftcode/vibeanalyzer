@@ -55,7 +55,7 @@ const okAnalyze = () =>
 // otestovaná PŘÍMO proti reálné estimateAiCost + reálné konstantě prahu. Bez toho by
 // refaktor ceníku/stropu/prahu mohl hranici tiše posunout a e2e testy zmást.
 describe("hranice prahu vs reálný odhad (kontrakt mezi estimateAiCost a prahem)", () => {
-  const tiny: AiPayload = { text: "export const x = 1;\n", includedFiles: [], truncated: false, oversizedFiles: [] };
+  const tiny: AiPayload = { text: "export const x = 1;\n", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] };
 
   it("1 režim opus na malém vstupu je POD prahem (běh bez dotazu)", () => {
     expect(estimateAiCost(tiny, "opus", 1).costMaxUsd).toBeLessThanOrEqual(AI_COST_CONFIRM_THRESHOLD_USD);
@@ -195,5 +195,81 @@ describe("run – brána odhadu ceny před AI během", () => {
     const errs = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
     expect(errs).toContain("Odhad ceny AI");
     expect(errs).toContain("NE fakturace");
+  });
+});
+
+interface TruncationShape {
+  includedFiles: number;
+  omittedFiles: number;
+  omittedBytes: number;
+}
+
+/** Plný `ai` objekt z JSON reportu (včetně payload-metadat truncation/oversizedFiles). */
+async function readAiRaw(outDir: string): Promise<{ truncation?: TruncationShape; code: AiStatusShape }> {
+  const files = await readdir(outDir);
+  const jsonName = files.find((f) => f.endsWith(".json"));
+  expect(jsonName).toBeDefined();
+  const index = JSON.parse(await readFile(path.join(outDir, jsonName as string), "utf8"));
+  return index.ai;
+}
+
+/**
+ * Projekt, který reálně PŘEteče AI_PAYLOAD_CHAR_BUDGET (1,65M znaků) → collectAiPayload
+ * vrátí truncated=true. 20 souborů po ~90 kB (pod per-file stropem 100 kB) = ~1,8M znaků.
+ * Bez tsconfig (tsc se přeskočí, ať test netrvá věčnost). Obsah je validní TS.
+ */
+async function writeLargeProject(): Promise<void> {
+  const line = "export const padding_value_for_size = 1234567890;\n"; // ~50 B
+  const big = line.repeat(1800); // ~90 kB, pod per-file stropem 100 kB
+  for (let i = 0; i < 20; i++) {
+    await writeFile(path.join(proj, `big${i}.ts`), big, "utf8");
+  }
+  await writeFile(path.join(proj, "project.md"), "## What I'm building\nCLI.\n\n## Non-goals\n- Do not run code.\n", "utf8");
+}
+
+describe("run – propsání payload.truncation do reportu (obě větve)", () => {
+  it("běh nad strop + --ai-yes → JSON nese ai.truncation s počty (běhová větev)", async () => {
+    await writeLargeProject();
+    const analyze = okAnalyze();
+    const outDir = path.join(proj, "report");
+    // --ai-yes obejde cenovou bránu (velký vstup = jistě nad prahem), takže projde
+    // do běhové větve, kde se vrací truncation z payloadu.
+    const code = await run([proj, "--out", outDir, "--ai-code", "--ai-yes"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+      isInteractive: true,
+      ask: vi.fn(async () => "ano"),
+    });
+    expect(code).toBe(0);
+    expect(analyze).toHaveBeenCalledOnce();
+    const ai = await readAiRaw(outDir);
+    expect(ai.code.kind).toBe("analyzed");
+    // 20 souborů po ~90 kB přeteklo strop → část se nevešla. Počty musí sedět: něco viděla,
+    // něco vynechala, a vynechané bajty jsou nenulové (reálná informace „o kolik jsem přišel").
+    expect(ai.truncation).toBeDefined();
+    expect(ai.truncation?.includedFiles).toBeGreaterThan(0);
+    expect(ai.truncation?.omittedFiles).toBeGreaterThan(0);
+    expect(ai.truncation?.omittedBytes).toBeGreaterThan(0);
+    // dohromady všech 20 zdrojových kandidátů (žádný nad per-file stropem 100 kB)
+    expect((ai.truncation?.includedFiles ?? 0) + (ai.truncation?.omittedFiles ?? 0)).toBe(20);
+  });
+
+  it("nad strop + ne-TTY bez --ai-yes → cenový skip, ale JSON přesto nese ai.truncation", async () => {
+    await writeLargeProject();
+    const analyze = okAnalyze();
+    const outDir = path.join(proj, "report");
+    // isInteractive vynecháno (=false) + bez --ai-yes → cenová brána přeskočí běh.
+    // truncation se MUSÍ promítnout i tady (skip-větev vrací truncation), jinak by report
+    // nepřiznal, že payload byl velký/uříznutý.
+    const code = await run([proj, "--out", outDir, "--ai-code"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+    });
+    expect(code).toBe(0);
+    expect(analyze).not.toHaveBeenCalled();
+    const ai = await readAiRaw(outDir);
+    expect(ai.code.kind).toBe("skipped");
+    expect(ai.truncation).toBeDefined();
+    expect(ai.truncation?.omittedFiles).toBeGreaterThan(0);
   });
 });

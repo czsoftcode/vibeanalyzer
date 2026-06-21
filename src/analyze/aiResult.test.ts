@@ -27,6 +27,8 @@ const payload: AiPayload = {
   text: "// ==== a.ts ====\nexport const x = 1;\n",
   includedFiles: [{ path: "a.ts", lineCount: 1 }],
   truncated: false,
+  omittedFiles: 0,
+  omittedBytes: 0,
   oversizedFiles: [],
 };
 
@@ -179,7 +181,7 @@ describe("runAiAnalysis – orchestrátor (analyze/classify injektované, bez s�
     const ai = await runAiAnalysis(
       { [AI_KEY_ENV]: "k" },
       intentWith(["x"]),
-      { text: "", includedFiles: [], truncated: false, oversizedFiles: [] },
+      { text: "", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] },
       "opus",
       vi.fn(okAnalyze),
       classifyNone,
@@ -394,7 +396,7 @@ describe("runAiCodeAnalysis – orchestrátor (analyze/classify injektované)", 
 
   it("žádné soubory → skipped, analyze se nezavolá", async () => {
     const analyze = vi.fn(okAnalyze);
-    const ai = await runAiCodeAnalysis({ [AI_KEY_ENV]: "k" }, { text: "", includedFiles: [], truncated: false, oversizedFiles: [] }, "opus", analyze, classifyNone);
+    const ai = await runAiCodeAnalysis({ [AI_KEY_ENV]: "k" }, { text: "", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] }, "opus", analyze, classifyNone);
     expect(ai).toMatchObject({ kind: "skipped" });
     expect(analyze).not.toHaveBeenCalled();
   });
@@ -618,7 +620,7 @@ describe("runAiLogicAnalysis – orchestrátor (brána na záměru, analyze/clas
 
   it("žádné soubory → skipped, analyze se nezavolá", async () => {
     const analyze = vi.fn(okAnalyze);
-    const ai = await runAiLogicAnalysis({ [AI_KEY_ENV]: "k" }, intentWith(null, "Stavím CLI"), { text: "", includedFiles: [], truncated: false, oversizedFiles: [] }, "opus", analyze, classifyNone);
+    const ai = await runAiLogicAnalysis({ [AI_KEY_ENV]: "k" }, intentWith(null, "Stavím CLI"), { text: "", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] }, "opus", analyze, classifyNone);
     expect(ai).toMatchObject({ kind: "skipped" });
     expect(analyze).not.toHaveBeenCalled();
   });

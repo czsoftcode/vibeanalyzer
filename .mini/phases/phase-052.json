@@ -1,0 +1,44 @@
+{
+  "id": 52,
+  "title": "Přiznat oříznutý payload v reportu",
+  "goal": "Příznak payload.truncated protáhnout do AiReport, serializovat do JSON a vykreslit v .md reportu jako sdílenou poznámku (vedle oversizedFiles), aby report přiznal, že AI posuzovala neúplný projekt; test: analyzed s truncated=true → JSON nese flag a .md obsahuje poznámku.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Pole truncated do AiReport",
+      "status": "done",
+      "detail": "V aiStatus.ts přidat nepovinné truncated?: boolean vedle oversizedFiles s doc komentářem (payload-level metadata, sdílené všemi režimy; plní se jen když se reálně stavěl payload). Typecheck zelený."
+    },
+    {
+      "title": "Propojit payload.truncated v cli.ts",
+      "status": "done",
+      "detail": "V analytické větvi nastavit truncated: payload.truncated do vraceného AiReport (cli.ts:624) i do cenové brány skip-větve (cli.ts:595-600). Jiné větve (--ai-check, gate) pole vynechají."
+    },
+    {
+      "title": "Sdílená poznámka v .md reportu",
+      "status": "done",
+      "detail": "V markdown.ts přidat aiTruncatedNote(truncated) (blockquote o uříznutí kódu) a zařadit do aiSection vedle aiOversizedNote. Prázdné/undefined => nic."
+    },
+    {
+      "title": "Bump INDEX_VERSION 16 -> 17 + docs",
+      "status": "done",
+      "detail": "V jsonIndex.ts zvednout verzi a doplnit komentář o tom, ze ai nese i truncated. Overit, ze JSON nese ai.truncated."
+    },
+    {
+      "title": "Testy se zuby",
+      "status": "done",
+      "detail": "markdown test (truncated=true => poznamka; false/undefined => bez ni); JSON test (truncated=true => index.ai.truncated===true, version 17); cli/wiring test propisu payload.truncated do obou vetvi (beh i cenovy skip)."
+    },
+    {
+      "title": "Nezavisly self-review + zelena sada",
+      "status": "done",
+      "detail": "Sub-agent s cerstvym kontextem projde unhappy path (truncated u vetve bez payloadu se nesmi objevit; konzistence stderr <-> report); npm test + typecheck zelene."
+    }
+  ],
+  "startedAt": "2026-06-21T01:11:41.348Z",
+  "completedAt": "2026-06-21T02:18:39.380Z",
+  "autoCommit": {
+    "preSha": "4e7593507e2e5c4df7d20bcb6ac183a45478f2de",
+    "subject": "Phase 52: Přiznat oříznutý payload v reportu"
+  }
+}

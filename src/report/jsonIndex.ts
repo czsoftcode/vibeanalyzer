@@ -26,6 +26,9 @@ import type { SecretsResult } from "../secrets.js";
  * i třetí režim `logic` (`--ai-logic`): analýza funkčnosti kódu jako celku vůči záměru.
  * Od verze 16 nese `ai` i `oversizedFiles` – zdrojové soubory vynechané z AI kvůli
  * per-file stropu (přizná, co AI nevidělo; přítomné jen když běžel analytický režim).
+ * Od verze 17 nese `ai` i `truncation` – payload byl nad celkovým stropem uříznut (kolik
+ * souborů/bajtů AI nevidělo), takže posuzovala neúplný projekt (přítomné jen když se reálně
+ * uřízlo během analytického režimu).
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -47,13 +50,14 @@ export interface JsonIndex {
   moduleGraph: ModuleGraphResult;
   /** souhrn AI vrstvy: tři nezávislé režimy (`nonGoal` přes --ai-non-goal, `code` přes
    *  --ai-code, `logic` přes --ai-logic), každý vlastní AiStatus (ready/verified/analyzed/skipped);
-   *  + nepovinné `oversizedFiles` (soubory vynechané z AI kvůli per-file stropu) */
+   *  + nepovinné `oversizedFiles` (soubory vynechané z AI kvůli per-file stropu) a `truncation`
+   *  (kolik souborů/bajtů kódu se nevešlo nad celkový strop → AI viděla neúplný projekt) */
   ai: AiReport;
 }
 
-/** Bump 15 → 16: `ai` nese nově i `oversizedFiles` (zdrojové soubory vynechané z AI kvůli
- *  per-file stropu). Změna tvaru = kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 16;
+/** Bump 16 → 17: `ai` nese nově i `truncation` (kolik souborů/bajtů kódu se nevešlo nad
+ *  celkový strop → AI posuzovala neúplný projekt). Změna tvaru = kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 17;
 
 export function buildJsonIndex(
   root: string,
