@@ -42,12 +42,16 @@ describe("estimateAiCost – rozsah ceny per model a per počet režimů", () =>
     expect(e.costMaxUsd).toBeCloseTo(0.405, 6);
   });
 
-  it("glm je levnější než opus za identický vstup i počet režimů", () => {
+  it("glm je per-token levnější (costMin), ale worst-case (costMax) je VYŠŠÍ než opus kvůli 8× většímu stropu", () => {
     const opus = estimateAiCost(payload(textForTokens(5000)), "opus", 2);
     const glm = estimateAiCost(payload(textForTokens(5000)), "glm", 2);
-    expect(glm.costMaxUsd).toBeLessThan(opus.costMaxUsd);
-    // glm má ale VYŠŠÍ strop výstupu (65536 vs 16000) → víc výstupních tokenů
+    // Realistický (dolní) odhad: glm je díky nižší ceně za token levnější.
+    expect(glm.costMinUsd).toBeLessThan(opus.costMinUsd);
+    // ALE worst-case se po fázi 53 OBRÁTIL: glm strop 131072 vs opus 16000 (8,2×) přebije
+    // 5,7× nižší cenu za výstupní token → glm.costMax > opus.costMax. Přesně tahle inverze
+    // žene cenovou bránu (todo 20) – zub, aby nikdo strop nezvedl bez vědomí dopadu na cenu.
     expect(glm.outputMaxTokens).toBeGreaterThan(opus.outputMaxTokens);
+    expect(glm.costMaxUsd).toBeGreaterThan(opus.costMaxUsd);
   });
 
   it("prázdný payload: vstup 0 tokenů, žádné NaN/dělení nulou, výstup pořád ze stropu", () => {

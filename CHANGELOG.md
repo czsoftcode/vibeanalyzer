@@ -85,8 +85,10 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
   AI režimy) s glm dřív padaly na limit délky výstupu a čistě se přeskočily. Příčina:
   Z.ai jede ve výchozím stavu „reasoning_effort: max", takže model promyslel tolik, že
   na samotnou odpověď nezbylo místo; navíc náš plošný strop 16k tokenů glm stahoval
-  pod jeho vlastní výchozí strop (64k). Nově je tvar dotazu **per-model** – glm dostává
-  64k strop, explicitní „thinking: enabled" a **nízký reasoning_effort** (hlavní oprava),
+  pod reálný strop modelu. Nově je tvar dotazu **per-model** – glm dostává **128k strop
+  výstupu** (131 072 tokenů, reálný strop GLM-5.2; dřívějších 65 536 byl jen výchozí
+  hodnota Z.ai, ne strop) a explicitní „reasoning_effort: high" (GLM-5.2 vystavuje jen
+  „high"/„max"; volíme „high" kvůli menšímu riziku, že přemýšlení sežere výstup),
   `opus`/`sonnet` zůstávají beze změny. Reálně ověřeno během na projektu.
 - AI analýza posílala modelu vždy schéma pro non-goaly, takže `--ai-code` dostával
   od modelu nepoužitelný tvar odpovědi a tiše se přeskakoval. Každý režim teď posílá

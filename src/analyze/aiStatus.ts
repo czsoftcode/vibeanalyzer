@@ -22,9 +22,10 @@ export interface AiProvider {
    * Strop výstupních tokenů (per-model, protože poskytovatelé se liší). POZOR: thinking
    * se počítá DO výstupu. U Anthropic (opus/sonnet) měření ukázalo, že sonnet „promyslel"
    * ~7,5k a na 8000 stropu nezbylo místo na JSON → uříznuto; proto rezerva 16k. glm jede
-   * na vlastní default 64k (Z.ai default je 65536; náš dřívější plošný 16k ho STAHOVAL
-   * pod jeho default a uřezával výstup). Reziduální uříznutí řeší runAiAnalysis čistým
-   * skipem (stop_reason=max_tokens), ne pádem.
+   * na reálný strop modelu 131072 (128k); pozor: 65536 je jen Z.ai DEFAULT, ne strop –
+   * ponechání na defaultu thinkingem ukrojilo z výstupu a velké projekty padaly na
+   * stop_reason=max_tokens. Reziduální uříznutí řeší runAiAnalysis čistým skipem
+   * (stop_reason=max_tokens), ne pádem.
    */
   maxTokens: number;
   /**
@@ -37,12 +38,14 @@ export interface AiProvider {
    */
   thinking: { type: "adaptive" } | { type: "enabled" };
   /**
-   * Rozšíření Z.ai (NE standardní Anthropic parametr). Síla uvažování pro GLM-5.2+; default
-   * poskytovatele je „max", což je přesně příčina uřezávání → posíláme nízkou hodnotu.
+   * Rozšíření Z.ai (NE standardní Anthropic parametr). Síla uvažování pro GLM-5.2. GLM-5.2
+   * vystavuje JEN dvě úrovně: „high" a „max" (ověřeno proti docs.z.ai 6/2026; hodnoty
+   * low/medium/minimal/xhigh/none jsou Anthropicový výčet a GLM je tiše ignoruje → spadne
+   * na default „max", což ukrajuje výstup). Z.ai pro kódování doporučuje „max"; my volíme
+   * „high" – menší riziko, že thinking sežere výstupní strop a výsledek se uřízne.
    * Nastaveno JEN pro glm; opus/sonnet ho nemají (Anthropic by neznámé pole mohl odmítnout).
-   * Povolené hodnoty Z.ai: max|xhigh|high|medium|low|minimal|none.
    */
-  reasoningEffort?: "max" | "xhigh" | "high" | "medium" | "low" | "minimal" | "none";
+  reasoningEffort?: "high" | "max";
 }
 
 /**
@@ -71,9 +74,9 @@ export const AI_PROVIDERS: Record<AiModelChoice, AiProvider> = {
     baseURL: "https://api.z.ai/api/anthropic",
     keyEnv: "ZAI_API_KEY",
     prices: { input: 1.4, output: 4.4 },
-    maxTokens: 65536,
+    maxTokens: 131072,
     thinking: { type: "enabled" },
-    reasoningEffort: "low",
+    reasoningEffort: "high",
   },
 };
 

@@ -108,7 +108,7 @@ describe("realAiAnalyze – streaming SDK volání (mock, bez sítě)", () => {
     );
   });
 
-  it("glm posílá per-model tvar: 64k strop + enabled thinking + reasoning_effort low", async () => {
+  it("glm posílá per-model tvar: 128k strop + enabled thinking + reasoning_effort high", async () => {
     // Zub proti regresi root-cause fixu: kdyby glm zdědil plošný 16k/adaptive jako Anthropic
     // (default reasoning_effort=max), výstup se zase uřízne. Tady to hlídáme konkrétními hodnotami.
     fakeFinal({ content: [{ type: "text", text: "{}" }], usage: { input_tokens: 1, output_tokens: 1 } });
@@ -118,9 +118,9 @@ describe("realAiAnalyze – streaming SDK volání (mock, bez sítě)", () => {
       thinking: unknown;
       reasoning_effort?: unknown;
     };
-    expect(params.max_tokens).toBe(65536);
+    expect(params.max_tokens).toBe(131072);
     expect(params.thinking).toEqual({ type: "enabled" });
-    expect(params.reasoning_effort).toBe("low");
+    expect(params.reasoning_effort).toBe("high");
   });
 
   it("per-model rozdíl: glm má jiný strop/thinking/effort než Anthropic modely", () => {
@@ -129,7 +129,7 @@ describe("realAiAnalyze – streaming SDK volání (mock, bez sítě)", () => {
     expect(AI_PROVIDERS.glm.thinking).toEqual({ type: "enabled" });
     expect(AI_PROVIDERS.opus.thinking).toEqual({ type: "adaptive" });
     expect(AI_PROVIDERS.sonnet.thinking).toEqual({ type: "adaptive" });
-    expect(AI_PROVIDERS.glm.reasoningEffort).toBe("low");
+    expect(AI_PROVIDERS.glm.reasoningEffort).toBe("high");
     // Anthropic modely NESMÍ nést reasoning_effort (Z.ai-only pole).
     expect(AI_PROVIDERS.opus.reasoningEffort).toBeUndefined();
     expect(AI_PROVIDERS.sonnet.reasoningEffort).toBeUndefined();

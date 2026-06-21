@@ -1,7 +1,7 @@
 {
   "version": 2,
   "createdAt": "2026-06-15T19:13:16.562Z",
-  "currentPhaseId": 53,
+  "currentPhaseId": null,
   "phases": [
     {
       "id": 1,
@@ -266,7 +266,7 @@
     {
       "id": 53,
       "title": "Zvednout strop glm na 128k",
-      "status": "proposed"
+      "status": "done"
     }
   ]
 }

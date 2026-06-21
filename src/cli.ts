@@ -85,9 +85,12 @@ nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --
  * Práh ceny (USD), nad kterým se před AI během vyžaduje potvrzení. Porovnává se proti
  * HORNÍ mezi odhadu (worst-case výstup), protože to je to, co může překvapit účet – ne
  * proti optimistické dolní mezi. Pod prahem AI běží rovnou (nemá smysl potvrzovat pár
- * centů). Hodnota je vědomý kompromis: dost nízko, aby drahý běh (víc režimů / glm 64k /
+ * centů). Hodnota je vědomý kompromis: dost nízko, aby drahý běh (víc režimů / glm 128k /
  * velký vstup) zachytila, dost vysoko, aby běžný malý projekt neobtěžovala dotazem.
  * Kontrakt, ne konfigurace (config soubor je deklarovaný non-goal).
+ * POZN. (fáze 53): zvednutí glm stropu 65536→131072 zhruba ZDVOJNÁSOBILO worst-case výstup
+ * → costMaxUsd glm běhu vzrostl a tenhle práh se u glm spouští výrazně častěji (i na menších
+ * projektech). Práh ZÁMĚRNĚ neměníme – jeho překalibrování řeší todo 20.
  */
 export const AI_COST_CONFIRM_THRESHOLD_USD = 0.5;
 

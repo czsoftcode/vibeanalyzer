@@ -2,5 +2,33 @@
   "id": 53,
   "title": "Zvednout strop glm na 128k",
   "goal": "Zvednout glm maxTokens z 65536 na 131072 (128k, reálný strop výstupu GLM-5.2), aby velké projekty nepadaly na stop_reason=max_tokens a nezahazovaly zaplacený výsledek; ponechat reasoning_effort na high (kvalita uvažování) a opravit zavádějící komentář v AI_PROVIDERS (GLM-5.2 zná jen high/max, ne low/medium/minimal/xhigh); ověřit, že se worst-case odhad ceny (aiEstimate) správně přepočítá a zdokumentovat, že tím vzroste a víc spouští cenovou bránu (souvisí s todo 20).",
-  "status": "proposed"
+  "status": "done",
+  "steps": [
+    {
+      "title": "Zúžit typ a změnit hodnoty glm v aiStatus.ts",
+      "status": "done",
+      "detail": "Union AiProvider.reasoningEffort zúžit na \"high\" | \"max\". V AI_PROVIDERS.glm: maxTokens 65536 → 131072, reasoningEffort \"low\" → \"high\". Změna typu a hodnoty jde spolu (jinak \"low\" neprojde buildem)."
+    },
+    {
+      "title": "Opravit zavádějící komentáře v aiStatus.ts",
+      "status": "done",
+      "detail": "Komentář u reasoningEffort (~ř. 40-45): povolené hodnoty jen high|max (ne celý Anthropicový výčet), zmínit že Z.ai pro kódování radí max, my volíme high kvůli riziku uřezání. Komentář u maxTokens (~ř. 24-25): sladit na nový stav (131072 = reálný strop, 65536 byl jen Z.ai default)."
+    },
+    {
+      "title": "Aktualizovat testy s natvrdo zadanými hodnotami",
+      "status": "done",
+      "detail": "aiStatus.test.ts:78,80 (65536→131072, low→high); aiAnalyze.test.ts:121,123,132 (max_tokens 65536→131072, reasoning_effort/reasoningEffort low→high); aiEstimate.test.ts:49 komentář aktualizovat. Testy procházejí a stále hlídají reálný kontrakt."
+    },
+    {
+      "title": "Ověřit přepočet odhadu ceny a zdokumentovat dopad na cenovou bránu",
+      "status": "done",
+      "detail": "npm run build + testy zeleně. Ověřit estimateAiCost outputMaxTokens = 131072 × modes (bere strop z provider.maxTokens). Doplnit poznámku + záznam do todo 20: zvednutí stropu zhruba zdvojnásobí worst-case costMaxUsd → cenová brána z fáze 51 se spouští častěji; práh brány se NEmění."
+    }
+  ],
+  "startedAt": "2026-06-21T02:24:55.048Z",
+  "completedAt": "2026-06-21T02:51:10.274Z",
+  "autoCommit": {
+    "preSha": "6c0d5182b200458f194f4f561b50e1b015623897",
+    "subject": "Phase 53: Zvednout strop glm na 128k"
+  }
 }

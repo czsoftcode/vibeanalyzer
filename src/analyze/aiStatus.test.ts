@@ -75,9 +75,9 @@ describe("AI_PROVIDERS – jeden zdroj pravdy (id/endpoint/klíč/ceny)", () => 
       baseURL: "https://api.z.ai/api/anthropic",
       keyEnv: "ZAI_API_KEY",
       prices: { input: 1.4, output: 4.4 },
-      maxTokens: 65536,
+      maxTokens: 131072,
       thinking: { type: "enabled" },
-      reasoningEffort: "low",
+      reasoningEffort: "high",
     });
   });
 
