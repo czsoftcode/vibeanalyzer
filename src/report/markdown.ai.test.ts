@@ -175,6 +175,34 @@ describe("buildMarkdown – AI sekce: tři nezávislé režimy (non-goal + code 
     expect(md.match(/AI NEvidělo/g)).toHaveLength(1); // oversized jen jednou (sdílené)
   });
 
+  it("skipped s cenou (provozní skip, max_tokens) → blok i souhrn přiznají naúčtovanou cenu + tokeny", () => {
+    const skippedWithCost: AiStatus = {
+      kind: "skipped",
+      reason: "model utnul výstup na max_tokens",
+      usage: { inputTokens: 5000, outputTokens: 128000 },
+      costUsd: 0.9876,
+    };
+    const md = buildMarkdown({ ...base, ai: report(skippedWithCost, detectAiStatus({})) });
+    // důvod zůstává
+    expect(md).toContain("model utnul výstup na max_tokens");
+    // NOVÉ: cena i tokeny v bloku
+    expect(md).toContain("I tak naúčtováno");
+    expect(md).toContain("5000 vstup + 128000 výstup");
+    expect(md).toContain("~$0.9876");
+    // NOVÉ: cena v souhrnu u přeskočeno
+    expect(md).toContain("- AI (non-goaly): přeskočeno (~$0.9876)");
+  });
+
+  it("skipped BEZ ceny (beznákladový skip) → žádný znak $ (rozlišení 'nestálo nic' vs 'stálo $0')", () => {
+    // Reálný beznákladový skip z detekce (chybí klíč) – costUsd/usage undefined.
+    const skip = detectAiStatus({});
+    const md = buildMarkdown({ ...base, ai: report(skip, skip) });
+    expect(md).toContain("- AI (non-goaly): přeskočeno");
+    expect(md).not.toContain("I tak naúčtováno");
+    // Žádná AI cena se nevykreslí: cenový marker `~$` se nikde neobjeví (analyzed větve tu neběží).
+    expect(md).not.toContain("~$");
+  });
+
   it("hodnota klíče se NIKDY neobjeví v reportu (tajemství)", () => {
     const ready = detectAiStatus({ [AI_KEY_ENV]: "sk-ant-super-secret" });
     const md = buildMarkdown({ ...base, ai: report(ready, ready) });

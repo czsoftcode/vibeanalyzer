@@ -356,6 +356,16 @@ function aiModeBlock(label: string, ai: AiStatus | undefined, emptyMsg: string, 
   if (!ai || ai.kind === "skipped") {
     const reason = ai?.reason ?? "AI vrstva zatím neproběhla";
     out.push(`_Přeskočeno: ${sanitizeInline(reason)}_`);
+    // Provozní skip (max_tokens/prázdný výstup) reálně naúčtoval tokeny – cenu přiznáme i
+    // u přeskočeného běhu. Beznákladový skip (chybí klíč, žádné non-goaly, síť) nechává
+    // costUsd undefined → tenhle řádek se nevypíše (rozlišení „nestálo nic" vs „stálo $0").
+    if (ai && ai.kind === "skipped" && ai.costUsd !== undefined) {
+      const tok = ai.usage
+        ? `tokeny ${ai.usage.inputTokens} vstup + ${ai.usage.outputTokens} výstup, `
+        : "";
+      out.push("");
+      out.push(`_I tak naúčtováno: ${tok}odhad ceny ~$${ai.costUsd.toFixed(4)}._`);
+    }
     out.push("");
     return out;
   }
@@ -439,7 +449,12 @@ function aiSection(ai: AiReport | undefined): string[] {
 
 /** Krátké shrnutí jednoho AI režimu do hlavičky reportu. */
 function aiModeSummary(label: string, ai: AiStatus | undefined): string {
-  if (!ai || ai.kind === "skipped") return `- AI (${label}): přeskočeno`;
+  if (!ai || ai.kind === "skipped") {
+    // Provozní skip s reálně naúčtovanou cenou ji přizná i v souhrnu; beznákladový skip
+    // (costUsd undefined) zůstane jen „přeskočeno".
+    const cost = ai && ai.kind === "skipped" && ai.costUsd !== undefined ? ` (~$${ai.costUsd.toFixed(4)})` : "";
+    return `- AI (${label}): přeskočeno${cost}`;
+  }
   if (ai.kind === "verified") return `- AI (${label}): ověřeno`;
   if (ai.kind === "analyzed") {
     return `- AI (${label}): analyzováno (${ai.findings.length} nálezů, ~$${ai.costUsd.toFixed(4)})`;

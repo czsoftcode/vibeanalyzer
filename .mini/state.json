@@ -312,6 +312,11 @@
       "id": 62,
       "title": "Cena přeskočených částí strukturovaně",
       "status": "done"
+    },
+    {
+      "id": 63,
+      "title": "Render ceny přeskočených AI částí",
+      "status": "done"
     }
   ]
 }

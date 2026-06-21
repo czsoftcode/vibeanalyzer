@@ -1,0 +1,44 @@
+{
+  "id": 63,
+  "title": "Render ceny přeskočených AI částí",
+  "goal": "Když skipped AI stav nese strukturovanou costUsd/usage (provozní skip, co reálně stál tokeny), zobrazit tuto sečtenou cenu v markdown reportu (aiModeBlock + aiModeSummary) i na stderr (runOneAiMode); beznákladové skipy (chybí klíč, žádné non-goaly, síťová chyba) zůstanou beze změny (costUsd/usage undefined → nic se netiskne).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "aiModeBlock: cena u skipped s costUsd",
+      "status": "done",
+      "detail": "V markdown.ts skipped větvi (ř. 356-361) za řádek důvodu přidat řádek s tokeny+cenou, JEN když ai.costUsd !== undefined (a ai.usage). Beznákladový skip (undefined) zůstane jen s důvodem."
+    },
+    {
+      "title": "aiModeSummary: cena u skipped s costUsd",
+      "status": "done",
+      "detail": "V markdown.ts souhrnu (ř. 442) u skipped připojit ~$X, jen když costUsd !== undefined; jinak beze změny přeskočeno."
+    },
+    {
+      "title": "runOneAiMode: cena na stderr u skipped",
+      "status": "done",
+      "detail": "Vyexportovat runOneAiMode (kvůli testu) a do skipped/ostatní větve přidat výpis tokeny+cena na stderr, jen když status.costUsd !== undefined."
+    },
+    {
+      "title": "Test markdown se zuby",
+      "status": "done",
+      "detail": "V markdown.ai.test.ts: skipped s {costUsd, usage} -> report obsahuje cenu i tokeny; skipped BEZ ceny -> report neobsahuje $ (regrese beznákladového skipu). Dočasné vyříznutí render-větve test shodí."
+    },
+    {
+      "title": "Test runOneAiMode se zuby",
+      "status": "done",
+      "detail": "Nový/rozšířený cli-test: injektovaný call -> skipped{costUsd,usage} -> stderr obsahuje cenu; skipped bez ceny -> žádné $. Testuje REÁLNou runOneAiMode, ne mock."
+    },
+    {
+      "title": "Zelený typecheck + testy + self-review",
+      "status": "done",
+      "detail": "tsc + vitest zeleně; bez bumpu INDEX_VERSION (jen render, tvar výstupu se nemění); nezávislý self-review sub-agentem (render skip/chybové cesty)."
+    }
+  ],
+  "startedAt": "2026-06-21T21:27:28.023Z",
+  "completedAt": "2026-06-21T21:40:14.032Z",
+  "autoCommit": {
+    "preSha": "a83a09d20659819babbc2be13a824d2284ceb8f9",
+    "subject": "Phase 63: Render ceny přeskočených AI částí"
+  }
+}

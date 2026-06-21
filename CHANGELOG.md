@@ -12,10 +12,15 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 - **Cena rozkrájeného AI běhu se už nepodhodnocuje.** Když některá část přijde o výstup
   kvůli limitu modelu (utnutý/prázdný výstup), API ji přesto naúčtuje. Nově se tahle cena
   počítá do celkové ceny běhu i strukturovaně (v JSON reportu), ne jen jako text – takže
-  součet sedí i v případě, že selže víc částí najednou. (Pozn.: v markdown reportu se cena
-  přeskočené části zatím ukazuje jen v textu důvodu.) Verze JSON indexu zvýšena na 19;
+  součet sedí i v případě, že selže víc částí najednou. Verze JSON indexu zvýšena na 19;
   konzumenti JSON musí počítat se změnou tvaru (varianta `skipped` nese nepovinné
   `usage`/`costUsd`).
+- **Cena přeskočené AI části je vidět i v reportu a na výstupu.** Když část přijde o výstup
+  kvůli limitu modelu, ale API ji naúčtuje, ukáže se naúčtovaná cena (a tokeny) nově přímo
+  v markdown reportu (u příslušného AI bloku i v souhrnu) a na stderr během běhu – ne jen
+  schovaná v textu důvodu, kde se u více částí slévala a mohla podstřelit. Beznákladové
+  přeskočení (chybí klíč, žádné non-goaly, výpadek sítě) zůstává beze změny – žádnou cenu
+  neukazuje (rozlišení „nestálo nic" vs „stálo $0").
 
 ### Fixed
 

@@ -704,7 +704,7 @@ async function runAiLayer(
  * vyrobí, exit 0). Při `analyzed` ohlásí na stderr nálezy, tokeny a cenu; vždy zmíní
  * počet částí a kolik jich provozně selhalo (transparentně, detail v reportu).
  */
-async function runOneAiMode(
+export async function runOneAiMode(
   label: string,
   model: AiModelChoice,
   call: () => Promise<ChunkedRunResult>,
@@ -723,6 +723,16 @@ async function runOneAiMode(
     console.error(
       `AI analýza ${label} (${status.model}): ${status.findings.length} nálezů, ` +
         `tokeny ${status.usage.inputTokens} vstup + ${status.usage.outputTokens} výstup, odhad ceny ~$${status.costUsd.toFixed(4)}.`,
+    );
+  }
+  // Provozní skip (max_tokens/prázdný výstup) reálně naúčtoval tokeny – cenu přiznáme i na
+  // stderr. Beznákladový skip (chybí klíč, žádné non-goaly, síť) má costUsd undefined → ticho.
+  if (status.kind === "skipped" && status.costUsd !== undefined) {
+    const tok = status.usage
+      ? `tokeny ${status.usage.inputTokens} vstup + ${status.usage.outputTokens} výstup, `
+      : "";
+    console.error(
+      `AI analýza ${label} přeskočena, ale částečně naúčtována: ${tok}odhad ceny ~$${status.costUsd.toFixed(4)}.`,
     );
   }
   if (result.chunkTotal > 1 || result.chunkFailed > 0) {
