@@ -1,0 +1,34 @@
+{
+  "id": 59,
+  "title": "Orchestrátor slučování běhu částí",
+  "goal": "Čistá testovatelná funkce, která spustí daný AI režim přes všechny části (stateless – části na sobě nezávislé, paralelizovatelné), posbírá a sloučí nálezy + tokeny/cenu do jednoho výsledku a degraduje při selhání části (posbírá, co prošlo, přizná počet selhaných; všechny selžou → skipped s důvodem; prázdné chunks → čistý výsledek); generická přes všechny tři AI režimy, zatím BEZ napojení do cli (to je další fáze).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Orchestrátor runChunkedMode v novém modulu",
+      "status": "done",
+      "detail": "Nový soubor src/analyze/aiChunkedRun.ts. Export ChunkedRunResult { status: AiStatus; chunkTotal; chunkFailed; failureReasons: string[] } a async runChunkedMode(chunks: AiChunk[], runOne: (chunk, index) => Promise<AiStatus>): Promise<ChunkedRunResult>. Sekvenční běh; slučování analyzed (findings spojené v pořadí, usage = součet input+output, costUsd = součet, model z první analyzed); skipped → chunkFailed+failureReasons; >=1 analyzed → status analyzed, jinak skipped se souhrnným reason; prázdné chunks → skipped(žádné zdrojové soubory k analýze), počty 0; runOne vyhodí → rethrow se stackem (nemaskovat programovou chybu)."
+    },
+    {
+      "title": "Testy se zuby pro orchestrátor",
+      "status": "done",
+      "detail": "Ne happy-path: víc částí → součet usage + spojené findings v pořadí; jedna část skipped → degradace (posbírá zbytek, chunkFailed=1, reason zachycen); VŠECHNY skipped → status skipped se souhrnem; prázdné chunks → skipped + počty 0; runOne vyhodí → orchestrátor PROBUBLÁ (rethrow), neztratí stack; determinismus pořadí findings. Reálné tvary AiStatus/AiChunk, ne vymyšlený literál."
+    },
+    {
+      "title": "Zelený typecheck a testy",
+      "status": "done",
+      "detail": "npm typecheck + vitest zelené (celá sada)."
+    },
+    {
+      "title": "Nezávislý self-review sub-agentem",
+      "status": "done",
+      "detail": "Čerstvý kontext. Checklist: cross-module kontrakt (reálné AiStatus/AiChunk), chybová cesta (rethrow programové vs degradace provozní), edge prázdný/všechny-skipped, správný součet usage/cost, testy mají zuby (rozbiju kód → padne test)."
+    }
+  ],
+  "startedAt": "2026-06-21T12:36:31.006Z",
+  "completedAt": "2026-06-21T12:46:13.614Z",
+  "autoCommit": {
+    "preSha": "f3cae9aaba63ab43f28586c3ef530e53a20bb3d4",
+    "subject": "Phase 59: Orchestrátor slučování běhu částí"
+  }
+}

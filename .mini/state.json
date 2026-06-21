@@ -292,6 +292,11 @@
       "id": 58,
       "title": "Dělič payloadu na části",
       "status": "done"
+    },
+    {
+      "id": 59,
+      "title": "Orchestrátor slučování běhu částí",
+      "status": "done"
     }
   ]
 }
