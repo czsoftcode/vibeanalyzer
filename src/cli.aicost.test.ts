@@ -7,10 +7,11 @@ import { estimateAiCost } from "./analyze/aiEstimate.js";
 import type { AiPayload } from "./analyze/aiPayload.js";
 import { AI_COST_CONFIRM_THRESHOLD_USD, run } from "./cli.js";
 
-// Brána odhadu ceny PŘED AI během: nad prahem ($0.50, porovnává se worst-case) se v TTY
-// ptáme, jinak (ne-TTY bez --ai-yes) čistě přeskočíme. Pod prahem AI běží bez dotazu.
-// Dvourežimový běh na opusu (--ai-non-goal --ai-code) má worst-case ~$0.80 > práh →
-// spolehlivě bránu spustí; jednorežimový opus má ~$0.40 < práh → bránu mine.
+// Brána odhadu ceny PŘED AI během: nad prahem ($0.50, porovnává se REALISTICKÝ odhad
+// costTypicalUsd, ne worst-case) se v TTY ptáme, jinak (ne-TTY bez --ai-yes) čistě přeskočíme.
+// Pod prahem AI běží bez dotazu. U opusu je typical == strop (16000 tok.), takže opus se chová
+// stejně jako dřív: dvourežimový (--ai-non-goal --ai-code) ~$0.80 > práh → spustí bránu;
+// jednorežimový ~$0.40 < práh → bránu mine. Změna se projeví u glm (viz vlastní describe níž).
 process.env.VIBE_ANALYSIS_INPROCESS = "1";
 
 let proj: string;
@@ -52,17 +53,24 @@ const okAnalyze = () =>
   vi.fn(async () => ({ rawText: JSON.stringify({ findings: [] }), usage: { inputTokens: 100, outputTokens: 10 }, stopReason: "end_turn" }));
 
 // Hranice, na které stojí e2e testy níž (1 režim opus pod prahem, 2 nad), je tady
-// otestovaná PŘÍMO proti reálné estimateAiCost + reálné konstantě prahu. Bez toho by
-// refaktor ceníku/stropu/prahu mohl hranici tiše posunout a e2e testy zmást.
+// otestovaná PŘÍMO proti reálné estimateAiCost + reálné konstantě prahu. Porovnáváme TÉŽ pole,
+// které čte brána (costTypicalUsd), ne worst-case – jinak by se kontrakt rozešel s realitou.
+// Bez toho by refaktor ceníku/stropu/prahu mohl hranici tiše posunout a e2e testy zmást.
 describe("hranice prahu vs reálný odhad (kontrakt mezi estimateAiCost a prahem)", () => {
   const tiny: AiPayload = { text: "export const x = 1;\n", includedFiles: [], truncated: false, omittedFiles: 0, omittedBytes: 0, oversizedFiles: [] };
 
   it("1 režim opus na malém vstupu je POD prahem (běh bez dotazu)", () => {
-    expect(estimateAiCost(tiny, "opus", 1).costMaxUsd).toBeLessThanOrEqual(AI_COST_CONFIRM_THRESHOLD_USD);
+    expect(estimateAiCost(tiny, "opus", 1).costTypicalUsd).toBeLessThanOrEqual(AI_COST_CONFIRM_THRESHOLD_USD);
   });
 
   it("2 režimy opus jsou NAD prahem (spustí bránu)", () => {
-    expect(estimateAiCost(tiny, "opus", 2).costMaxUsd).toBeGreaterThan(AI_COST_CONFIRM_THRESHOLD_USD);
+    expect(estimateAiCost(tiny, "opus", 2).costTypicalUsd).toBeGreaterThan(AI_COST_CONFIRM_THRESHOLD_USD);
+  });
+
+  it("BUG-FIX todo 20: 1 režim glm na malém vstupu je realisticky POD prahem, ale worst-case NAD (proč brána dřív cinkala vždy)", () => {
+    const e = estimateAiCost(tiny, "glm", 1);
+    expect(e.costTypicalUsd).toBeLessThanOrEqual(AI_COST_CONFIRM_THRESHOLD_USD);
+    expect(e.costMaxUsd).toBeGreaterThan(AI_COST_CONFIRM_THRESHOLD_USD); // kdyby brána četla tohle, ptala by se i tady
   });
 });
 
@@ -195,6 +203,52 @@ describe("run – brána odhadu ceny před AI během", () => {
     const errs = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
     expect(errs).toContain("Odhad ceny AI");
     expect(errs).toContain("NE fakturace");
+  });
+});
+
+// Jádro fáze 55 / todo 20: u glm brána dřív cinkala VŽDY (worst-case strop 131072 tok. ≈ $0.58 >
+// práh i s nulovým vstupem). Teď gateuje realistický odhad → malý glm projekt projde bez dotazu,
+// velký (kde dominuje VSTUPNÍ cena) bránu pořád spustí. Tyhle dva testy mají zuby: kdyby se brána
+// vrátila na costMaxUsd, (g) by selhal (ask by se zavolal a analyze ne).
+describe("run – glm brána na realistickém odhadu (todo 20)", () => {
+  beforeEach(() => {
+    vi.stubEnv(AI_PROVIDERS.glm.keyEnv, "zai-test-key"); // glm klíč přítomen
+  });
+
+  it("(g) glm 3 režimy na malém projektu → běží BEZ dotazu (ask se nevolá), analyze 3×", async () => {
+    await writeProject();
+    const analyze = okAnalyze();
+    const ask = vi.fn(async () => "ne"); // i kdyby řekl ne, nesmí být dotázán
+    const outDir = path.join(proj, "report");
+
+    const code = await run([proj, "--out", outDir, "--ai-model", "glm", "--ai-non-goal", "--ai-code", "--ai-logic"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+      isInteractive: true,
+      ask,
+    });
+    expect(code).toBe(0);
+    expect(ask).not.toHaveBeenCalled(); // dřív (gate na costMaxUsd) by se ZEPTAL → tady jsou zuby
+    expect(analyze).toHaveBeenCalledTimes(3);
+    expect((await readAi(outDir)).code.kind).toBe("analyzed");
+  });
+
+  it("(h) glm velký vstup → brána se PŘESTO spustí (přes vstupní složku ceny), TTY 'ano' → analyze běží", async () => {
+    await writeLargeProject();
+    const analyze = okAnalyze();
+    const ask = vi.fn(async () => "ano");
+    const outDir = path.join(proj, "report");
+
+    const code = await run([proj, "--out", outDir, "--ai-model", "glm", "--ai-code"], proj, {
+      aiAnalyzeFn: analyze,
+      aiClassifyFn: () => null,
+      isInteractive: true,
+      ask,
+    });
+    expect(code).toBe(0);
+    expect(ask).toHaveBeenCalledOnce(); // velký vstup = realistický odhad nad prahem i bez worst-case
+    expect(analyze).toHaveBeenCalledOnce();
+    expect((await readAi(outDir)).code.kind).toBe("analyzed");
   });
 });
 

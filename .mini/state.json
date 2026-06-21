@@ -272,6 +272,11 @@
       "id": 54,
       "title": "Uklidit TS2532 v testech",
       "status": "done"
+    },
+    {
+      "id": 55,
+      "title": "Práh ceny na realistický odhad",
+      "status": "done"
     }
   ]
 }

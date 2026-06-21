@@ -21,6 +21,22 @@ export const CHARS_PER_TOKEN = 3.3;
 export const OUTPUT_MIN_TOKENS_PER_MODE = 2_000;
 
 /**
+ * REALISTICKÝ (střední) odhad výstupu na jeden režim – slouží JEN pro práh potvrzení ceny
+ * (`AI_COST_CONFIRM_THRESHOLD_USD` v cli.ts), ne pro zobrazený rozsah. Worst-case = strop modelu
+ * (`maxTokens`) bránu rozbíjel: glm má strop 131072 tok., což i s NULOVÝM vstupem přeleze práh
+ * ($0.58 jen z výstupu) → glm se ptal vždycky a brána ztratila signál. 16k = „plná reálná odpověď"
+ * (thinking + JSON nálezů), shodou okolností strop opus/sonnet. Jedna GLOBÁLNÍ hodnota (ne
+ * per-model): JSON nálezů je napříč modely podobný a o thinkingu nemáme data, takže per-model by
+ * byla nadbytečná složitost.
+ *
+ * POZOR – undershoot: glm jede `reasoningEffort:high`, thinking se účtuje jako výstup a může 16k
+ * překročit (reálný běh klidně ~60k tok. ≈ $0.80). Brána se pak nezeptá, ač účet přeleze práh.
+ * VĚDOMÝ kompromis: worst-case `costMaxUsd` zůstává VYTIŠTĚNÝ ve výpisu (uživatel ho vidí), jen
+ * ho neotravujeme dotazem. Měníme, co spouští dotaz, ne co se uživateli ukáže.
+ */
+export const OUTPUT_TYPICAL_TOKENS_PER_MODE = 16_000;
+
+/**
  * Odhad ceny JEDNOHO AI běhu před voláním API. Vše v tokenech jsou CELKY napříč
  * vyžádanými režimy (`modeCount`), protože každý režim je samostatné API volání
  * a posílá CELÝ payload znovu → vstup se násobí počtem režimů, ne jen výstup.
@@ -36,6 +52,11 @@ export interface AiCostEstimate {
   /** Dolní a horní mez ceny v USD (vstup je u obou stejný, liší se jen výstup). */
   costMinUsd: number;
   costMaxUsd: number;
+  /**
+   * REALISTICKÝ odhad ceny (vstup + `OUTPUT_TYPICAL_TOKENS_PER_MODE` na režim). Leží mezi
+   * `costMinUsd` a `costMaxUsd`. Tohle – ne worst-case – řídí práh potvrzení ceny v cli.ts.
+   */
+  costTypicalUsd: number;
 }
 
 /**
@@ -53,12 +74,14 @@ export function estimateAiCost(payload: AiPayload, model: AiModelChoice, modeCou
   const totalInputTokens = inputTokensPerMode * modes;
   const outputMinTokens = OUTPUT_MIN_TOKENS_PER_MODE * modes;
   const outputMaxTokens = provider.maxTokens * modes;
+  const outputTypicalTokens = OUTPUT_TYPICAL_TOKENS_PER_MODE * modes;
 
   const inputCostUsd = (totalInputTokens / 1_000_000) * provider.prices.input;
   const costMinUsd = inputCostUsd + (outputMinTokens / 1_000_000) * provider.prices.output;
   const costMaxUsd = inputCostUsd + (outputMaxTokens / 1_000_000) * provider.prices.output;
+  const costTypicalUsd = inputCostUsd + (outputTypicalTokens / 1_000_000) * provider.prices.output;
 
-  return { inputTokensPerMode, modeCount: modes, outputMinTokens, outputMaxTokens, costMinUsd, costMaxUsd };
+  return { inputTokensPerMode, modeCount: modes, outputMinTokens, outputMaxTokens, costMinUsd, costMaxUsd, costTypicalUsd };
 }
 
 /** Cenu naformátuje na 2 desetinná místa; nepatrné nenulové částky nezamlčí jako $0.00. */
@@ -78,5 +101,6 @@ export function formatCostEstimate(estimate: AiCostEstimate, model: AiModelChoic
     `  vstup:  ~${estimate.inputTokensPerMode} tokenů/režim (posílá se ${estimate.modeCount}×)`,
     `  výstup: předem neznámý, ${estimate.outputMinTokens}–${estimate.outputMaxTokens} tokenů celkem (horní = strop modelu)`,
     `  celkem: řádově ${fmtUsd(estimate.costMinUsd)} až nejvýš ${fmtUsd(estimate.costMaxUsd)}`,
+    `  realistický odhad: ~${fmtUsd(estimate.costTypicalUsd)} (na tohle se dívá práh potvrzení; horní mez je worst-case)`,
   ].join("\n");
 }

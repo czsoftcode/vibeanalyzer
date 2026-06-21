@@ -1,0 +1,44 @@
+{
+  "id": 55,
+  "title": "Práh ceny na realistický odhad",
+  "goal": "Přidat do aiEstimate.ts per-model realistický (střední) odhad výstupu a vázat na něj práh potvrzení v cli.ts (worst-case rozsah costMaxUsd dál zobrazovat ve výpisu), aby glm netripoval bránu i s nulovým vstupem a brána zase nesla signál; pokrýt testy (glm malý vstup → bez dotazu, reálně drahý běh → dotaz).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Realistický odhad v aiEstimate.ts",
+      "status": "done",
+      "detail": "Přidat OUTPUT_TYPICAL_TOKENS_PER_MODE = 16000 (komentář o smyslu i undershoot riziku) a do AiCostEstimate pole costTypicalUsd = inputCost + (typical × modeCount / 1M) × prices.output. Čistá funkce, žádné I/O."
+    },
+    {
+      "title": "Řádek realistického odhadu ve výpisu",
+      "status": "done",
+      "detail": "formatCostEstimate přidá řádek s realistickým odhadem (na co se brána dívá) vedle dnešního řádově $X až nejvýš $Y. Worst-case řádek zůstává beze změny."
+    },
+    {
+      "title": "Brána porovnává costTypicalUsd",
+      "status": "done",
+      "detail": "V cli.ts:587 změnit podmínku z costMaxUsd > na costTypicalUsd > AI_COST_CONFIRM_THRESHOLD_USD. Aktualizovat zastaralý komentář u prahu (dnes říká porovnává se proti HORNÍ mezi)."
+    },
+    {
+      "title": "Testy estimateAiCost (sanity)",
+      "status": "done",
+      "detail": "V aiEstimate.test.ts: costTypicalUsd leží mezi costMinUsd a costMaxUsd; pro glm 1 režim s nulovým/malým vstupem je costTypicalUsd pod $0.50 (přímý důkaz opravy bugu)."
+    },
+    {
+      "title": "Testy brány se zuby (cli.aicost.test.ts)",
+      "status": "done",
+      "detail": "(a) glm malý vstup + běžné režimy → deps.ask se NEVOLÁ (padne, kdyby se brána vrátila na costMaxUsd); (b) reálně drahý běh (velký payload → trip přes vstupní složku, příp. víc režimů) → deps.ask se VOLÁ."
+    },
+    {
+      "title": "Zelený typecheck/testy + nezávislý self-review",
+      "status": "done",
+      "detail": "npm run typecheck a testy zelené; brána je vstupní/rozhodovací cesta → před reportem pustit nezávislého sub-agenta (čerstvý kontext) dle CLAUDE.md."
+    }
+  ],
+  "startedAt": "2026-06-21T03:18:25.326Z",
+  "completedAt": "2026-06-21T09:35:24.368Z",
+  "autoCommit": {
+    "preSha": "9c33812ac15c7b702101f1fc7cb852f832edbd45",
+    "subject": "Phase 55: Práh ceny na realistický odhad"
+  }
+}

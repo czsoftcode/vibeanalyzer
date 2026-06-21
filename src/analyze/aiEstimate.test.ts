@@ -3,6 +3,7 @@ import type { AiPayload } from "./aiPayload.js";
 import {
   CHARS_PER_TOKEN,
   OUTPUT_MIN_TOKENS_PER_MODE,
+  OUTPUT_TYPICAL_TOKENS_PER_MODE,
   estimateAiCost,
   formatCostEstimate,
 } from "./aiEstimate.js";
@@ -73,6 +74,39 @@ describe("estimateAiCost – rozsah ceny per model a per počet režimů", () =>
   it("OUTPUT_MIN_TOKENS_PER_MODE je nenulový (i levný běh stojí thinking + JSON)", () => {
     expect(OUTPUT_MIN_TOKENS_PER_MODE).toBeGreaterThan(0);
   });
+
+  it("costTypicalUsd leží mezi costMin a costMax (≤ max; u opus, kde typical==strop, je roven)", () => {
+    const glm = estimateAiCost(payload(textForTokens(5000)), "glm", 2);
+    expect(glm.costTypicalUsd).toBeGreaterThanOrEqual(glm.costMinUsd);
+    expect(glm.costTypicalUsd).toBeLessThan(glm.costMaxUsd); // glm strop 131072 > typical 16000
+    const opus = estimateAiCost(payload(textForTokens(5000)), "opus", 2);
+    // opus strop = OUTPUT_TYPICAL (16000) → typical == max, ne víc.
+    expect(OUTPUT_TYPICAL_TOKENS_PER_MODE).toBe(16000);
+    expect(opus.costTypicalUsd).toBeCloseTo(opus.costMaxUsd, 6);
+  });
+
+  it("BUG-FIX todo 20: glm 1 režim s nulovým vstupem je realisticky POD prahem $0.50 (worst-case ho přitom přeleze)", () => {
+    const e = estimateAiCost(payload(""), "glm", 1);
+    // worst-case = strop 131072 × $4.4/M ≈ $0.577 → přes práh (proč brána dřív cinkala vždy)
+    expect(e.costMaxUsd).toBeGreaterThan(0.5);
+    // realistický = 16000 × $4.4/M ≈ $0.0704 → pod prahem (oprava: brána se neptá)
+    expect(e.costTypicalUsd).toBeCloseTo(0.0704, 4);
+    expect(e.costTypicalUsd).toBeLessThan(0.5);
+  });
+
+  it("glm 3 režimy na malém projektu zůstanou realisticky pod prahem", () => {
+    const e = estimateAiCost(payload(textForTokens(2000)), "glm", 3);
+    // vstup 2000×3 tok × $1.4/M ≈ $0.0084 + výstup 16000×3 × $4.4/M ≈ $0.2112 ≈ $0.22
+    expect(e.costTypicalUsd).toBeLessThan(0.5);
+  });
+
+  it("costTypicalUsd se NÁSOBÍ počtem režimů a modeCount 0 → 0", () => {
+    const one = estimateAiCost(payload(textForTokens(1000)), "glm", 1);
+    const three = estimateAiCost(payload(textForTokens(1000)), "glm", 3);
+    expect(three.costTypicalUsd).toBeCloseTo(one.costTypicalUsd * 3, 6);
+    const zero = estimateAiCost(payload(textForTokens(1000)), "glm", 0);
+    expect(zero.costTypicalUsd).toBe(0);
+  });
 });
 
 describe("formatCostEstimate – rozsah, ne jedno číslo", () => {
@@ -84,5 +118,11 @@ describe("formatCostEstimate – rozsah, ne jedno číslo", () => {
     expect(out).toContain("až nejvýš");
     expect(out).toContain("glm");
     expect(out).toContain("3×");
+  });
+
+  it("vypíše i řádek s realistickým odhadem (na co se dívá práh)", () => {
+    const e = estimateAiCost(payload(textForTokens(1000)), "glm", 1);
+    const out = formatCostEstimate(e, "glm");
+    expect(out).toContain("realistický odhad");
   });
 });

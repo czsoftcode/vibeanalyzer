@@ -55,6 +55,16 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- **Potvrzení ceny AI se nově ptá podle realistického odhadu, ne podle nejhoršího případu.**
+  Dřív se práh ($0.50) porovnával s worst-case cenou (celý výstupní strop modelu), což
+  u modelu `glm` (strop 131072 tokenů) znamenalo, že se nástroj ptal **vždycky** – i na
+  malém projektu s nulovým vstupem, kde reálná cena jsou centy. Brána tím ztrácela smysl
+  a `--ai-yes` byl skoro povinný. Nově se rozhoduje podle realistického odhadu (vstup
+  + typický výstup), takže se nástroj ptá jen tam, kde to dává smysl (hodně režimů nebo
+  velký vstup). **Worst-case rozsah se ve výpisu dál ukazuje** („až nejvýš $Y") – jen už
+  nespouští dotaz. Práh $0.50 beze změny. Pozor: u `glm` s vyšším „přemýšlením" může
+  reálný výstup typický odhad překročit, takže se nástroj v hraničních případech nemusí
+  zeptat, i když účet práh nakonec přeleze – proto rozsah s worst-case zůstává na očích.
 - **Vstupní strop pro AI zvednut z ~240k na ~500k tokenů** (z 800 000 na 1 650 000 znaků).
   Velké projekty se tak do jednoho AI dotazu vejdou celé místo aby se uřízla zhruba půlka –
   u všech tří modelů (opus 4.8, sonnet 4.6, glm-5.2) je to i s výstupem pod 1M kontextem.

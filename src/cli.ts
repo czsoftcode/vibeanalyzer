@@ -83,14 +83,16 @@ nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --
 
 /**
  * Práh ceny (USD), nad kterým se před AI během vyžaduje potvrzení. Porovnává se proti
- * HORNÍ mezi odhadu (worst-case výstup), protože to je to, co může překvapit účet – ne
- * proti optimistické dolní mezi. Pod prahem AI běží rovnou (nemá smysl potvrzovat pár
- * centů). Hodnota je vědomý kompromis: dost nízko, aby drahý běh (víc režimů / glm 128k /
- * velký vstup) zachytila, dost vysoko, aby běžný malý projekt neobtěžovala dotazem.
- * Kontrakt, ne konfigurace (config soubor je deklarovaný non-goal).
- * POZN. (fáze 53): zvednutí glm stropu 65536→131072 zhruba ZDVOJNÁSOBILO worst-case výstup
- * → costMaxUsd glm běhu vzrostl a tenhle práh se u glm spouští výrazně častěji (i na menších
- * projektech). Práh ZÁMĚRNĚ neměníme – jeho překalibrování řeší todo 20.
+ * REALISTICKÉMU odhadu (`costTypicalUsd` = vstup + `OUTPUT_TYPICAL_TOKENS_PER_MODE` na režim),
+ * NE proti worst-case (`costMaxUsd`). Pod prahem AI běží rovnou (nemá smysl potvrzovat pár centů).
+ * Hodnota je vědomý kompromis: dost nízko, aby drahý běh (víc režimů / velký vstup) zachytila,
+ * dost vysoko, aby běžný malý projekt neobtěžovala dotazem. Kontrakt, ne konfigurace (config
+ * soubor je deklarovaný non-goal).
+ * POZN. (fáze 55): dřív brána porovnávala `costMaxUsd` = strop výstupu modelu. U glm (strop 131072
+ * tok.) to znamenalo ~$0.58 jen z výstupu i s NULOVÝM vstupem → glm cinkl vždy a brána ztratila
+ * signál. Reálná cena jsou přitom dál centy. Proto teď gateujeme na realistický odhad; worst-case
+ * rozsah se uživateli DÁL tiskne (`formatCostEstimate`), jen nespouští dotaz. Hodnota $0.50 beze
+ * změny – mění se jen, proti čemu se porovnává.
  */
 export const AI_COST_CONFIRM_THRESHOLD_USD = 0.5;
 
@@ -584,11 +586,11 @@ async function runAiLayer(
     const estimate = estimateAiCost(payload, parsed.aiModel, modeCount);
     console.error(formatCostEstimate(estimate, parsed.aiModel));
 
-    if (estimate.costMaxUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
+    if (estimate.costTypicalUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
       let skipReason: string | null = null;
       if (deps.isInteractive && deps.ask) {
         const answer = await deps.ask(
-          `Odhad nejhoršího případu přesahuje $${AI_COST_CONFIRM_THRESHOLD_USD.toFixed(2)}. Pustit AI analýzu? [a/N]`,
+          `Realistický odhad ceny přesahuje $${AI_COST_CONFIRM_THRESHOLD_USD.toFixed(2)} (worst-case viz rozsah výše). Pustit AI analýzu? [a/N]`,
         );
         if (!isYes(answer)) {
           skipReason = "AI běh nepotvrzen (odhadovaná cena nad práh) – přeskočeno";
