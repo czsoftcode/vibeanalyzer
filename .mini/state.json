@@ -267,6 +267,11 @@
       "id": 53,
       "title": "Zvednout strop glm na 128k",
       "status": "done"
+    },
+    {
+      "id": 54,
+      "title": "Uklidit TS2532 v testech",
+      "status": "done"
     }
   ]
 }

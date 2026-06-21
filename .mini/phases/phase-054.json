@@ -1,0 +1,39 @@
+{
+  "id": 54,
+  "title": "Uklidit TS2532 v testech",
+  "goal": "Doplnit non-null assertce a guardy do indexových přístupů ve třech testovacích souborech (aiResult.test.ts, cli.ai.test.ts, aiPayload.test.ts), aby npm run typecheck byl zelený a brána zase chytala reálné regrese místo trvalé červené; tam, kde test ověřuje právě prázdné/undefined, použít guard nebo optional chaining (ne jen !), ať test pořád padá při skutečné regresi.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Sjednotit vzor: ! na prvku, ne ?.",
+      "status": "done",
+      "detail": "Zdůvodnění do reportu: testy ověřují vlastnost existujícího prvku, ne chybějící prvek; ?. by maskoval regresi 'žádný nález vyroben'. Vzor = pole[0]!.vlastnost. Žádný ?. ani vypnutí noUncheckedIndexedAccess."
+    },
+    {
+      "title": "Opravit aiPayload.test.ts (2 místa)",
+      "status": "done",
+      "detail": "Řádky 67, 72: out.includedFiles[0]!.lineCount."
+    },
+    {
+      "title": "Opravit cli.ai.test.ts (9 míst)",
+      "status": "done",
+      "detail": "Řádky 155-156, 204-206, 208, 272-273, 276: seen[0]!.prompt resp. seen[0]!.schema."
+    },
+    {
+      "title": "Opravit aiResult.test.ts (34 míst)",
+      "status": "done",
+      "detail": "f[0]!... a ai.findings[0]!... na všech vypsaných řádcích (125-140, 198, 356-391, 544-616)."
+    },
+    {
+      "title": "Ověřit zelený typecheck + zuby",
+      "status": "done",
+      "detail": "npm run typecheck bez chyb a vitest run zelený; navíc důkaz zubů - dočasně nechat toFindings vrátit [], potvrdit, že dotčený test PADNE (TypeError, ne tichý průchod), pak vrátit."
+    }
+  ],
+  "startedAt": "2026-06-21T02:57:17.490Z",
+  "completedAt": "2026-06-21T03:07:03.994Z",
+  "autoCommit": {
+    "preSha": "573a8ee525f0f4af65b2974a30a9aec8c07dc4a1",
+    "subject": "Phase 54: Uklidit TS2532 v testech"
+  }
+}

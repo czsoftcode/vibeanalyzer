@@ -152,8 +152,8 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     });
     expect(code).toBe(0);
     expect(analyze).toHaveBeenCalledOnce(); // jen non-goal režim
-    expect(seen[0].prompt).toContain("export const x = 1;");
-    expect(seen[0].prompt).toContain("Do not run code.");
+    expect(seen[0]!.prompt).toContain("export const x = 1;");
+    expect(seen[0]!.prompt).toContain("Do not run code.");
 
     const { md, index } = await readJson(outDir);
     expect(index.ai.nonGoal.kind).toBe("analyzed");
@@ -201,11 +201,11 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     expect(code).toBe(0);
     expect(analyze).toHaveBeenCalledOnce();
     // logic posílá záměr, ale NE non-goaly (ty řeší --ai-non-goal)
-    expect(seen[0].prompt).toContain("What I'm building");
-    expect(seen[0].prompt).toContain("CLI co umí Y.");
-    expect(seen[0].prompt).not.toContain("Do not run code.");
+    expect(seen[0]!.prompt).toContain("What I'm building");
+    expect(seen[0]!.prompt).toContain("CLI co umí Y.");
+    expect(seen[0]!.prompt).not.toContain("Do not run code.");
     // logic schéma: file/line nepovinné, BEZ nonGoalIndex
-    const items = (seen[0].schema as { properties: { findings: { items: { required: string[]; properties: Record<string, unknown> } } } }).properties.findings.items;
+    const items = (seen[0]!.schema as { properties: { findings: { items: { required: string[]; properties: Record<string, unknown> } } } }).properties.findings.items;
     expect(items.required).not.toContain("file");
     expect(items.properties.nonGoalIndex).toBeUndefined();
 
@@ -269,11 +269,11 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     expect(code).toBe(0);
     expect(analyze).toHaveBeenCalledOnce();
     // code režim posílá kód, ale NE non-goaly (je na nich nezávislý)
-    expect(seen[0].prompt).toContain("export const x = 1;");
-    expect(seen[0].prompt).not.toContain("Do not run code.");
+    expect(seen[0]!.prompt).toContain("export const x = 1;");
+    expect(seen[0]!.prompt).not.toContain("Do not run code.");
     // REGRESE (reálný běh): code dotaz MUSÍ dostat CODE schéma (s kind, bez nonGoalIndex),
     // ne non-goal schéma – jinak model vrátí tvar, který parseCodeFindings odmítne.
-    const items = (seen[0].schema.properties as { findings: { items: { properties: Record<string, unknown> } } }).findings.items;
+    const items = (seen[0]!.schema.properties as { findings: { items: { properties: Record<string, unknown> } } }).findings.items;
     expect(items.properties.kind).toBeDefined();
     expect(items.properties.nonGoalIndex).toBeUndefined();
 

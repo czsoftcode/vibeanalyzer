@@ -122,22 +122,22 @@ describe("toFindings – mapování + levná kontrola místa", () => {
 
   it("soubor mimo poslaný set → file/line zahozeny, zpráva označí 'místo neověřeno'", () => {
     const f = toFindings([{ file: "cizi.ts", line: 3, nonGoalIndex: 1, severity: "warning", message: "x" }], nonGoals, included);
-    expect(f[0].file).toBeUndefined();
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toContain("místo neověřeno");
-    expect(f[0].message).toContain("cizi.ts");
+    expect(f[0]!.file).toBeUndefined();
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toContain("místo neověřeno");
+    expect(f[0]!.message).toContain("cizi.ts");
   });
 
   it("řádek mimo soubor (> lineCount) → file zůstane, line zahozen, 'místo neověřeno'", () => {
     const f = toFindings([{ file: "a.ts", line: 999, nonGoalIndex: 0, severity: "info", message: "x" }], nonGoals, included);
-    expect(f[0].file).toBe("a.ts");
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toContain("řádek 999");
+    expect(f[0]!.file).toBe("a.ts");
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toContain("řádek 999");
   });
 
   it("nonGoalIndex mimo seznam → rule to přizná, nespadne", () => {
     const f = toFindings([{ file: "a.ts", line: 1, nonGoalIndex: 9, severity: "error", message: "x" }], nonGoals, included);
-    expect(f[0].rule).toContain("mimo seznam");
+    expect(f[0]!.rule).toContain("mimo seznam");
   });
 });
 
@@ -195,7 +195,7 @@ describe("runAiAnalysis – orchestrátor (analyze/classify injektované, bez s�
     if (ai.kind === "analyzed") {
       expect(ai.model).toBe("opus");
       expect(ai.findings).toHaveLength(1);
-      expect(ai.findings[0].rule).toBe("non-goal: Nespouštět kód");
+      expect(ai.findings[0]!.rule).toBe("non-goal: Nespouštět kód");
       expect(ai.usage).toEqual<AiUsage>({ inputTokens: 1000, outputTokens: 100 });
       expect(ai.costUsd).toBeGreaterThan(0);
     }
@@ -353,16 +353,16 @@ describe("toCodeFindings – mapování + kontrola místa (bez vazby na non-goal
 
   it("soubor mimo poslaný set → file/line zahozeny, 'místo neověřeno'", () => {
     const f = toCodeFindings([{ file: "cizi.ts", line: 3, kind: "x", severity: "info", message: "m" }], included);
-    expect(f[0].file).toBeUndefined();
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toContain("místo neověřeno");
+    expect(f[0]!.file).toBeUndefined();
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toContain("místo neověřeno");
   });
 
   it("řádek mimo soubor → file zůstane, line zahozen", () => {
     const f = toCodeFindings([{ file: "a.ts", line: 999, kind: "x", severity: "info", message: "m" }], included);
-    expect(f[0].file).toBe("a.ts");
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toContain("řádek 999");
+    expect(f[0]!.file).toBe("a.ts");
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toContain("řádek 999");
   });
 });
 
@@ -388,7 +388,7 @@ describe("runAiCodeAnalysis – orchestrátor (analyze/classify injektované)", 
     expect(ai.kind).toBe("analyzed");
     if (ai.kind === "analyzed") {
       expect(ai.findings).toHaveLength(1);
-      expect(ai.findings[0].rule).toBe("kód: riskantní vzorec");
+      expect(ai.findings[0]!.rule).toBe("kód: riskantní vzorec");
       expect(ai.usage).toEqual<AiUsage>({ inputTokens: 1000, outputTokens: 100 });
       expect(ai.costUsd).toBeGreaterThan(0);
     }
@@ -541,38 +541,38 @@ describe("toLogicFindings – nepovinné místo, ověření jen když je dodáno
 
   it("bez místa → žádné file/line, ŽÁDNÁ značka neověřeno (legitimní soud o celku)", () => {
     const f = toLogicFindings([{ kind: "chybí funkčnost", severity: "error", message: "neumí X" }], included);
-    expect(f[0].file).toBeUndefined();
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toBe("neumí X");
-    expect(f[0].rule).toBe("logika: chybí funkčnost");
+    expect(f[0]!.file).toBeUndefined();
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toBe("neumí X");
+    expect(f[0]!.rule).toBe("logika: chybí funkčnost");
   });
 
   it("file v setu, bez line → file zůstane, line undefined, bez značky (nález o celém souboru)", () => {
     const f = toLogicFindings([{ file: "a.ts", kind: "k", severity: "info", message: "m" }], included);
-    expect(f[0].file).toBe("a.ts");
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toBe("m");
+    expect(f[0]!.file).toBe("a.ts");
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toBe("m");
   });
 
   it("file v setu + platný line → ověřené místo", () => {
     const f = toLogicFindings([{ file: "a.ts", line: 5, kind: "k", severity: "warning", message: "m" }], included);
-    expect(f[0].file).toBe("a.ts");
-    expect(f[0].line).toBe(5);
-    expect(f[0].message).toBe("m");
+    expect(f[0]!.file).toBe("a.ts");
+    expect(f[0]!.line).toBe(5);
+    expect(f[0]!.message).toBe("m");
   });
 
   it("file mimo poslaný set → file zahozen + značka neověřeno", () => {
     const f = toLogicFindings([{ file: "cizi.ts", line: 3, kind: "k", severity: "info", message: "m" }], included);
-    expect(f[0].file).toBeUndefined();
-    expect(f[0].message).toContain("místo neověřeno");
-    expect(f[0].message).toContain("cizi.ts");
+    expect(f[0]!.file).toBeUndefined();
+    expect(f[0]!.message).toContain("místo neověřeno");
+    expect(f[0]!.message).toContain("cizi.ts");
   });
 
   it("file v setu + line mimo rozsah → file zůstane, line zahozen + značka", () => {
     const f = toLogicFindings([{ file: "a.ts", line: 999, kind: "k", severity: "info", message: "m" }], included);
-    expect(f[0].file).toBe("a.ts");
-    expect(f[0].line).toBeUndefined();
-    expect(f[0].message).toContain("místo neověřeno");
+    expect(f[0]!.file).toBe("a.ts");
+    expect(f[0]!.line).toBeUndefined();
+    expect(f[0]!.message).toContain("místo neověřeno");
   });
 });
 
@@ -612,8 +612,8 @@ describe("runAiLogicAnalysis – orchestrátor (brána na záměru, analyze/clas
     expect(ai.kind).toBe("analyzed");
     if (ai.kind === "analyzed") {
       expect(ai.findings).toHaveLength(1);
-      expect(ai.findings[0].rule).toBe("logika: chybí funkčnost");
-      expect(ai.findings[0].file).toBeUndefined();
+      expect(ai.findings[0]!.rule).toBe("logika: chybí funkčnost");
+      expect(ai.findings[0]!.file).toBeUndefined();
       expect(ai.costUsd).toBeGreaterThan(0);
     }
   });

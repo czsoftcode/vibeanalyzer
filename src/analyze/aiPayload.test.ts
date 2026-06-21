@@ -64,12 +64,12 @@ describe("collectAiPayload – výběr a ohraničení payloadu", () => {
 
   it("počet řádků nepřičítá koncový \\n (3 řádky s koncovým newline = 3, ne 4)", async () => {
     const out = await collectAiPayload([file("a.ts", ".ts")], async () => "r1\nr2\nr3\n");
-    expect(out.includedFiles[0].lineCount).toBe(3); // ne 4 – jinak by halucinace na řádku 4 prošla
+    expect(out.includedFiles[0]!.lineCount).toBe(3); // ne 4 – jinak by halucinace na řádku 4 prošla
   });
 
   it("prázdný soubor → 0 řádků (ne 1)", async () => {
     const out = await collectAiPayload([file("a.ts", ".ts")], async () => "");
-    expect(out.includedFiles[0].lineCount).toBe(0);
+    expect(out.includedFiles[0]!.lineCount).toBe(0);
   });
 
   it("nad stropem uřízne a PŘIZNÁ to (truncated:true + počty), ne tiché vynechání", async () => {
