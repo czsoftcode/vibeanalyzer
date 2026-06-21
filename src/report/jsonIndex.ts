@@ -30,6 +30,10 @@ import type { SecretsResult } from "../secrets.js";
  * běh nic neuřezává (velký projekt se pošle celý po částech); místo toho má `ai` nepovinné
  * `chunking` s per-režim metadaty krájení (`nonGoal`/`code`/`logic` → {total, failed,
  * reasons}: na kolik částí se projekt rozdělil a kolik jich v daném režimu selhalo).
+ * Od verze 19 nese varianta `skipped` v `AiStatus` nepovinné `usage`/`costUsd` – provozně
+ * přeskočená část (model utnul výstup na max_tokens / vrátil prázdno; API už naúčtovalo)
+ * přiznává naúčtovanou cenu i strukturovaně, aby ji krájený běh sečetl. Beznákladové skipy
+ * (chybí klíč, žádné non-goaly, síťová chyba) pole nemají (rozlišení „nestálo nic" vs „$0").
  *
  * POZOR: `secrets.findings[].message` nese jen MASKOVANÝ náznak (prefix + délka),
  * nikdy celou hodnotu tajemství – JSON je perzistovaný artefakt jako `.md`.
@@ -56,9 +60,9 @@ export interface JsonIndex {
   ai: AiReport;
 }
 
-/** Bump 17 → 18: `ai` už NEMÁ `truncation` (krájený běh nic neuřezává), místo toho nese
- *  nepovinné `chunking` (per-režim metadata krájení). Změna tvaru = kontrakt s konzumenty JSON. */
-export const INDEX_VERSION = 18;
+/** Bump 18 → 19: varianta `skipped` v `AiStatus` má nepovinné `usage`/`costUsd` (provozně
+ *  přeskočená část přiznává naúčtovanou cenu strukturovaně). Změna tvaru = kontrakt s konzumenty JSON. */
+export const INDEX_VERSION = 19;
 
 export function buildJsonIndex(
   root: string,

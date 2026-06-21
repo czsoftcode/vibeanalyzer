@@ -1,0 +1,39 @@
+{
+  "id": 62,
+  "title": "Cena přeskočených částí strukturovaně",
+  "goal": "run*Analysis u provozně přeskočené části (max_tokens/prázdný výstup) vrátí usage+costUsd strukturovaně (rozšířená varianta skipped) a runChunkedMode je započítá do sloučené ceny krájeného běhu, i když výsledný stav skončí jako skipped.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Rozšířit AiStatus.skipped o usage?/costUsd?",
+      "status": "done",
+      "detail": "aiStatus.ts: varianta skipped získá nepovinná pole usage?: AiUsage a costUsd?: number; aktualizovat doc komentář. Typecheck zelený (stávající konzumenti se nerozbijí, pole volitelná)."
+    },
+    {
+      "title": "run*Analysis: provozní skip nese cenu strukturovaně",
+      "status": "done",
+      "detail": "Ve všech 3 funkcích (aiResult.ts:242/425/652) přidat do skipped objektu usage a costUsd: cost (cost už počítán přes computeCostUsd, žádný duplikát čísla). Text reason zůstává. Test se zuby: pro každou funkci max_tokens i prázdný rawText → skipped nese usage i costUsd; vyříznutí polí test shodí."
+    },
+    {
+      "title": "runChunkedMode: započítat cenu i ze skipped částí",
+      "status": "done",
+      "detail": "aiChunkedRun.ts: ve větvi skipped přičíst usage/costUsd, když je nese; výsledný analyzed i výsledný skipped vrací nasčítanou cenu. Bez double-countu. Test se zuby přes REÁLNÝ runChunkedMode: (a) mix analyzed+skipped{cost} → sloučená cena = součet obou; (b) všechny skipped{cost} → výsledný skipped nese součet. Vyříznutí započítání test shodí."
+    },
+    {
+      "title": "Bump INDEX_VERSION 18 → 19",
+      "status": "done",
+      "detail": "jsonIndex.ts: INDEX_VERSION na 19 + řádek historie do doc komentáře (skipped nově nese nepovinné usage/costUsd). Ověřit test verze indexu, pokud existuje."
+    },
+    {
+      "title": "Zelený typecheck + testy + self-review sub-agentem",
+      "status": "done",
+      "detail": "Celý typecheck a test suite zelené. Nezávislý self-review sub-agentem (čerstvý kontext) na chybovou/přeskakovací cestu a kontrakt AiStatus mezi aiResult/aiChunkedRun/jsonIndex."
+    }
+  ],
+  "startedAt": "2026-06-21T20:57:01.499Z",
+  "completedAt": "2026-06-21T21:18:55.600Z",
+  "autoCommit": {
+    "preSha": "45a63e3e2f81d381ec9f01c124207f95f099eca6",
+    "subject": "Phase 62: Cena přeskočených částí strukturovaně"
+  }
+}

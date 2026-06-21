@@ -33,8 +33,23 @@ const noGraph: ModuleGraphResult = {
 };
 
 describe("buildJsonIndex", () => {
-  it("verze indexu je 18 (`ai` nese chunking místo truncation)", () => {
-    expect(INDEX_VERSION).toBe(18);
+  it("verze indexu je 19 (`AiStatus.skipped` nese nepovinné usage/costUsd)", () => {
+    expect(INDEX_VERSION).toBe(19);
+  });
+
+  it("nese skipped s usage/costUsd 1:1 (provozní skip přiznává naúčtovanou cenu – odůvodnění bumpu 19)", () => {
+    const tsc: TscResult = { kind: "skipped", reason: "není tsconfig" };
+    const costedSkip: AiStatus = {
+      kind: "skipped",
+      reason: "model opus nevrátil úplný výstup; naúčtováno ~$0.0500",
+      usage: { inputTokens: 70000, outputTokens: 16000 },
+      costUsd: 0.05,
+    };
+    const idx = buildJsonIndex("/p", "t", [], tsc, noEslint, noSecrets, noAudit, noGraph, aiReport(costedSkip));
+    expect(idx.ai.nonGoal).toEqual(costedSkip); // usage/costUsd projdou, ne tiše zahozeny
+    // beznákladový skip pole NEMÁ (rozlišení „nestálo nic" vs „$0")
+    expect(idx.ai.nonGoal.kind === "skipped" && idx.ai.nonGoal.usage).toEqual({ inputTokens: 70000, outputTokens: 16000 });
+    expect("usage" in noAi).toBe(false);
   });
 
   it("nese ai.oversizedFiles 1:1 (přiznání souborů vynechaných z AI)", () => {

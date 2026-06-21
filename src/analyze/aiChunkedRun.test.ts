@@ -23,6 +23,11 @@ function analyzed(
 function skipped(reason: string): AiStatus {
   return { kind: "skipped", reason };
 }
+// Provozně přeskočená část, co reálně něco stála (max_tokens/prázdný výstup) – nese cenu
+// STRUKTUROVANĚ (tak ji vrací run*Analysis od fáze 62). Reálný tvar AiStatus.skipped.
+function skippedWithCost(reason: string, inputTokens: number, outputTokens: number, costUsd: number): AiStatus {
+  return { kind: "skipped", reason, usage: { inputTokens, outputTokens }, costUsd };
+}
 
 describe("runChunkedMode – slučování běhu přes části", () => {
   it("víc analyzed částí → sečte usage/cenu a spojí nálezy v pořadí částí", async () => {
@@ -109,6 +114,48 @@ describe("runChunkedMode – slučování běhu přes části", () => {
     expect(out.chunkFailed).toBe(2); // ready + skipped, NE failureReasons.length (=1)
     expect(out.failureReasons).toEqual(["timeout"]); // jen skipped nese reason
     expect(out.chunkFailed).toBeGreaterThan(out.failureReasons.length); // rozejití zafixováno
+  });
+
+  it("MÍCHANÝ běh: analyzed + skipped S CENOU → sloučená cena/usage = součet OBOU (fáze 62)", async () => {
+    // Zub: provozně přeskočená část (max_tokens) reálně něco stála; když ji nezapočítám
+    // do sloučené costUsd, krájený běh cenu PODSTŘELÍ. Vyříznutí započítání skipnuté ceny
+    // v runChunkedMode tenhle test shodí.
+    const chunks = [chunk("a"), chunk("b")];
+    const results = [analyzed([finding("n1")], 10, 20, 0.1), skippedWithCost("max_tokens; ~$0.05", 70, 16, 0.05)];
+    const out = await runChunkedMode(chunks, async (_c, i) => results[i]!);
+
+    expect(out.status.kind).toBe("analyzed");
+    if (out.status.kind !== "analyzed") throw new Error("nedosažitelné");
+    expect(out.status.findings.map((f) => f.message)).toEqual(["n1"]); // skip nálezy nepřidá
+    expect(out.status.usage).toEqual({ inputTokens: 80, outputTokens: 36 }); // 10+70, 20+16
+    expect(out.status.costUsd).toBeCloseTo(0.15, 10); // 0.1 + 0.05 (nepodstřeleno)
+    expect(out.chunkFailed).toBe(1);
+    expect(out.failureReasons).toEqual(["max_tokens; ~$0.05"]);
+  });
+
+  it("VŠECHNY skipped S CENOU → výsledný skipped nese NASČÍTANOU cenu/usage (fáze 62)", async () => {
+    const chunks = [chunk("a"), chunk("b")];
+    const results = [skippedWithCost("max_tokens; ~$0.05", 70, 16, 0.05), skippedWithCost("max_tokens; ~$0.03", 50, 10, 0.03)];
+    const out = await runChunkedMode(chunks, async (_c, i) => results[i]!);
+
+    expect(out.status.kind).toBe("skipped");
+    if (out.status.kind !== "skipped") throw new Error("nedosažitelné");
+    expect(out.status.reason).toContain("max_tokens"); // souhrnný důvod
+    expect(out.status.usage).toEqual({ inputTokens: 120, outputTokens: 26 }); // 70+50, 16+10
+    expect(out.status.costUsd).toBeCloseTo(0.08, 10); // 0.05 + 0.03
+    expect(out.chunkFailed).toBe(2);
+  });
+
+  it("MÍCHANÉ skipy: část s cenou + beznákladová → výsledný skipped nese jen cenu nákladové", async () => {
+    // Beznákladový skip (chybí klíč) nesmí přidat $0 ani usage; jede jen cena nákladové části.
+    const chunks = [chunk("a"), chunk("b")];
+    const results = [skippedWithCost("max_tokens; ~$0.05", 70, 16, 0.05), skipped("chybí klíč pro model opus")];
+    const out = await runChunkedMode(chunks, async (_c, i) => results[i]!);
+
+    expect(out.status.kind).toBe("skipped");
+    if (out.status.kind !== "skipped") throw new Error("nedosažitelné");
+    expect(out.status.usage).toEqual({ inputTokens: 70, outputTokens: 16 });
+    expect(out.status.costUsd).toBeCloseTo(0.05, 10);
   });
 
   it("prázdné chunks → skipped, počty 0, žádné důvody (bez pádu)", async () => {

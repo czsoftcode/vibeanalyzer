@@ -7,6 +7,16 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Cena rozkrájeného AI běhu se už nepodhodnocuje.** Když některá část přijde o výstup
+  kvůli limitu modelu (utnutý/prázdný výstup), API ji přesto naúčtuje. Nově se tahle cena
+  počítá do celkové ceny běhu i strukturovaně (v JSON reportu), ne jen jako text – takže
+  součet sedí i v případě, že selže víc částí najednou. (Pozn.: v markdown reportu se cena
+  přeskočené části zatím ukazuje jen v textu důvodu.) Verze JSON indexu zvýšena na 19;
+  konzumenti JSON musí počítat se změnou tvaru (varianta `skipped` nese nepovinné
+  `usage`/`costUsd`).
+
 ### Fixed
 
 - **Zmizelý nebo nečitelný soubor během AI analýzy už neshodí celý report.** Když se

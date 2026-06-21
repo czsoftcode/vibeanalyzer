@@ -244,6 +244,8 @@ export async function runAiAnalysis(
       return {
         kind: "skipped",
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
+        usage,
+        costUsd: cost,
       };
     }
     const findings = toFindings(parseFindings(rawText), nonGoals, chunk.includedFiles);
@@ -427,6 +429,8 @@ export async function runAiCodeAnalysis(
       return {
         kind: "skipped",
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
+        usage,
+        costUsd: cost,
       };
     }
     const findings = toCodeFindings(parseCodeFindings(rawText), chunk.includedFiles);
@@ -654,6 +658,8 @@ export async function runAiLogicAnalysis(
       return {
         kind: "skipped",
         reason: `model ${model} nevrátil úplný výstup (stop_reason=${stopReason ?? "prázdný"}); naúčtováno ~$${cost.toFixed(4)}. Zkus jiný model nebo menší rozsah.`,
+        usage,
+        costUsd: cost,
       };
     }
     const findings = toLogicFindings(parseLogicFindings(rawText), chunk.includedFiles);

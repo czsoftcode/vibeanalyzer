@@ -46,10 +46,12 @@ function summarizeFailures(reasons: string[], total: number): string {
  * Stav výsledku: ≥1 část `analyzed` → `analyzed` (posbírané). Žádná → `skipped` se
  * souhrnným důvodem. Prázdný vstup (0 částí) → `skipped` jako u `run*Analysis`.
  *
- * POZOR – cena: `skipped` část nenese usage/cenu strukturovaně (jen v textu reason),
- * takže cena provozně přeskočené (např. max_tokens) části se do sloučené `costUsd`
- * NEzapočítá → mírné PODHODNOCENÍ. Vědomě odloženo (viz mini todo). PROGRAMOVÁ chyba
- * z `runOne` (throw – `classify` ji nezná) se NEMASKUJE: probublá se stackem.
+ * Cena (fáze 62): provozně přeskočená část (max_tokens/prázdný výstup) nese usage/cenu
+ * i STRUKTUROVANĚ (API ji naúčtovalo) → sečte se do sloučené `costUsd`, ať už výsledek
+ * skončí jako `analyzed` (míchaný běh), nebo `skipped` (všechny části utnuté). Beznákladové
+ * skipy (chybí klíč, žádné non-goaly, síťová chyba) cenu nenesou → nepřičtou nic a výsledný
+ * `skipped` má usage/costUsd undefined. PROGRAMOVÁ chyba z `runOne` (throw – `classify` ji
+ * nezná) se NEMASKUJE: probublá se stackem.
  */
 export async function runChunkedMode(
   chunks: readonly AiChunk[],
@@ -70,6 +72,10 @@ export async function runChunkedMode(
   let costUsd = 0;
   let model: AiModelChoice | null = null;
   let analyzedCount = 0;
+  // Nesla ALESPOŇ JEDNA přeskočená část strukturovanou cenu? (provozní skip –
+  // max_tokens/prázdný výstup – API už naúčtovalo). Rozhoduje, jestli výsledný
+  // `skipped` má nést usage/costUsd, nebo je nechat undefined (beznákladové skipy).
+  let skippedCost = false;
   const failureReasons: string[] = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -85,6 +91,20 @@ export async function runChunkedMode(
       costUsd += status.costUsd;
     } else if (status.kind === "skipped") {
       failureReasons.push(status.reason);
+      // Fáze 62: provozně přeskočená část (max_tokens/prázdný výstup) nese cenu
+      // STRUKTUROVANĚ – API ji naúčtovalo. Sečteme ji do TÝCHŽ akumulátorů (do
+      // sloučeného `analyzed` i do výsledného `skipped`), ať krájený běh cenu
+      // nepodstřeluje. Beznákladové skipy (chybí klíč, žádné non-goaly, síťová chyba)
+      // usage/costUsd nemají → nepřičtou nic a `skippedCost` zůstane false.
+      // Bez double-countu: část je buď `analyzed`, NEBO `skipped`, nikdy obojí.
+      if (status.usage) {
+        inputTokens += status.usage.inputTokens;
+        outputTokens += status.usage.outputTokens;
+      }
+      if (status.costUsd !== undefined) {
+        costUsd += status.costUsd;
+        skippedCost = true;
+      }
     }
     // `ready`/`verified` v analytickém běhu nenastávají; kdyby přece, nezapočítají se
     // do nálezů ani důvodů (nemají reason) – jen sníží poměr analyzed/total.
@@ -94,14 +114,17 @@ export async function runChunkedMode(
   const chunkFailed = chunkTotal - analyzedCount;
 
   if (analyzedCount > 0 && model !== null) {
+    // Sloučená usage/cena už zahrnuje i provozně přeskočené části (viz výše).
     const usage: AiUsage = { inputTokens, outputTokens };
     return { status: { kind: "analyzed", model, findings, usage, costUsd }, chunkTotal, chunkFailed, failureReasons };
   }
 
-  return {
-    status: { kind: "skipped", reason: summarizeFailures(failureReasons, chunkTotal) },
-    chunkTotal,
-    chunkFailed,
-    failureReasons,
-  };
+  const reason = summarizeFailures(failureReasons, chunkTotal);
+  // Žádná část neprošla. Když některý skip nesl cenu (běh přesto něco stál – typicky
+  // VŠECHNY části utnuté na max_tokens), přiznáme ji i ve výsledném `skipped`. Bez ceny
+  // necháme pole undefined (rozlišení „nestálo nic" vs „stálo $0").
+  const status: AiStatus = skippedCost
+    ? { kind: "skipped", reason, usage: { inputTokens, outputTokens }, costUsd }
+    : { kind: "skipped", reason };
+  return { status, chunkTotal, chunkFailed, failureReasons };
 }

@@ -307,6 +307,11 @@
       "id": 61,
       "title": "Ošetřit pád čtení AI vrstvy",
       "status": "done"
+    },
+    {
+      "id": 62,
+      "title": "Cena přeskočených částí strukturovaně",
+      "status": "done"
     }
   ]
 }

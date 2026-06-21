@@ -91,7 +91,12 @@ export interface AiUsage {
  * Stav AI vrstvy. Rozlišitelné stavy (diskriminovaná unie jako u ostatních vrstev –
  * tsc, audit, …), aby ze strojového výstupu šlo poznat, co se stalo:
  *   - `skipped`  – AI neproběhla (chybí klíč, síť/timeout, odmítnutý klíč, žádné
- *                  non-goaly) + důvod.
+ *                  non-goaly) + důvod. Nepovinné `usage`/`costUsd` nese JEN provozní
+ *                  přeskočení, co reálně něco stálo (model utnul výstup na max_tokens
+ *                  nebo vrátil prázdno – API už proběhlo a naúčtovalo tokeny). Bezná-
+ *                  kladové skipy (chybí klíč, žádné non-goaly, síťová chyba) je nechají
+ *                  `undefined` (rozlišení „nestálo nic" vs „stálo $0"). Orchestrátor
+ *                  krájeného běhu (runChunkedMode) je sečte do sloučené ceny.
  *   - `ready`    – klíč nalezen, ale reálný dotaz NEPROBĚHL (default běh bez
  *                  `--ai-check`/`--ai`). NE falešné „hotovo".
  *   - `verified` – levný testovací dotaz na API proběhl (jen s `--ai-check`).
@@ -100,7 +105,7 @@ export interface AiUsage {
  *                  skutečnou spotřebu tokenů a spočítanou cenu.
  */
 export type AiStatus =
-  | { kind: "skipped"; reason: string }
+  | { kind: "skipped"; reason: string; usage?: AiUsage; costUsd?: number }
   | { kind: "ready" }
   | { kind: "verified" }
   | { kind: "analyzed"; model: AiModelChoice; findings: Finding[]; usage: AiUsage; costUsd: number };
