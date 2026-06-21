@@ -22,6 +22,7 @@ export type ParsedArgs =
       aiCode: boolean;
       aiLogic: boolean;
       aiModel: AiModelChoice;
+      aiYes: boolean;
     }
   | { kind: "error"; message: string };
 
@@ -50,8 +51,10 @@ export function defaultOutDir(homeDir: string, targetPath: string): string {
  * porušení non-goalů, `--ai-code` reálnou analýzu kvality/rizik kódu, `--ai-logic`
  * posouzení funkčnosti kódu jako CELKU vůči záměru z project.md – všechny jsou
  * samostatné drahé cesty, každá vlastní dotaz na API (lze i víc naráz). `--ai-model
- * <opus|sonnet|glm>` volí model pro všechny (default opus). Vyhodnocení (síť, klíč, samotné
- * --ai-model bez AI běhu) řeší CLI, ne parser.
+ * <opus|sonnet|glm>` volí model pro všechny (default opus). `--ai-yes` předem potvrdí
+ * odhadovanou cenu (přeskočí interaktivní dotaz – nutné v neinteraktivním běhu, jinak se
+ * AI nad prahem ceny přeskočí). Vyhodnocení (síť, klíč, odhad ceny, samotné --ai-model bez
+ * AI běhu) řeší CLI, ne parser.
  */
 export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let target: string | undefined;
@@ -63,6 +66,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
   let aiCode = false;
   let aiLogic = false;
   let aiModel: AiModelChoice = "opus";
+  let aiYes = false;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
@@ -113,6 +117,10 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
       aiLogic = true;
       continue;
     }
+    if (a === "--ai-yes") {
+      aiYes = true;
+      continue;
+    }
     if (a === "--ai-model") {
       const val = argv[i + 1];
       if (val === undefined || !AI_MODELS.includes(val as AiModelChoice)) {
@@ -142,7 +150,7 @@ export function parseArgs(argv: readonly string[], cwd: string): ParsedArgs {
 
   const targetPath = path.resolve(cwd, target ?? ".");
   const outDir = out === undefined ? null : path.resolve(cwd, out);
-  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiNonGoal, aiCode, aiLogic, aiModel };
+  return { kind: "run", targetPath, outDir, audit, dev, aiCheck, aiNonGoal, aiCode, aiLogic, aiModel, aiYes };
 }
 
 /** Výsledek validace cílové cesty. */

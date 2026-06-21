@@ -252,6 +252,11 @@
       "id": 50,
       "title": "glm: vyšší strop výstupu a thinking",
       "status": "done"
+    },
+    {
+      "id": 51,
+      "title": "Odhad ceny AI před během",
+      "status": "done"
     }
   ]
 }

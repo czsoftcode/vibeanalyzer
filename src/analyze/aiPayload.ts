@@ -28,15 +28,20 @@ export interface AiPayload {
  * Strop celkové délky payloadu ve znacích. Jeden dotaz (žádné krájení na desítky
  * částí – to je pozdější fáze). POZOR: strop je ve ZNACÍCH, ne v tokenech – poměr
  * ~3,3 znaku/token je jen hrubá heuristika, u hustého kódu jich může být víc.
- * ~800k znaků je tedy zhruba ~240k tokenů (klidně i 250–280k) – stále hluboko pod
- * 1M kontextem modelu. Na běžných projektech se vejde, u velkých se uřízne a přizná.
+ * ~1,65M znaků je tedy zhruba ~500k tokenů (u hustšího kódu i méně) – i s výstupem
+ * (max 64–128k) stále pod 1M kontextem všech tří modelů (opus 4.8, sonnet 4.6,
+ * glm-5.2). Na velké projekty se tak vejde víc; u extrémně velkých se pořád uřízne
+ * a přizná (`truncated`).
  *
- * VĚDOMÝ MEZIKROK, ne řešení: větší strop = větší TICHÝ náklad. Odhad ceny PŘED
- * během zatím neexistuje (Fáze 5c / todo 7), takže cenu uvidíš až po doběhu (řádově
- * sonnet ~$0,7 / opus ~$1,2 za jeden režim na projektu těsně pod stropem). Skutečné
- * řešení velkých projektů je krájení na části (backlog). Konstanta = kontrakt, ne konfig.
+ * VĚDOMÝ KOMPROMIS, ne řešení: větší strop = lineárně větší náklad (řádově $2,5
+ * vstup/režim na opusu u projektu těsně pod stropem). Tichý už ale NENÍ – brána
+ * odhadu ceny (fáze 51) ho před během spočítá a nad prahem vyžádá potvrzení. Dvě
+ * další rizika strop neřeší: (1) lost-in-the-middle – obří kontext zhoršuje míření
+ * nálezů na konkrétní řádek (obrana proti halucinaci); (2) robustnější cesta pro
+ * velké projekty je krájení na části (backlog), ne nafouknutý single-shot. GLOBÁLNÍ,
+ * ne per-model (per-model strop je todo 19). Konstanta = kontrakt, ne konfig.
  */
-export const AI_PAYLOAD_CHAR_BUDGET = 800_000;
+export const AI_PAYLOAD_CHAR_BUDGET = 1_650_000;
 
 /** Strop pro JEDEN soubor v bajtech – jeden obří generovaný soubor by jinak sám
  *  vyžral celý rozpočet. Vybírá se podle `FileEntry.size` (z scanu), bez čtení. */

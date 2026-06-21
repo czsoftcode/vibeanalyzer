@@ -51,8 +51,8 @@ describe("collectAiPayload – výběr a ohraničení payloadu", () => {
     expect(out.oversizedFiles).toEqual([]);
   });
 
-  it("strop má dohodnutou hodnotu 800_000 znaků (regrese: relativní truncation test špatnou hodnotu nechytí)", () => {
-    expect(AI_PAYLOAD_CHAR_BUDGET).toBe(800_000);
+  it("strop má dohodnutou hodnotu 1_650_000 znaků ≈ ~500k tokenů (regrese: relativní truncation test špatnou hodnotu nechytí)", () => {
+    expect(AI_PAYLOAD_CHAR_BUDGET).toBe(1_650_000);
   });
 
   it("zachytí počet řádků každého souboru (pro pozdější kontrolu místa)", async () => {

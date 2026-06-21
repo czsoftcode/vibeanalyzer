@@ -304,7 +304,9 @@ describe("run – e2e AI vrstva (souhrn dvou režimů v reálném výstupu)", ()
     }));
 
     const outDir = path.join(proj, "report");
-    const code = await run([proj, "--out", outDir, "--ai-non-goal", "--ai-code"], proj, {
+    // --ai-yes: dva režimy na opusu mají worst-case odhad > práh ($0.80) → bez potvrzení
+    // by je brána přeskočila. Tady testujeme zapojení analýzy, ne bránu, proto cenu potvrdíme.
+    const code = await run([proj, "--out", outDir, "--ai-non-goal", "--ai-code", "--ai-yes"], proj, {
       aiAnalyzeFn: analyze,
       aiClassifyFn: () => null,
     });

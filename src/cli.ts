@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { AI_MISSING_KEY_REASON, AI_PROVIDERS, type AiModelChoice, type AiReport, type AiStatus, detectAiStatus, verifyAiAccess } from "./analyze/aiStatus.js";
 import type { realAiAnalyze } from "./analyze/aiAnalyze.js";
 import { collectAiPayload } from "./analyze/aiPayload.js";
+import { estimateAiCost, formatCostEstimate } from "./analyze/aiEstimate.js";
 import type { classifyAiError, realAiPing } from "./analyze/aiPing.js";
 import type { ChildPayload } from "./analyze/analyzeChild.js";
 import { auditDependencies, type AuditResult } from "./audit.js";
@@ -50,6 +51,8 @@ Volby:
                    opus/sonnet jedou na Anthropic (ANTHROPIC_API_KEY); glm (GLM-5.2 od
                    Z.ai) je levnější a jede na Anthropic-kompatibilní endpoint Z.ai
                    s vlastním klíčem ZAI_API_KEY.
+  --ai-yes         Předem potvrdí odhadovanou cenu AI běhu (přeskočí dotaz). Bez něj se
+                   běh s odhadem nad práh v neinteraktivním režimu (skript/CI) přeskočí.
   -h, --help       Zobrazí tuto nápovědu.
   -v, --version    Zobrazí verzi.
 
@@ -77,6 +80,16 @@ Nastav ji a spusť nástroj znovu, např.:
   ${keyEnv}=... vibeanalyzer --ai-code
 nebo přes nativní načtení .env:  node --env-file=.env <cesta-k-nástroji> --ai-code
 (Vestavěnou .env podporu schválně nepřidáváme – nástroj je sám skener tajemství.)`;
+
+/**
+ * Práh ceny (USD), nad kterým se před AI během vyžaduje potvrzení. Porovnává se proti
+ * HORNÍ mezi odhadu (worst-case výstup), protože to je to, co může překvapit účet – ne
+ * proti optimistické dolní mezi. Pod prahem AI běží rovnou (nemá smysl potvrzovat pár
+ * centů). Hodnota je vědomý kompromis: dost nízko, aby drahý běh (víc režimů / glm 64k /
+ * velký vstup) zachytila, dost vysoko, aby běžný malý projekt neobtěžovala dotazem.
+ * Kontrakt, ne konfigurace (config soubor je deklarovaný non-goal).
+ */
+export const AI_COST_CONFIRM_THRESHOLD_USD = 0.5;
 
 // Cesta k child skriptu pro izolovaný běh. Odvozená od PŘÍPONY tohoto modulu:
 // v provozu běžíme z dist (cli.js → analyzeChild.js), v dev/testu ze src přes tsx
@@ -554,6 +567,39 @@ async function runAiLayer(
     const { runAiAnalysis, runAiCodeAnalysis, runAiLogicAnalysis } = await import("./analyze/aiResult.js");
     // payload se sbírá JEDNOU a sdílí mezi všemi režimy (žádné dvojí čtení souborů).
     const payload = await collectAiPayload(files, (rel) => readFile(path.join(targetPath, rel), "utf8"));
+
+    // Odhad ceny PŘED voláním API. modeCount = počet vyžádaných režimů (každý je samostatné
+    // API volání → vstup se posílá tolikrát). Odhad VŽDY vypíšeme (ať uživatel cenu vidí
+    // i s --ai-yes / pod prahem). Nad prahem a bez --ai-yes se zeptáme (TTY), jinak čistě
+    // přeskočíme – paušál „AI vrstva se v takovém případě jen označí jako přeskočená".
+    const modeCount = (wantNonGoal ? 1 : 0) + (wantCode ? 1 : 0) + (wantLogic ? 1 : 0);
+    const estimate = estimateAiCost(payload, parsed.aiModel, modeCount);
+    console.error(formatCostEstimate(estimate, parsed.aiModel));
+
+    if (estimate.costMaxUsd > AI_COST_CONFIRM_THRESHOLD_USD && !parsed.aiYes) {
+      let skipReason: string | null = null;
+      if (deps.isInteractive && deps.ask) {
+        const answer = await deps.ask(
+          `Odhad nejhoršího případu přesahuje $${AI_COST_CONFIRM_THRESHOLD_USD.toFixed(2)}. Pustit AI analýzu? [a/N]`,
+        );
+        if (!isYes(answer)) {
+          skipReason = "AI běh nepotvrzen (odhadovaná cena nad práh) – přeskočeno";
+        }
+      } else {
+        skipReason = "odhadovaná cena nad práh a běh není interaktivní – přidej --ai-yes pro potvrzení";
+      }
+      if (skipReason !== null) {
+        console.error(`AI analýza přeskočena: ${skipReason}`);
+        const skipped: AiStatus = { kind: "skipped", reason: skipReason };
+        // Jen VYŽÁDANÉ režimy → skipped; nevyžádané zůstávají `pre` (ready) jako jinde.
+        return {
+          nonGoal: wantNonGoal ? skipped : pre,
+          code: wantCode ? skipped : pre,
+          logic: wantLogic ? skipped : pre,
+          oversizedFiles: payload.oversizedFiles,
+        };
+      }
+    }
 
     // Když je klíč, ale daný režim není vyžádán, zůstane `ready` (klíč nalezen, dotaz
     // neproběhl) – NE falešné „analyzováno".

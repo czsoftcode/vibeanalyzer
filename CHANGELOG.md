@@ -9,6 +9,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Added
 
+- **Odhad ceny AI před během.** Před každým reálným AI dotazem se teď vypíše přibližný
+  odhad ceny jako rozsah („řádově $X až nejvýš $Y", explicitně označený jako odhad, ne
+  fakturace). Počítá se z reálné délky posílaného kódu × ceník zvoleného modelu; vstup
+  i výstup se násobí počtem zapnutých režimů (každý posílá celý kód zvlášť). Když
+  odhadovaná horní mez přesáhne práh ($0.50), nástroj se v terminálu **zeptá na potvrzení**;
+  v neinteraktivním běhu (skript, roura) AI vrstvu **čistě přeskočí** s důvodem (report
+  vznikne, exit 0). Nová vlajka **`--ai-yes`** cenu potvrdí předem a běh pustí bez ptaní
+  (nutná pro neinteraktivní běh nad prahem).
 - Nová volba modelu **`--ai-model glm`** (GLM-5.2 od Z.ai) jako třetí možnost vedle
   `opus`/`sonnet` – výrazně levnější (vstup $1,4 / výstup $4,4 za milion tokenů oproti
   opus $5 / $25), běží přes Anthropic-kompatibilní endpoint Z.ai s vlastním klíčem
@@ -40,6 +48,11 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- **Vstupní strop pro AI zvednut z ~240k na ~500k tokenů** (z 800 000 na 1 650 000 znaků).
+  Velké projekty se tak do jednoho AI dotazu vejdou celé místo aby se uřízla zhruba půlka –
+  u všech tří modelů (opus 4.8, sonnet 4.6, glm-5.2) je to i s výstupem pod 1M kontextem.
+  Pozor: cena roste lineárně s velikostí kódu (proto odhad ceny výše), a velmi velký
+  kontext může zhoršit přesnost mířených nálezů.
 - **Který API klíč je potřeba, určuje nově zvolený model:** `glm` hlídá `ZAI_API_KEY`,
   `opus`/`sonnet` dál `ANTHROPIC_API_KEY`. Když klíč zvoleného modelu chybí, ale máš
   nastavený klíč jiného providera, hláška o přeskočení to napoví (např. „nalezen

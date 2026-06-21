@@ -1,0 +1,43 @@
+{
+  "id": 51,
+  "title": "Odhad ceny AI před během",
+  "goal": "Před voláním API spočítat přibližný počet vstupních a (worst-case) výstupních tokenů × ceník zvoleného modelu, zobrazit odhad rozsahu ceny a počkat na potvrzení uživatele (s vlajkou pro přeskočení v neinteraktivním běhu).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Čistá funkce odhadu ceny + formátování + test",
+      "status": "done",
+      "detail": "Nový modul src/analyze/aiEstimate.ts: estimateAiCost(payload, model, modeCount) → { inputTokens, outputMinTokens, outputMaxTokens, costMinUsd, costMaxUsd }. Heuristika znaky/token jako dokumentovaná konstanta; vstup = text.length/poměr × modeCount × cena.input (vstup se násobí počtem režimů, každý posílá celý payload); výstup min = dokumentovaný floor/režim, max = AI_PROVIDERS[model].maxTokens × modeCount. Ceník/strop z AI_PROVIDERS (žádný duplikát). Plus formatCostEstimate(...) → český víceřádkový text 'řádově $X až nejvýš $Y', explicitně označený jako přibližný odhad, ne fakturace. Test má zuby: per-model ceník, násobení režimy, prázdný payload (0 znaků/0 souborů) → ~0 bez NaN/dělení nulou."
+    },
+    {
+      "title": "Vlajka --ai-yes v parseArgs + HELP + test",
+      "status": "done",
+      "detail": "Přidat aiYes: boolean do ParsedArgs (větev kind:run) v src/args.ts, parsovat --ai-yes, doplnit do HELP. Test: --ai-yes nastaví aiYes=true, default false."
+    },
+    {
+      "title": "Práh + rozhodovací brána v cli.ts",
+      "status": "done",
+      "detail": "Konstanta AI_COST_CONFIRM_THRESHOLD_USD (dokumentovaná). V AI větvi po collectAiPayload spočítat modeCount (počet vyžádaných režimů) a odhad, odhad VŽDY vypsat. Logika porovnává costMax (horní mez) s prahem: <=práh → běž; >práh + aiYes → vypiš a běž; >práh + isInteractive + ask → zeptej se, jen a/ano/y potvrdí; >práh + ne-TTY / bez ask / odmítnutí / EOF(null) → čistě přeskoč. Při přeskočení AiStatus.kind=skipped s důvodem zmiňujícím --ai-yes do všech vyžádaných režimů (nevyžádané jako dnes), report vznikne, exit 0."
+    },
+    {
+      "title": "Testy rozhodovací brány (happy + unhappy)",
+      "status": "done",
+      "detail": "V run/cli testu přes fake ask+isInteractive+fake analyze: (a) pod prahem → běží bez dotazu; (b) nad prahem + TTY + ano → analyze zavolán; (c) nad prahem + TTY + ne → skipped, analyze nezavolán; (d) nad prahem + TTY + EOF/null → skipped; (e) nad prahem + ne-TTY bez vlajky → skipped s důvodem o --ai-yes, exit 0; (f) --ai-yes nad prahem → běží bez dotazu. Ověřit, že ask se NEspustí mimo isInteractive."
+    },
+    {
+      "title": "Nezávislý self-review + zelená sada",
+      "status": "done",
+      "detail": "Sub-agent s čerstvým kontextem projde unhappy path (prázdný payload, 0 znaků, EOF z ask, ne-TTY, dělení nulou, exit kódy chybových větví) podle checklistu z CLAUDE.md. Pak npm test + npm run typecheck zelené (typecheck testů je dnes globálně červený kvůli todo 18 – neřešit zde, jen nezhoršit)."
+    }
+  ],
+  "startedAt": "2026-06-21T00:11:24.056Z",
+  "resolvedVerify": [
+    "Reálný placený AI běh: obklopuje odhadovaný rozsah skutečnou cenu?",
+    "UX prahu u glm na reálném projektu (viz nález #9 níže)"
+  ],
+  "completedAt": "2026-06-21T01:07:44.034Z",
+  "autoCommit": {
+    "preSha": "b0853eb6f5ae4069db24dae50be3335891f685fb",
+    "subject": "Phase 51: Odhad ceny AI před během"
+  }
+}
