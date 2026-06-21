@@ -57,6 +57,42 @@ export const AI_PAYLOAD_CHAR_BUDGET = 1_650_000;
 export const AI_PAYLOAD_PER_FILE_MAX_BYTES = 100_000;
 
 /**
+ * Výsledek výběru AI kandidátů: soubory, co půjdou do dotazu, a ty, které vypadly
+ * kvůli per-file stropu (přiznají se v reportu, ne tiché vynechání).
+ */
+export interface AiCandidates {
+  /** Vybrané zdrojové soubory pod per-file stropem, seřazené podle cesty (deterministicky). */
+  selected: FileEntry[];
+  /** Cesty ZDROJOVÝCH souborů nad per-file stropem (`AI_PAYLOAD_PER_FILE_MAX_BYTES`).
+   *  NEzahrnuje minifikáty ani ne-zdroj – ty nejsou AI kandidáti, byl by to šum. */
+  oversizedFiles: string[];
+}
+
+/**
+ * JEDINÝ zdroj pravdy pro výběr souborů do AI vrstvy. Sdílí ho `collectAiPayload`
+ * (single-shot) i `splitAiPayload` (krájení) – aby výběr nedriftoval mezi dvěma
+ * cestami. Kandidát = soubor (ne adresář), ne minifikát, se zdrojovou příponou.
+ * Z kandidátů per-file strop (`FileEntry.size`, bez čtení) vytřídí obří do
+ * `oversizedFiles`. Řazení podle cesty = deterministické pořadí.
+ */
+export function selectAiCandidates(files: readonly FileEntry[]): AiCandidates {
+  const candidates = files
+    .filter((f) => f.type === "file" && !f.minified && SOURCE_EXTENSIONS.includes(f.ext))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  const selected = candidates.filter((f) => f.size <= AI_PAYLOAD_PER_FILE_MAX_BYTES);
+  const oversizedFiles = candidates.filter((f) => f.size > AI_PAYLOAD_PER_FILE_MAX_BYTES).map((f) => f.path);
+  return { selected, oversizedFiles };
+}
+
+/** Slepí jeden soubor do payloadu s hlavičkou cesty. SDÍLENÝ formát – `collectAiPayload`
+ *  i `splitAiPayload` musí slepovat stejně, jinak by se část poslaná AI lišila tvarem.
+ *  Změna formátu = změna kontraktu pro obě cesty (a pro odkazy na řádky v nálezech). */
+function formatFileChunk(path: string, content: string): string {
+  return `// ==== ${path} ====\n${content}\n`;
+}
+
+/**
  * Počet řádků obsahu. POZOR na koncový `\n`: `"a\n".split("\n")` = `["a", ""]`
  * (délka 2), ale soubor má 1 řádek – proto koncový newline odečteme. Prázdný
  * soubor = 0 řádků. Přesný počet je důležitý pro kontrolu místa v `toFindings`
@@ -81,15 +117,8 @@ export async function collectAiPayload(
   files: readonly FileEntry[],
   readFile: (relPath: string) => Promise<string>,
 ): Promise<AiPayload> {
-  // Nejdřív AI kandidáti (zdrojová přípona, ne minifikát, soubor) – z nich pak per-file
-  // strop vytřídí ty obří. Ty se NEzahodí potichu: vypíšou se do `oversizedFiles` a report
-  // je přizná. Minifikáty/ne-zdrojové sem schválně nepatří (nejsou kandidáti = nejsou nález).
-  const candidates = files
-    .filter((f) => f.type === "file" && !f.minified && SOURCE_EXTENSIONS.includes(f.ext))
-    .sort((a, b) => a.path.localeCompare(b.path));
-
-  const selected = candidates.filter((f) => f.size <= AI_PAYLOAD_PER_FILE_MAX_BYTES);
-  const oversizedFiles = candidates.filter((f) => f.size > AI_PAYLOAD_PER_FILE_MAX_BYTES).map((f) => f.path);
+  // Výběr (kandidáti + oversized) je sdílený se `splitAiPayload` – jeden zdroj pravdy.
+  const { selected, oversizedFiles } = selectAiCandidates(files);
 
   const includedFiles: PayloadFile[] = [];
   let text = "";
@@ -97,7 +126,7 @@ export async function collectAiPayload(
 
   for (const f of selected) {
     const content = await readFile(f.path);
-    const chunk = `// ==== ${f.path} ====\n${content}\n`;
+    const chunk = formatFileChunk(f.path, content);
     if (text.length > 0 && text.length + chunk.length > AI_PAYLOAD_CHAR_BUDGET) {
       truncated = true;
       break;
@@ -114,4 +143,105 @@ export async function collectAiPayload(
   const omittedBytes = omitted.reduce((sum, f) => sum + f.size, 0);
 
   return { text, includedFiles, truncated, omittedFiles, omittedBytes, oversizedFiles };
+}
+
+/** Jedna část (chunk) pro samostatné AI volání: slepený kód + seznam zahrnutých
+ *  souborů s počty řádků (kontrola místa proti halucinaci, jako u `AiPayload`). */
+export interface AiChunk {
+  text: string;
+  includedFiles: PayloadFile[];
+}
+
+/**
+ * Výsledek krájení: pole částí (každá samostatný AI dotaz) a globálně vynechané
+ * oversized soubory. ZÁMĚRNĚ bez `truncated`/`omitted*` (na rozdíl od `AiPayload`) –
+ * dělič NIC nezahazuje kvůli celkovému stropu, to je celý smysl krájení; jediné
+ * vynechané jsou oversized (nad per-file stropem), stejně jako u single-shotu.
+ */
+export interface ChunkedPayload {
+  chunks: AiChunk[];
+  oversizedFiles: string[];
+}
+
+/**
+ * Rozdělí AI kandidáty (sdílený `selectAiCandidates`) do částí pro krájené volání.
+ * Strategie: ROVNOMĚRNÉ dělení, ne „plň po strop". Spočítá `N = ceil(total / window)`
+ * (z délky payloadu VE ZNACÍCH, ne z bajtů `FileEntry.size` – měří se to, co se reálně
+ * pošle) a cílí na části o velikosti ~`total/N`, aby žádná nevisela těsně pod oknem.
+ *
+ * `window` (ve znacích) je TVRDÁ horní mez: cíl `total/N` je jen měkká rovnováha, ale
+ * okno se nepřekročí (jinak by API vstup uřízlo). Měkký cíl navíc NIKDY nevyrobí víc
+ * částí než `N` (poslední část pobere zbytek); víc částí než `N` může vynutit jen
+ * okno + zrnitost souborů (soubory se nekrájejí). Krájí se PO CELÝCH souborech –
+ * rozseknutí by rozbilo číslování řádků (`lineCount` = obrana proti halucinaci).
+ *
+ * Přetékající soubor (sám > `window`) se NEzahodí: dostane vlastní (přeplněnou) část –
+ * prošel per-file výběrem, tak patří dovnitř (kopíruje „první se zahrne vždy"
+ * z `collectAiPayload`). Reálně s dnešními konstantami nenastane (per-file strop
+ * 100 kB << okno), ale `window` je parametr, tak je to ošetřené.
+ *
+ * `window <= 0` je programová chyba volajícího → `RangeError` (ne tiché chování).
+ * `readFile` dostává cestu RELATIVNÍ ke kořeni (jako `FileEntry.path`), čte se každý
+ * vybraný soubor právě jednou (všechny jdou do nějaké části).
+ */
+export async function splitAiPayload(
+  files: readonly FileEntry[],
+  readFile: (relPath: string) => Promise<string>,
+  window: number,
+): Promise<ChunkedPayload> {
+  if (!Number.isFinite(window) || window <= 0) {
+    throw new RangeError(`splitAiPayload: window musí být kladné číslo, dostal ${window}`);
+  }
+
+  const { selected, oversizedFiles } = selectAiCandidates(files);
+  if (selected.length === 0) return { chunks: [], oversizedFiles };
+
+  // Přečti VŠECHNY vybrané (všechny jdou do nějaké části – nic se nezahazuje) a spočítej
+  // délku každého slepeného bloku VE ZNACÍCH (s hlavičkou cesty, jako se reálně pošle).
+  const pieces = await Promise.all(
+    selected.map(async (f) => {
+      const content = await readFile(f.path);
+      const text = formatFileChunk(f.path, content);
+      return { path: f.path, text, len: text.length, lineCount: countLines(content) };
+    }),
+  );
+
+  const total = pieces.reduce((sum, p) => sum + p.len, 0);
+  const n = Math.max(1, Math.ceil(total / window));
+  const target = total / n;
+
+  const chunks: AiChunk[] = [];
+  let curText = "";
+  let curFiles: PayloadFile[] = [];
+  let curLen = 0;
+
+  for (const p of pieces) {
+    if (curLen === 0) {
+      // Prázdná část: přidej vždy (i přeplněnou nad okno = single-file případ).
+      curText = p.text;
+      curFiles = [{ path: p.path, lineCount: p.lineCount }];
+      curLen = p.len;
+      continue;
+    }
+
+    const exceedsWindow = curLen + p.len > window;
+    const reachedTarget = curLen >= target;
+    // Měkký cíl uzavírá část jen pokud ještě POTŘEBUJEME další části (jinak by
+    // rovnoměrnost vyrobila víc než N částí). Poslední část tak pobere zbytek.
+    const moreChunksNeeded = chunks.length < n - 1;
+
+    if (exceedsWindow || (reachedTarget && moreChunksNeeded)) {
+      chunks.push({ text: curText, includedFiles: curFiles });
+      curText = p.text;
+      curFiles = [{ path: p.path, lineCount: p.lineCount }];
+      curLen = p.len;
+    } else {
+      curText += p.text;
+      curFiles.push({ path: p.path, lineCount: p.lineCount });
+      curLen += p.len;
+    }
+  }
+  chunks.push({ text: curText, includedFiles: curFiles });
+
+  return { chunks, oversizedFiles };
 }

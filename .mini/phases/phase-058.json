@@ -1,0 +1,39 @@
+{
+  "id": 58,
+  "title": "Dělič payloadu na části",
+  "goal": "Přidat čistou funkci, která AI kandidáty (stejný výběr jako collectAiPayload: zdrojová přípona, ne minifikát, pod per-file stropem) rozdělí do pole částí pod stropem – žádný zdrojový soubor se nerozsekne ani neztratí, deterministické pořadí – s testy se zuby; zatím bez napojení do AI volání (to přijde jako další fáze).",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Vytáhnout výběr kandidátů do sdílené funkce",
+      "status": "done",
+      "detail": "Nová čistá funkce selectAiCandidates(files) vrátí { selected, oversizedFiles } podle dnešní logiky (type===file && ne minifikát && zdrojová přípona && size <= AI_PAYLOAD_PER_FILE_MAX_BYTES, řazení path.localeCompare). collectAiPayload ji použije místo inline filtru – chování beze změny, stávající testy aiPayload.test.ts procházejí; testy ověřují reálnou sdílenou funkci, ne kopii."
+    },
+    {
+      "title": "Implementovat dělič s rovnoměrným dělením",
+      "status": "done",
+      "detail": "splitAiPayload(selected, readFile, window) → { chunks: { text, includedFiles: PayloadFile[] }[], oversizedFiles }. N = ceil(totalSelectedSize / window), greedy s cílem total/N, okno tvrdá horní mez (cíl ustoupí oknu), po celých souborech, deterministické řazení podle cesty. Přetékající soubor (sám > okno) dostane vlastní část. Bez truncated/omitted. Sdílí výběr z kroku 1."
+    },
+    {
+      "title": "Testy se zuby pro dělič",
+      "status": "done",
+      "detail": "Ne happy-path: malé okno → víc částí; součet souborů napříč všemi částmi == všichni kandidáti (nic neztraceno/nezdvojeno); žádná část nepřekročí okno (kromě single-file přeplněné části); oversized se do částí nedostanou; prázdný vstup → prázdné chunks i oversizedFiles bez pádu; determinismus (stejný vstup → stejné rozdělení)."
+    },
+    {
+      "title": "Zelený typecheck a testy",
+      "status": "done",
+      "detail": "npm typecheck + vitest zelené včetně stávajících aiPayload testů po refaktoru z kroku 1."
+    },
+    {
+      "title": "Nezávislý self-review sub-agentem",
+      "status": "done",
+      "detail": "Čerstvý kontext. Checklist: cross-module kontrakt sdíleného výběru (reálná funkce, ne mock), determinismus, edge prázdný/přetečení, testy mají zuby (rozbiju kód → padne test), žádný tichý drift v collectAiPayload."
+    }
+  ],
+  "startedAt": "2026-06-21T11:41:50.198Z",
+  "completedAt": "2026-06-21T12:04:13.616Z",
+  "autoCommit": {
+    "preSha": "7acf4de8dc8b701ed1c3d2c4510046d41adf4c10",
+    "subject": "Phase 58: Dělič payloadu na části"
+  }
+}
