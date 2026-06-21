@@ -102,6 +102,64 @@ describe("parseIntent – kontrakt s formátem mini", () => {
   });
 });
 
+describe("parseIntent – context (syrový project.md bez non-goalů)", () => {
+  it("kontext drží záměr i ostatní sekce, ale NE sekci Non-goals", () => {
+    const intent = parseIntent(MINI_FIXTURE, "/x");
+    // sekce, které AI dřív nedostávala, jsou v kontextu
+    expect(intent.context).toContain("## What I'm building");
+    expect(intent.context).toContain("Lokální CLI nástroj.");
+    expect(intent.context).toContain("## Approach");
+    expect(intent.context).toContain("## Success criteria");
+    expect(intent.context).toContain("## Main constraints");
+    // ZUB: non-goaly se z kontextu vyřezaly (jdou do promptu jako číslovaný seznam).
+    // Kdyby vyříznutí přestalo fungovat, tahle dvojice padne.
+    expect(intent.context).not.toContain("## Non-goals");
+    expect(intent.context).not.toContain("Do not run code.");
+    expect(intent.context).not.toContain("Do not build a web service.");
+  });
+
+  it("'## Non-goals' UVNITŘ code fence se nevyřezává (jen skutečná sekce zmizí)", () => {
+    const content = [
+      "## What I'm building",
+      "Úvod.",
+      "```",
+      "## Non-goals", // ukázka v bloku – musí v kontextu zůstat
+      "- ukázkový non-goal",
+      "```",
+      "Próza za blokem.",
+      "",
+      "## Non-goals",
+      "- skutečný non-goal",
+    ].join("\n");
+    const intent = parseIntent(content, "/x");
+    // skutečná sekce (poslední) je pryč i s položkou
+    expect(intent.context).not.toContain("skutečný non-goal");
+    // ale ukázka uvnitř fence i próza za ním zůstaly
+    expect(intent.context).toContain("## Non-goals"); // ta z fence
+    expect(intent.context).toContain("ukázkový non-goal");
+    expect(intent.context).toContain("Próza za blokem.");
+  });
+
+  it("minimální project.md (jen záměr) → kontext = celý text (degraduje na dnešek)", () => {
+    const content = "## What I'm building\nStavím malý CLI.\n";
+    const intent = parseIntent(content, "/x");
+    expect(intent.context).toContain("Stavím malý CLI.");
+  });
+
+  it("prázdný obsah → kontext null (ne prázdný string)", () => {
+    expect(parseIntent("", "/x").context).toBeNull();
+    expect(parseIntent("   \n\n  ", "/x").context).toBeNull();
+  });
+
+  it("jen sekce Non-goals → po vyříznutí nezbyde text → kontext null", () => {
+    const content = `## ${INTENT_HEADINGS.nonGoals}\n- Do not run code.\n`;
+    const intent = parseIntent(content, "/x");
+    expect(intent.context).toBeNull();
+    // non-goaly se přitom dál čtou strukturovaně (jdou do promptu zvlášť)
+    expect(intent.nonGoals).toEqual(["Do not run code."]);
+  });
+});
+
 describe("loadIntent – lokalizace souboru", () => {
   let proj: string;
 

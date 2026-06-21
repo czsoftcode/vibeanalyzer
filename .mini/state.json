@@ -277,6 +277,11 @@
       "id": 55,
       "title": "Práh ceny na realistický odhad",
       "status": "done"
+    },
+    {
+      "id": 56,
+      "title": "AI vidí celý project.md",
+      "status": "done"
     }
   ]
 }

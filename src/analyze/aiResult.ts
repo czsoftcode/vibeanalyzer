@@ -55,13 +55,18 @@ export const SYSTEM_PROMPT = [
   "ohrazení (code fence), žádný text před ani za JSONem.",
 ].join("\n");
 
-/** Sestaví uživatelský prompt: záměr + číslované non-goaly + (případně přiznané
- *  uříznutí) + slepený kód. Čisté, testovatelné. */
-export function buildAnalyzePrompt(building: string | null, nonGoals: string[], payload: AiPayload): string {
+/** Sestaví uživatelský prompt: deklarovaný kontext (syrový project.md bez sekce
+ *  Non-goals, tj. včetně záměru/Approach/Success criteria/…) + číslované non-goaly
+ *  (adresování `nonGoalIndex`) + (případně přiznané uříznutí) + slepený kód. Kontext
+ *  je null/prázdný → blok se VYNECHÁ (žádný prázdný nadpis = šum pro model). Čisté,
+ *  testovatelné. */
+export function buildAnalyzePrompt(context: string | null, nonGoals: string[], payload: AiPayload): string {
   const parts: string[] = [];
-  parts.push("# Záměr projektu");
-  parts.push(building && building.trim() !== "" ? building.trim() : "(nedodán)");
-  parts.push("");
+  if (context && context.trim() !== "") {
+    parts.push("# Deklarovaný kontext projektu (z project.md)");
+    parts.push(context.trim());
+    parts.push("");
+  }
   parts.push("# Deklarované non-goaly (index: text)");
   parts.push(nonGoals.map((g, i) => `${i}: ${g}`).join("\n"));
   parts.push("");
@@ -231,7 +236,7 @@ export async function runAiAnalysis(
   }
 
   const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
-  const prompt = buildAnalyzePrompt(intent?.building ?? null, nonGoals, payload);
+  const prompt = buildAnalyzePrompt(intent?.context ?? null, nonGoals, payload);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT, prompt, FINDINGS_SCHEMA);
     // Uříznutý/prázdný výstup je PROVOZNÍ stav (thinking sežral max_tokens, model
@@ -513,14 +518,18 @@ export const SYSTEM_PROMPT_LOGIC = [
   "ohrazení (code fence), žádný text před ani za JSONem.",
 ].join("\n");
 
-/** Sestaví uživatelský prompt pro logickou analýzu: záměr ("What I'm building") + slepený
- *  kód s hlavičkami cest. Non-goaly se NEposílají – ty řeší `--ai-non-goal`. Uříznutý kód
- *  sem nedoteče (orchestrátor na `payload.truncated` přeskočí), proto bez poznámky o uříznutí. */
-export function buildLogicPrompt(building: string, payload: AiPayload): string {
+/** Sestaví uživatelský prompt pro logickou analýzu: deklarovaný kontext (syrový
+ *  project.md bez sekce Non-goals, tj. včetně záměru/Approach/Success criteria/…) +
+ *  slepený kód s hlavičkami cest. Non-goaly se NEposílají – ty řeší `--ai-non-goal`.
+ *  Kontext prázdný → blok se VYNECHÁ (žádný prázdný nadpis). Uříznutý kód sem nedoteče
+ *  (orchestrátor na `payload.truncated` přeskočí), proto bez poznámky o uříznutí. */
+export function buildLogicPrompt(context: string, payload: AiPayload): string {
   const parts: string[] = [];
-  parts.push("# Záměr projektu (What I'm building)");
-  parts.push(building.trim());
-  parts.push("");
+  if (context.trim() !== "") {
+    parts.push("# Deklarovaný kontext projektu (z project.md)");
+    parts.push(context.trim());
+    parts.push("");
+  }
   parts.push("# Zdrojový kód (s hlavičkami cest)");
   parts.push(payload.text);
   return parts.join("\n");
@@ -650,7 +659,10 @@ export async function runAiLogicAnalysis(
   }
 
   const apiKey = (env[AI_PROVIDERS[model].keyEnv] as string).trim();
-  const prompt = buildLogicPrompt(building, payload);
+  // Kontext (syrový project.md bez non-goalů) v sobě záměr OBSAHUJE – brána výš už
+  // ověřila, že záměr není prázdný, takže context tu je vždy neprázdný (záměr se z
+  // něj nevyřezává). `?? ""` je jen null-safety optional chainu, ne reálná větev.
+  const prompt = buildLogicPrompt(intent?.context ?? "", payload);
   try {
     const { rawText, usage, stopReason } = await analyze(apiKey, model, SYSTEM_PROMPT_LOGIC, prompt, LOGIC_FINDINGS_SCHEMA);
     if (stopReason === "max_tokens" || rawText.trim() === "") {

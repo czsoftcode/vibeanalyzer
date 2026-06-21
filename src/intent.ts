@@ -20,6 +20,15 @@ export interface Intent {
   building: string | null;
   /** Položky sekce "Non-goals"; null = sekce chybí nebo nemá žádnou položku. */
   nonGoals: string[] | null;
+  /**
+   * Syrový text celého project.md MINUS sekce "Non-goals" (záměr i ostatní sekce
+   * jako Approach/Success criteria/Main constraints v něm ZŮSTÁVAJÍ). Slouží jako
+   * úplný deklarovaný kontext pro AI prompty. Non-goaly se vyřezávají, protože do
+   * promptu jdou zvlášť jako číslovaný seznam (adresování `nonGoalIndex`) – jinak by
+   * tam byly dvakrát. null = po vyříznutí nezbyl žádný text (project.md byl prázdný
+   * nebo obsahoval jen non-goaly).
+   */
+  context: string | null;
   /** Cesta k souboru, ze kterého se záměr načetl (absolutní). */
   sourcePath: string;
 }
@@ -83,6 +92,7 @@ export function parseIntent(content: string, sourcePath: string): Intent {
   return {
     building: extractText(content, INTENT_HEADINGS.building),
     nonGoals: extractList(content, INTENT_HEADINGS.nonGoals),
+    context: extractContext(content),
     sourcePath,
   };
 }
@@ -98,22 +108,26 @@ function isSiblingHeading(line: string): boolean {
 }
 
 /**
- * Vrátí řádky bloku pod nadpisem `## <heading>` až do dalšího sourozeneckého
- * nadpisu `## `. null = nadpis se v obsahu nenašel; prázdné pole = nadpis je,
- * ale blok je prázdný.
+ * Najde rozsah sekce `## <heading>` v už rozdělených řádcích: index řádku NADPISU
+ * (`headingIdx`) a index prvního řádku ZA sekcí (`endIdx` = další sourozenecký `## `
+ * nebo konec). null = nadpis se nenašel.
  *
  * Hledání startu i konce IGNORUJE řádky uvnitř code fence a předěl bere jen na
  * `## ` (úroveň 2), ne na každém `#` řádku. Bez toho by `#` v próze nebo
  * `## Non-goals` v ukázce uvnitř ``` bloku tiše uřízly/zfalšovaly sekci
  * (nálezy 4-1, 4-3). NENÍ to plný markdown parser – jen tolik povědomí o
- * struktuře, aby parser netvořil zavádějící obsah.
+ * struktuře, aby parser netvořil zavádějící obsah. Sdílí ho čtení sekcí
+ * (`sectionLines`) i vyříznutí sekce (`stripSection`), ať se obě cesty drží
+ * stejné definice „kde sekce končí".
  */
-function sectionLines(content: string, heading: string): string[] | null {
-  const lines = content.split(/\r?\n/);
+function findSectionRange(
+  lines: string[],
+  heading: string,
+): { headingIdx: number; endIdx: number } | null {
   const target = `## ${heading}`;
 
   let inFence = false;
-  let start = -1;
+  let headingIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     if (isFenceLine(line)) {
@@ -121,27 +135,65 @@ function sectionLines(content: string, heading: string): string[] | null {
       continue;
     }
     if (!inFence && line.trim() === target) {
-      start = i + 1;
+      headingIdx = i;
       break;
     }
   }
-  if (start === -1) return null;
+  if (headingIdx === -1) return null;
 
-  // start leží těsně za nadpisem, který byl MIMO fence → blok čteme se stavem
-  // inFence = false.
-  const block: string[] = [];
+  // konec hledáme od řádku ZA nadpisem; nadpis byl MIMO fence → start inFence = false.
   inFence = false;
-  for (let i = start; i < lines.length; i++) {
+  let endIdx = lines.length;
+  for (let i = headingIdx + 1; i < lines.length; i++) {
     const line = lines[i] ?? "";
     if (isFenceLine(line)) {
       inFence = !inFence;
-      block.push(line);
       continue;
     }
-    if (!inFence && isSiblingHeading(line)) break;
-    block.push(line);
+    if (!inFence && isSiblingHeading(line)) {
+      endIdx = i;
+      break;
+    }
   }
-  return block;
+  return { headingIdx, endIdx };
+}
+
+/**
+ * Vrátí řádky bloku pod nadpisem `## <heading>` až do dalšího sourozeneckého
+ * nadpisu `## `. null = nadpis se v obsahu nenašel; prázdné pole = nadpis je,
+ * ale blok je prázdný.
+ */
+function sectionLines(content: string, heading: string): string[] | null {
+  const lines = content.split(/\r?\n/);
+  const range = findSectionRange(lines, heading);
+  if (range === null) return null;
+  // headingIdx+1 přeskočí nadpis, endIdx je první řádek ZA sekcí (exkluzivně).
+  return lines.slice(range.headingIdx + 1, range.endIdx);
+}
+
+/**
+ * Vrátí obsah s ODSTRANĚNOU sekcí `## <heading>` (nadpis i její tělo až po další
+ * `## `). Sekce se nenašla → obsah beze změny. Stejné povědomí o fence/předělech
+ * jako `sectionLines` (sdílený `findSectionRange`), ať vyříznutí nepadne na
+ * `## <heading>` uvnitř code fence.
+ */
+function stripSection(content: string, heading: string): string {
+  const lines = content.split(/\r?\n/);
+  const range = findSectionRange(lines, heading);
+  if (range === null) return content;
+  const kept = [...lines.slice(0, range.headingIdx), ...lines.slice(range.endIdx)];
+  return kept.join("\n");
+}
+
+/**
+ * Sestaví `context`: celý project.md MINUS sekce Non-goals (jde do promptu zvlášť
+ * jako číslovaný seznam). Záměr i ostatní sekce zůstávají. Po vyříznutí trimne
+ * krajní bílé znaky; prázdné → null (ať „není kontext" zůstane viditelný stav,
+ * ne prázdný řetězec, který by v promptu udělal prázdný nadpis).
+ */
+function extractContext(content: string): string | null {
+  const stripped = stripSection(content, INTENT_HEADINGS.nonGoals).trim();
+  return stripped.length === 0 ? null : stripped;
 }
 
 /** Sekci přečte jako souvislý text (víceřádkově). Prázdné → null. */

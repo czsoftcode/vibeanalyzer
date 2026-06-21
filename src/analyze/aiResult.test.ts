@@ -32,17 +32,36 @@ const payload: AiPayload = {
   oversizedFiles: [],
 };
 
-function intentWith(nonGoals: string[] | null, building: string | null = "Stavím CLI"): Intent {
-  return { building, nonGoals, sourcePath: "/p/project.md" };
+// context default = building: parseIntent garantuje, že kontext (syrový project.md bez
+// non-goalů) záměr OBSAHUJE, takže neprázdný záměr ⇒ neprázdný kontext. Testy brány tím
+// dostanou realistický tvar Intentu.
+function intentWith(
+  nonGoals: string[] | null,
+  building: string | null = "Stavím CLI",
+  context: string | null = building,
+): Intent {
+  return { building, nonGoals, context, sourcePath: "/p/project.md" };
 }
 
 describe("buildAnalyzePrompt", () => {
-  it("obsahuje záměr, číslované non-goaly i kód", () => {
-    const p = buildAnalyzePrompt("Stavím CLI", ["Nespouštět kód", "Žádný web"], payload);
+  it("obsahuje kontext, číslované non-goaly i kód", () => {
+    const context = "# VibeAnalyzer\n\n## What I'm building\nStavím CLI\n\n## Approach\nHybridně";
+    const p = buildAnalyzePrompt(context, ["Nespouštět kód", "Žádný web"], payload);
+    expect(p).toContain("# Deklarovaný kontext projektu (z project.md)");
     expect(p).toContain("Stavím CLI");
+    expect(p).toContain("## Approach"); // sekce, kterou dřív AI nedostávala
     expect(p).toContain("0: Nespouštět kód");
     expect(p).toContain("1: Žádný web");
     expect(p).toContain("export const x = 1;");
+  });
+
+  it("prázdný/null kontext → blok kontextu se VYNECHÁ, ale číslované non-goaly zůstanou", () => {
+    // Zub: kdyby se prázdný kontext nevynechal, vznikl by prázdný nadpis (šum pro model).
+    const p = buildAnalyzePrompt(null, ["Nespouštět kód"], payload);
+    expect(p).not.toContain("# Deklarovaný kontext projektu");
+    expect(p).toContain("0: Nespouštět kód"); // adresování nálezů musí zůstat
+    const pEmpty = buildAnalyzePrompt("   \n  ", ["Nespouštět kód"], payload);
+    expect(pEmpty).not.toContain("# Deklarovaný kontext projektu");
   });
 
   it("při uříznutí přidá varování o neúplnosti", () => {
@@ -476,10 +495,18 @@ describe("LOGIC_FINDINGS_SCHEMA", () => {
 });
 
 describe("buildLogicPrompt", () => {
-  it("obsahuje záměr i kód, NEobsahuje non-goaly", () => {
-    const p = buildLogicPrompt("Stavím CLI co čte projekty", payload);
-    expect(p).toContain("What I'm building");
+  it("obsahuje deklarovaný kontext i kód", () => {
+    const context = "## What I'm building\nStavím CLI co čte projekty\n\n## Success criteria\n- report bez pádu";
+    const p = buildLogicPrompt(context, payload);
+    expect(p).toContain("# Deklarovaný kontext projektu (z project.md)");
     expect(p).toContain("Stavím CLI co čte projekty");
+    expect(p).toContain("## Success criteria"); // sekce, kterou dřív logika nedostávala
+    expect(p).toContain("export const x = 1;");
+  });
+
+  it("prázdný kontext → blok se VYNECHÁ (žádný prázdný nadpis)", () => {
+    const p = buildLogicPrompt("   \n  ", payload);
+    expect(p).not.toContain("# Deklarovaný kontext projektu");
     expect(p).toContain("export const x = 1;");
   });
 });

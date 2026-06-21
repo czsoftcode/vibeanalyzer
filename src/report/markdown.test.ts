@@ -77,6 +77,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
       intent: {
         building: "Lokální CLI nástroj.",
         nonGoals: ["Nespouští kód.", "Bez webové služby."],
+        context: null,
         sourcePath: "/p/.mini/project.md",
       },
     });
@@ -89,7 +90,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
   it("chybějící část záměru → '_nedodáno_' (ne tichý prázdný blok)", () => {
     const md = buildMarkdown({
       ...base,
-      intent: { building: null, nonGoals: null, sourcePath: "/p/project.md" },
+      intent: { building: null, nonGoals: null, context: null, sourcePath: "/p/project.md" },
     });
     expect(md).toContain("> _nedodáno_");
   });
@@ -97,7 +98,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
   it("injection: backtick v sourcePath nerozbije inline code span", () => {
     const md = buildMarkdown({
       ...base,
-      intent: { building: "x", nonGoals: null, sourcePath: "/p/`zlo`/project.md" },
+      intent: { building: "x", nonGoals: null, context: null, sourcePath: "/p/`zlo`/project.md" },
     });
     // backtick z cesty je pryč (nahrazen), takže code span zůstane uzavřený
     expect(md).toContain("Načteno z `/p/'zlo'/project.md`.");
@@ -107,7 +108,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
   it("injection: newline v sourcePath nepřeruší inline code span (4-5)", () => {
     const md = buildMarkdown({
       ...base,
-      intent: { building: "x", nonGoals: null, sourcePath: "/p/zlo\nnewline/project.md" },
+      intent: { building: "x", nonGoals: null, context: null, sourcePath: "/p/zlo\nnewline/project.md" },
     });
     expect(md).toContain("Načteno z `/p/zlo newline/project.md`.");
     // řádek 'Načteno z ...' zůstane na jednom řádku (newline nahrazen mezerou)
@@ -121,6 +122,7 @@ describe("buildMarkdown – sekce Záměr projektu", () => {
       intent: {
         building: "Zlo\n```mermaid\ngraph TD; HACK\n```\n## Falešný nadpis",
         nonGoals: ["```bash\nrm -rf /\n```"],
+        context: null,
         sourcePath: "/p/project.md",
       },
     });

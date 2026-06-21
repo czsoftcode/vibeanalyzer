@@ -55,6 +55,16 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ### Changed
 
+- **AI analýza logiky a non-goalů nově posuzuje vůči celému `project.md`, ne jen vůči
+  jedné větě záměru.** Dřív AI dostala jen sekce „What I'm building" + „Non-goals";
+  ostatní (Approach, Who it's for, Success criteria, Main constraints i případné vlastní
+  sekce) se zahazovaly. Nově dostane **celý deklarovaný kontext** projektu, takže může
+  posoudit, jestli se kód rozchází i s deklarovaným přístupem nebo kritérii úspěchu.
+  Non-goaly se přitom do dotazu posílají **právě jednou** (jako číslovaný seznam, na který
+  se věší nálezy), aby se neopakovaly. Analýza kódu (`--ai-code`) se nemění – ta posuzuje
+  kód nezávisle na záměru. Pozn.: odhad ceny počítá vstup dál jen z velikosti kódu, ne
+  z celého promptu – `project.md` je proti kódu zanedbatelný.
+
 - **Potvrzení ceny AI se nově ptá podle realistického odhadu, ne podle nejhoršího případu.**
   Dřív se práh ($0.50) porovnával s worst-case cenou (celý výstupní strop modelu), což
   u modelu `glm` (strop 131072 tokenů) znamenalo, že se nástroj ptal **vždycky** – i na

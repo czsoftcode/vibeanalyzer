@@ -1,0 +1,34 @@
+{
+  "id": 56,
+  "title": "AI vidí celý project.md",
+  "goal": "Rozšířit Intent o syrový text celého project.md a vstříknout ho do AI promptů (logika i non-goal) jako blok 'Deklarovaný kontext projektu', aby AI posuzovala vůči přístupu, success criteria i omezením; building/nonGoals zůstávají strukturované kvůli bráně a indexaci. Aby se non-goaly (a záměr) neopakovaly dvakrát, vyřízne se z raw textu sekce, které už jdou do promptu strukturovaně. Cross-module kontrakt parser↔prompt → před reportem nezávislý self-review.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Intent.context: vyříznout Non-goals z raw",
+      "status": "done",
+      "detail": "Do intent.ts přidat pole context: string|null na Intent, počítané v parseIntent ze syrového obsahu = celý project.md MINUS sekce ## Non-goals (záměr zůstává). Vyříznutí přes fence/sibling-aware helper (refaktor/reuse logiky ze sectionLines, ne naivní split). Prázdné po ořezu → null. Testy: záměr zůstává, non-goaly nejsou, ## Non-goals v code fence se ignoruje, prázdné → null."
+    },
+    {
+      "title": "Kontext do non-goal promptu",
+      "status": "done",
+      "detail": "buildAnalyzePrompt: zahodit blok '# Záměr projektu', místo něj blok kontextu s context (vynechat když null/prázdný); číslovaný seznam non-goalů ZŮSTÁVÁ (index contract). Přidat parametr context, předat z volajícího (ř. 234, intent?.context). Testy: kontext přítomen, seznam non-goalů pořád tam, prázdný kontext → blok vynechán."
+    },
+    {
+      "title": "Kontext do logic promptu",
+      "status": "done",
+      "detail": "buildLogicPrompt: zahodit blok '# Záměr', nahradit blokem kontextu (vynechat když prázdný). Změnit signaturu (building → context), upravit volajícího (ř. 653). Brána na building v orchestrátoru beze změny. Testy: kontext v promptu, prázdný → vynechán, minimální project.md → degraduje na dnešek."
+    },
+    {
+      "title": "Zelený typecheck/testy + self-review",
+      "status": "done",
+      "detail": "tsc + vitest zeleně. Ověřit, zda odhad ceny (fáze 51) počítá z payloadu kódu (pak kontext do odhadu nespadne – zmínit v reportu) nebo z celého promptu. Dle CLAUDE.md nezávislý sub-agent na cross-module kontrakt parser↔prompt."
+    }
+  ],
+  "startedAt": "2026-06-21T09:50:15.967Z",
+  "completedAt": "2026-06-21T10:49:48.164Z",
+  "autoCommit": {
+    "preSha": "25b021c29b7d6e11b4a74d06adc95dd462c83fc4",
+    "subject": "Phase 56: AI vidí celý project.md"
+  }
+}
