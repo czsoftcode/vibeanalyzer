@@ -37,6 +37,48 @@ describe("classifyAiError – zatřídění chyby z pingu", () => {
     expect(classifyAiError(err)).toBe("API hlásí překročení limitu (rate limit)");
   });
 
+  it("InternalServerError 529 (přetížení) → důvod o přetížení", () => {
+    // SDK mapuje všechna 5xx na InternalServerError; status se kontroluje ručně.
+    // Konstruktor chce hlavičky, proto instanci odvodíme a status dosadíme.
+    const err = Object.create(Anthropic.InternalServerError.prototype) as Error;
+    (err as { status?: number }).status = 529;
+    expect(err).toBeInstanceOf(Anthropic.InternalServerError);
+    expect(classifyAiError(err)).toBe("API přetížené, zkus později");
+  });
+
+  it("InternalServerError 503 (dočasně nedostupné) → důvod o nedostupnosti", () => {
+    const err = Object.create(Anthropic.InternalServerError.prototype) as Error;
+    (err as { status?: number }).status = 503;
+    expect(classifyAiError(err)).toBe("API je dočasně nedostupné, zkus později");
+  });
+
+  it("InternalServerError 500 → null (NEpřematchovat všechna 5xx, jen retry-later stavy)", () => {
+    const err = Object.create(Anthropic.InternalServerError.prototype) as Error;
+    (err as { status?: number }).status = 500;
+    expect(err).toBeInstanceOf(Anthropic.InternalServerError);
+    expect(classifyAiError(err)).toBeNull();
+  });
+
+  it("utnutý stream: AnthropicError s message 'terminated' → síťová chyba", () => {
+    // Replikuje SDK wrap (MessageStream.js): ne-Anthropic chyba se zabalí do base
+    // AnthropicError s okopírovanou message a původním TypeError v cause.
+    const err = new Anthropic.AnthropicError("terminated");
+    (err as { cause?: unknown }).cause = new TypeError("terminated");
+    expect(classifyAiError(err)).toBe("síťová chyba při dotazu na API");
+  });
+
+  it("utnutý stream přes cause: message jiná, cause 'terminated' → síťová chyba (fallback)", () => {
+    const err = new Anthropic.AnthropicError("stream error");
+    (err as { cause?: unknown }).cause = new TypeError("terminated");
+    expect(classifyAiError(err)).toBe("síťová chyba při dotazu na API");
+  });
+
+  it("base AnthropicError bez 'terminated' (protokolová chyba) → null (probublá)", () => {
+    // „stream ended without producing a Message" apod. CHCEME probublat se stackem.
+    const err = new Anthropic.AnthropicError("stream ended without producing a Message");
+    expect(classifyAiError(err)).toBeNull();
+  });
+
   it("nečekaná chyba (TypeError) → null (NESMÍ se tvářit jako přeskočeno)", () => {
     expect(classifyAiError(new TypeError("boom"))).toBeNull();
   });

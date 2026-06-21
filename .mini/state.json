@@ -282,6 +282,11 @@
       "id": 56,
       "title": "AI vidí celý project.md",
       "status": "done"
+    },
+    {
+      "id": 57,
+      "title": "classifyAiError: 529 a terminated",
+      "status": "done"
     }
   ]
 }

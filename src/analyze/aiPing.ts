@@ -32,13 +32,18 @@ export const realAiPing = async (apiKey: string): Promise<void> => {
 };
 
 /**
- * Zatřídí chybu z pingu: vrátí KONKRÉTNÍ důvod přeskočení pro očekávané provozní
- * chyby (síť / timeout / odmítnutý klíč / rate limit), nebo `null` pro cokoliv
- * nečekaného (programová chyba, neznámý API stav). `null` se NESMÍ tvářit jako
- * „přeskočeno" – volající ho probublá se stackem (tichý falešný úspěch = nález).
+ * Zatřídí chybu z pingu/analýzy: vrátí KONKRÉTNÍ důvod přeskočení pro očekávané
+ * provozní chyby (síť / timeout / odmítnutý klíč / rate limit / přetížený server /
+ * utnutý stream), nebo `null` pro cokoliv nečekaného (programová chyba, neznámý API
+ * stav). `null` se NESMÍ tvářit jako „přeskočeno" – volající ho probublá se stackem
+ * (tichý falešný úspěch = nález).
  *
- * Pořadí `instanceof` je důležité: APIConnectionTimeoutError dědí z
- * APIConnectionError, takže timeout testujeme dřív.
+ * Pořadí `instanceof` je důležité:
+ * - APIConnectionTimeoutError dědí z APIConnectionError, takže timeout testujeme dřív.
+ * - `AnthropicError` (větev pro „terminated") je PŘEDEK úplně všeho (i APIError),
+ *   proto stojí AŽ POSLEDNÍ a je úzce zúžená na message/cause „terminated" – jinak by
+ *   spolkla 401/429/5xx i legitimní protokolové chyby base AnthropicError
+ *   („stream ended without producing a Message"), které CHCEME probublat.
  */
 export function classifyAiError(err: unknown): string | null {
   if (err instanceof Anthropic.APIConnectionTimeoutError) {
@@ -53,5 +58,30 @@ export function classifyAiError(err: unknown): string | null {
   if (err instanceof Anthropic.RateLimitError) {
     return "API hlásí překročení limitu (rate limit)";
   }
+  // SDK mapuje VŠECHNA 5xx na jednu třídu InternalServerError (status není zúžený
+  // typem), proto status kontrolujeme ručně. Degradujeme JEN „retry later" stavy
+  // (529 přetížení, 503 dočasně nedostupné); ostatní 5xx (500/502…) necháme probublat
+  // se stackem – můžou signalizovat reálný problém, ne přechodný výpadek.
+  if (err instanceof Anthropic.InternalServerError) {
+    if (err.status === 529) return "API přetížené, zkus později";
+    if (err.status === 503) return "API je dočasně nedostupné, zkus později";
+    return null;
+  }
+  // Utnuté streamované spojení: SDK MessageStream zabalí ne-Anthropic chybu (undici
+  // `TypeError: terminated`) do base AnthropicError – zkopíruje message a do `cause`
+  // dá původní TypeError. Detekce proto stojí na message/cause „terminated", NE na
+  // `instanceof TypeError` (ten je dál programová chyba → null). String-match je
+  // křehký (undici-specifická zpráva), typovaná cesta ale neexistuje; kontrolujeme
+  // i `cause` jako robustnější fallback.
+  if (err instanceof Anthropic.AnthropicError && isTerminatedStreamError(err)) {
+    return "síťová chyba při dotazu na API";
+  }
   return null;
+}
+
+/** True, když chyba (nebo její `cause`) nese undici message „terminated" = utnutý stream. */
+function isTerminatedStreamError(err: Error): boolean {
+  if (/terminated/i.test(err.message)) return true;
+  const cause: unknown = (err as { cause?: unknown }).cause;
+  return cause instanceof Error && /terminated/i.test(cause.message);
 }

@@ -7,6 +7,8 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-21
+
 ### Added
 
 - Report nově **přiznává, když AI posuzovala neúplný projekt**, protože se zdrojový kód
@@ -113,6 +115,14 @@ a projekt používá [sémantické verzování](https://semver.org/lang/cs/).
 - AI analýza posílala modelu vždy schéma pro non-goaly, takže `--ai-code` dostával
   od modelu nepoužitelný tvar odpovědi a tiše se přeskakoval. Každý režim teď posílá
   své vlastní schéma; chyba byla odhalena reálným během a pokryta testy.
+- **Přetížené API a utnuté spojení už neprobublají jako „nečekaná chyba".** Když je
+  Anthropic/Z.ai API přetížené (HTTP 529) nebo dočasně nedostupné (HTTP 503), případně
+  když se streamované spojení během dlouhého dotazu přeruší (`terminated`), AI vrstva
+  to teď zatřídí jako **čistě přeskočeno se srozumitelným důvodem** („API přetížené,
+  zkus později" / „API je dočasně nedostupné…" / „síťová chyba…") místo výpisu stacku.
+  Týká se obou cest – ověření přístupu (`--ai-check`) i samotné analýzy. Ostatní serverové
+  chyby (HTTP 500/502) i programové chyby se záměrně dál hlásí se stackem, aby se reálný
+  problém neschoval.
 
 ## [0.4.0] - 2026-06-20
 

@@ -1,0 +1,34 @@
+{
+  "id": 57,
+  "title": "classifyAiError: 529 a terminated",
+  "goal": "Rozšířit classifyAiError o čistou degradaci pro HTTP 529 (overloaded_error -> 'API přetížené, zkus později') a pro přerušené streamované spojení (TypeError: terminated -> síťová chyba), aniž by se obecná programová TypeError přestala probublávat se stackem; doplnit testy se zuby pro obě větve.",
+  "status": "done",
+  "steps": [
+    {
+      "title": "Rozšířit classifyAiError o 5xx a terminated",
+      "status": "done",
+      "detail": "src/analyze/aiPing.ts: za stávající větve přidat InternalServerError se status===529 -> 'API přetížené, zkus později' a status===503 -> 'API je dočasně nedostupné, zkus později' (ostatní 5xx -> null). Jako poslední úzká větev: AnthropicError s message/cause obsahujícím 'terminated' -> 'síťová chyba při dotazu na API'. Vše ostatní zůstává null."
+    },
+    {
+      "title": "Testy se zuby pro nové větve",
+      "status": "done",
+      "detail": "src/analyze/aiPing.test.ts: 529 -> 'API přetížené…'; 503 -> 'API je dočasně nedostupné…'; 500 -> null (nepřematchovat všechna 5xx); terminated přes replikaci SDK wrapu (AnthropicError('terminated') s cause=TypeError) -> 'síťová chyba…'; regrese TypeError('boom') -> null. Ověřit zub: rozbití větve shodí test."
+    },
+    {
+      "title": "Zelený typecheck a testy",
+      "status": "done",
+      "detail": "npx tsc --noEmit a npx vitest run projdou bez chyb; potvrdit, že existující testy (vč. aiPing.test.ts:41) dál procházejí."
+    },
+    {
+      "title": "Nezávislý self-review sub-agentem",
+      "status": "done",
+      "detail": "Čerstvý sub-agent zkontroluje pořadí instanceof, dosažitelnost větví, křehkost string-matche 'terminated' a že base AnthropicError pro protokolové chyby dál probublá."
+    }
+  ],
+  "startedAt": "2026-06-21T11:04:28.627Z",
+  "completedAt": "2026-06-21T11:13:33.542Z",
+  "autoCommit": {
+    "preSha": "fb93b03514b9909ff0eb444b2134c4492a4c7a19",
+    "subject": "Phase 57: classifyAiError: 529 a terminated"
+  }
+}
